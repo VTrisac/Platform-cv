@@ -25,7 +25,7 @@ export const dataES = {
   },
   experience: [
     {
-      project: "Jungle (Wejungle)",
+      project: "WeAi",
       role: "Senior AI Engineer",
       dates: "Feb. 2026 - Actualidad",
       description: "Diseño y despliegue de soluciones de IA generativa y agénticas con Claude (Anthropic) para grandes clientes (BBVA, Iberia, Telefónica, Decathlon, KFC) dentro de la unidad Tech & Data.",
@@ -147,7 +147,7 @@ export const dataEN = {
   },
   experience: [
     {
-      project: "Jungle (Wejungle)",
+      project: "WeAi",
       role: "Senior AI Engineer",
       dates: "Feb. 2026 - Present",
       description: "Design and deployment of generative and agentic AI solutions powered by Claude (Anthropic) for enterprise clients (BBVA, Iberia, Telefónica, Decathlon, KFC) within the Tech & Data unit.",
