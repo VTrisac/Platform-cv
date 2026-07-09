@@ -1,3 +1,17 @@
+// Certificaciones LinkedIn (linkedin.com/in/victortrisac) — todas Anthropic, expedidas may. 2026
+const certList = (date) => [
+  "Claude Code in Action",
+  "Model Context Protocol: Advanced Topics",
+  "Introduction to Model Context Protocol",
+  "Claude with Google Cloud's Vertex AI",
+  "Claude in Amazon Bedrock",
+  "Introduction to Subagents",
+  "Introduction to Agent Skills",
+  "Introduction to Claude Cowork",
+  "Teaching the AI Fluency Framework",
+  "Claude Code 101"
+].map(name => ({ name, issuer: "Anthropic", date }));
+
 export const dataES = {
   name: "VÍCTOR TRISAC",
   title: "Senior AI Engineer | Full Stack Developer",
@@ -106,6 +120,7 @@ export const dataES = {
     databases: ["PostgreSQL", "SQL Server", "MySQL", "MariaDB", "MongoDB"]
   },
   languages: ["Castellano (Nativo)", "Catalán (Nativo)", "Inglés (Técnico)"],
+  certifications: certList("may. 2026"),
   labels: {
     technologies: "Tecnologías",
     backend: "Backend",
@@ -114,7 +129,8 @@ export const dataES = {
     databases: "Bases de Datos",
     education: "Educación",
     experience: "Experiencia Profesional",
-    languages: "Idiomas"
+    languages: "Idiomas",
+    certifications: "Certificaciones"
   }
 };
 
@@ -226,6 +242,7 @@ export const dataEN = {
     databases: ["PostgreSQL", "SQL Server", "MySQL", "MariaDB", "MongoDB"]
   },
   languages: ["Spanish (Native)", "Catalan (Native)", "English (Technical)"],
+  certifications: certList("May 2026"),
   labels: {
     technologies: "Technologies",
     backend: "Backend",
@@ -234,9 +251,7 @@ export const dataEN = {
     databases: "Databases",
     education: "Education",
     experience: "Professional Experience",
-    languages: "Languages"
+    languages: "Languages",
+    certifications: "Certifications"
   }
 };
-
-// Default export for backwards compatibility
-export const data = dataES;

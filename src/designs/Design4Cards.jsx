@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Mail, Phone, MapPin, Terminal, Briefcase, GraduationCap, Globe, CheckCircle } from 'lucide-react';
+import { Mail, Phone, MapPin, Terminal, Briefcase, GraduationCap, Globe, CheckCircle, Award } from 'lucide-react';
 
 const Design4Cards = ({ data }) => {
   return (
@@ -112,6 +112,23 @@ const Design4Cards = ({ data }) => {
                 ))}
               </div>
             </div>
+
+            {/* Certifications Card */}
+            {data.certifications?.length > 0 && (
+              <div className="bg-[var(--surface)] rounded-2xl shadow-lg p-6 print-avoid-break">
+                <h2 className="text-sm font-bold text-[var(--text)] mb-4 flex items-center gap-2">
+                  <Award size={16} className="text-[var(--accent)]"/> {data.labels.certifications}
+                </h2>
+                <div className="space-y-2">
+                  {data.certifications.map((cert, idx) => (
+                    <div key={idx} className="bg-[var(--surface-alt)] px-3 py-2 rounded-lg">
+                      <p className="text-xs font-medium text-[var(--text)]">{cert.name}</p>
+                      <p className="text-[10px] text-[var(--text-muted)]">{cert.issuer} · {cert.date}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Experience Cards */}
@@ -120,7 +137,7 @@ const Design4Cards = ({ data }) => {
               <Briefcase size={16} className="text-[var(--accent)]"/> {data.labels.experience}
             </h2>
             {data.experience.map((exp, idx) => (
-              <div key={idx} className="bg-[var(--surface)] rounded-2xl shadow-lg p-6 hover:shadow-xl transition-shadow">
+              <div key={idx} className="bg-[var(--surface)] rounded-2xl shadow-lg p-6 hover:shadow-xl transition-shadow print-avoid-break">
                 <div className="flex justify-between items-start mb-3">
                   <div>
                     <h3 className="font-bold text-[var(--text)] text-lg">{exp.project}</h3>

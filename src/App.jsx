@@ -1,7 +1,5 @@
-import { useState, useRef, useMemo, useCallback, useEffect, Suspense, lazy } from 'react';
-import { FileDown, Globe, Loader2 } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+import { useState, useMemo, useEffect, Suspense, lazy } from 'react';
+import { FileDown, Globe } from 'lucide-react';
 import { dataES, dataEN } from './data';
 import { themes, DEFAULT_THEME_ID } from './theme';
 
@@ -26,13 +24,10 @@ const designs = [
 const App = () => {
   const [currentDesign, setCurrentDesign] = useState(3); // Tarjetas por defecto
   const [language, setLanguage] = useState('es');
-  const [isGenerating, setIsGenerating] = useState(false);
   const [themeId, setThemeId] = useState(() => {
     if (typeof window === 'undefined') return DEFAULT_THEME_ID;
     return localStorage.getItem('cvTheme') || DEFAULT_THEME_ID;
   });
-  const cvRef = useRef(null);
-
   useEffect(() => {
     const theme = themes.find((t) => t.id === themeId) || themes[0];
     const root = document.documentElement;
@@ -42,84 +37,13 @@ const App = () => {
     localStorage.setItem('cvTheme', theme.id);
   }, [themeId]);
 
-  const handlePrint = useCallback(async () => {
-    if (!cvRef.current || isGenerating) return;
-
-    setIsGenerating(true);
-
-    try {
-      const element = cvRef.current;
-
-      // Wait for all images to load
-      const images = element.querySelectorAll('img');
-      await Promise.all(
-        Array.from(images).map((img) => {
-          if (img.complete) return Promise.resolve();
-          return new Promise((resolve) => {
-            img.onload = resolve;
-            img.onerror = resolve;
-          });
-        })
-      );
-
-      // Ensure fonts are ready and rendering is complete
-      if (document.fonts?.ready) {
-        await document.fonts.ready;
-      }
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Render at the natural max-width of the CV cards (~1000px) so the outer
-      // wrapper does not add large empty side margins in the PDF.
-      const CAPTURE_WIDTH = 1000;
-
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        imageTimeout: 0,
-        windowWidth: CAPTURE_WIDTH,
-        width: CAPTURE_WIDTH,
-        onclone: (_, clonedRoot) => {
-          const wrapper = clonedRoot.firstElementChild;
-          if (wrapper) {
-            wrapper.style.minHeight = 'auto';
-            wrapper.style.paddingLeft = '0';
-            wrapper.style.paddingRight = '0';
-            wrapper.style.paddingTop = '16px';
-            wrapper.style.paddingBottom = '16px';
-            wrapper.style.width = `${CAPTURE_WIDTH}px`;
-          }
-        }
-      });
-
-      // Convert pixels to mm (assuming 96 DPI screen)
-      const pxToMm = 0.264583;
-      const pdfWidth = (canvas.width / 2) * pxToMm; // Divide by scale
-      const pdfHeight = (canvas.height / 2) * pxToMm;
-
-      // Create PDF with exact content dimensions and compression
-      const pdf = new jsPDF({
-        orientation: pdfWidth > pdfHeight ? 'landscape' : 'portrait',
-        unit: 'mm',
-        format: [pdfWidth, pdfHeight],
-        compress: true
-      });
-
-      // Add image as JPEG with 80% quality (much smaller than PNG)
-      const imgData = canvas.toDataURL('image/jpeg', 0.8);
-      pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
-
-      // Save
-      pdf.save(`CV_Victor_Trisac_${language.toUpperCase()}.pdf`);
-
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [isGenerating, language]);
+  const handlePrint = () => {
+    // El nombre del PDF en "Guardar como PDF" sale del título del documento
+    const prev = document.title;
+    document.title = `CV_Victor_Trisac_${language.toUpperCase()}`;
+    window.print();
+    document.title = prev;
+  };
 
   const toggleLanguage = () => {
     setLanguage(prev => prev === 'es' ? 'en' : 'es');
@@ -191,30 +115,19 @@ const App = () => {
       </div>
 
       {/* Diseño actual */}
-      <div ref={cvRef}>
-        <Suspense fallback={<div className="p-8 text-[var(--text-muted)]">Cargando diseño…</div>}>
-          <CurrentComponent data={currentData} />
-        </Suspense>
-      </div>
+      <Suspense fallback={<div className="p-8 text-[var(--text-muted)]">Cargando diseño…</div>}>
+        <CurrentComponent data={currentData} />
+      </Suspense>
 
       {/* Botón flotante para PDF */}
       <button
         onClick={handlePrint}
-        disabled={isGenerating}
-        className={`no-print fixed bottom-8 right-8 text-[var(--accent-contrast)] p-4 rounded-full shadow-lg flex items-center gap-2 transition-all transform z-50 group ${
-          isGenerating
-            ? 'bg-[var(--border)] cursor-not-allowed'
-            : 'bg-[var(--accent)] hover:scale-105 active:scale-95'
-        }`}
+        className="no-print fixed bottom-8 right-8 text-[var(--accent-contrast)] p-4 rounded-full shadow-lg flex items-center gap-2 transition-all transform z-50 group bg-[var(--accent)] hover:scale-105 active:scale-95"
         title="Generar PDF"
       >
-        {isGenerating ? (
-          <Loader2 size={24} className="animate-spin" />
-        ) : (
-          <FileDown size={24} />
-        )}
+        <FileDown size={24} />
         <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 font-bold text-sm">
-          {isGenerating ? 'Generando...' : 'PDF'}
+          PDF
         </span>
       </button>
     </div>

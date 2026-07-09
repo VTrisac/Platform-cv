@@ -1,9 +1,9 @@
 import { memo } from 'react';
-import { Mail, Phone, MapPin, Globe, GraduationCap, CheckCircle } from 'lucide-react';
+import { Mail, Phone, MapPin, Globe, GraduationCap, CheckCircle, Award } from 'lucide-react';
 
 const Design5Timeline = ({ data }) => {
   return (
-    <div className="bg-[var(--bg)] min-h-screen font-sans">
+    <div className="bg-[var(--bg)] min-h-screen font-sans print-container print-a4">
       {/* Header compacto */}
       <header className="bg-gradient-to-r from-[var(--accent)] to-[var(--accent-2)] text-[color:var(--accent-contrast)] py-8 px-4">
         <div className="max-w-[900px] mx-auto flex items-center gap-6">
@@ -42,7 +42,7 @@ const Design5Timeline = ({ data }) => {
 
               <div className="space-y-8">
                 {data.experience.map((exp, idx) => (
-                  <div key={idx} className="relative pl-12">
+                  <div key={idx} className="relative pl-12 print-avoid-break">
                     {/* Nodo */}
                     <div className="absolute left-0 top-1 w-8 h-8 rounded-full bg-gradient-to-br from-[var(--accent)] to-[var(--accent-2)] flex items-center justify-center text-[var(--accent-contrast)] text-xs font-bold shadow-lg">
                       {idx + 1}
@@ -137,6 +137,23 @@ const Design5Timeline = ({ data }) => {
                 ))}
               </div>
             </section>
+
+            {/* Certificaciones */}
+            {data.certifications?.length > 0 && (
+              <section className="print-avoid-break">
+                <h2 className="text-xs uppercase tracking-widest text-[var(--accent)] mb-4 font-bold flex items-center gap-2">
+                  <Award size={14}/> {data.labels.certifications}
+                </h2>
+                <div className="space-y-2">
+                  {data.certifications.map((cert, idx) => (
+                    <div key={idx} className="bg-[var(--surface-alt)] px-3 py-2 rounded-lg border-l-2 border-[var(--accent)]">
+                      <p className="text-xs font-medium text-[var(--text)]">{cert.name}</p>
+                      <p className="text-[10px] text-[var(--text-muted)]">{cert.issuer} · {cert.date}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
 
             {/* Idiomas */}
             <section>

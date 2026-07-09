@@ -1,9 +1,9 @@
 import { memo } from 'react';
-import { Mail, Phone, MapPin } from 'lucide-react';
+import { Mail, Phone, MapPin, Award } from 'lucide-react';
 
 const Design1Minimal = ({ data }) => {
   return (
-    <div className="bg-[var(--bg)] min-h-screen py-16 px-4 font-sans text-[var(--text)]">
+    <div className="bg-[var(--bg)] min-h-screen py-16 px-4 font-sans text-[var(--text)] print-container print-a4">
       <div className="max-w-[800px] mx-auto">
 
         {/* Header minimalista */}
@@ -36,7 +36,7 @@ const Design1Minimal = ({ data }) => {
           <h2 className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)] mb-6">Experiencia</h2>
           <div className="space-y-8">
             {data.experience.map((exp, idx) => (
-              <div key={idx}>
+              <div key={idx} className="print-avoid-break">
                 <div className="flex justify-between items-baseline mb-1">
                   <h3 className="font-medium text-[var(--text)]">{exp.project}</h3>
                   <span className="text-xs text-[var(--text-muted)]">{exp.role}</span>
@@ -84,6 +84,22 @@ const Design1Minimal = ({ data }) => {
             ))}
           </section>
         </div>
+
+        {/* Certificaciones */}
+        {data.certifications?.length > 0 && (
+          <section className="mt-10 print-avoid-break">
+            <h2 className="text-xs uppercase tracking-[0.3em] text-[var(--text-muted)] mb-4 flex items-center gap-2">
+              <Award size={12}/> {data.labels.certifications}
+            </h2>
+            <div className="grid grid-cols-2 gap-x-12 gap-y-2">
+              {data.certifications.map((cert, idx) => (
+                <p key={idx} className="text-sm text-[var(--text)]">
+                  {cert.name} <span className="text-xs text-[var(--text-muted)]">— {cert.issuer} · {cert.date}</span>
+                </p>
+              ))}
+            </div>
+          </section>
+        )}
 
       </div>
     </div>

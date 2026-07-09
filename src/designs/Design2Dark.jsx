@@ -1,9 +1,9 @@
 import { memo } from 'react';
-import { Terminal, Briefcase, GraduationCap } from 'lucide-react';
+import { Terminal, Briefcase, GraduationCap, Award } from 'lucide-react';
 
 const Design2Dark = ({ data }) => {
   return (
-    <div className="bg-[var(--bg)] min-h-screen py-10 px-4 font-mono text-[var(--text-muted)]">
+    <div className="bg-[var(--bg)] min-h-screen py-10 px-4 font-mono text-[var(--text-muted)] print-container print-a4">
       <div className="max-w-[900px] mx-auto">
 
         {/* Header estilo terminal */}
@@ -81,6 +81,22 @@ const Design2Dark = ({ data }) => {
                 </div>
               ))}
             </section>
+
+            {data.certifications?.length > 0 && (
+              <section className="p-4 bg-[var(--surface)] rounded-lg border border-[var(--border)] print-avoid-break">
+                <h2 className="text-[var(--accent)] text-xs mb-3 flex items-center gap-2">
+                  <Award size={14}/> certifications.log
+                </h2>
+                <div className="space-y-2 text-xs">
+                  {data.certifications.map((cert, idx) => (
+                    <div key={idx}>
+                      <p className="text-[var(--text)]">{cert.name}</p>
+                      <p className="text-[10px] text-[var(--accent-2)]">{cert.issuer} · {cert.date}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
           </div>
 
           {/* Columna derecha - Experiencia */}
@@ -91,7 +107,7 @@ const Design2Dark = ({ data }) => {
               </h2>
               <div className="space-y-6">
                 {data.experience.map((exp, idx) => (
-                  <div key={idx} className="border-l border-[var(--border)] pl-4">
+                  <div key={idx} className="border-l border-[var(--border)] pl-4 print-avoid-break">
                     <div className="flex justify-between items-start mb-1">
                       <h3 className="text-[var(--text)] font-bold">{exp.project}</h3>
                       <span className="text-[10px] text-[var(--accent)] bg-[color:var(--accent)]/10 px-2 py-1 rounded">{exp.role}</span>

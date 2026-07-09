@@ -53,14 +53,13 @@
     padding: 0 !important;
     min-height: auto !important;
     width: 100% !important;
-    overflow: hidden !important;
+    /* ponytail: única perilla de escala del PDF; zoom reflow-a y pagina bien
+       (transform: scale no repagina). Subir/bajar hasta que quepa en 1 A4. */
+    zoom: 0.9;
   }
 
-  .print-a4 > div {
-    transform: scale(0.58);
-    transform-origin: top center;
-    width: 170% !important;
-    margin-left: -35% !important;
+  .print-avoid-break {
+    break-inside: avoid;
   }
 
   .rounded-2xl {

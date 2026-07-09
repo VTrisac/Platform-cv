@@ -1,9 +1,9 @@
 import { memo } from 'react';
-import { Mail, Phone, MapPin, Globe, Briefcase, GraduationCap, CheckCircle } from 'lucide-react';
+import { Mail, Phone, MapPin, Globe, Briefcase, GraduationCap, CheckCircle, Award } from 'lucide-react';
 
 const Design3Sidebar = ({ data }) => {
   return (
-    <div className="bg-[var(--bg)] min-h-screen py-10 px-4 font-sans">
+    <div className="bg-[var(--bg)] min-h-screen py-10 px-4 font-sans print-container print-a4">
       <div className="max-w-[950px] mx-auto bg-[var(--surface)] shadow-xl rounded-xl overflow-hidden flex">
 
         {/* Sidebar */}
@@ -89,7 +89,7 @@ const Design3Sidebar = ({ data }) => {
             </h2>
             <div className="space-y-6">
               {data.experience.map((exp, idx) => (
-                <div key={idx}>
+                <div key={idx} className="print-avoid-break">
                   <div className="flex justify-between items-baseline mb-1">
                     <h3 className="font-bold text-[var(--text)]">{exp.project}</h3>
                     <span className="text-xs text-[var(--accent)] bg-[var(--chip-bg)] px-2 py-1 rounded-full">{exp.role}</span>
@@ -131,6 +131,23 @@ const Design3Sidebar = ({ data }) => {
               ))}
             </div>
           </section>
+
+          {/* Certificaciones */}
+          {data.certifications?.length > 0 && (
+            <section className="mt-8 print-avoid-break">
+              <h2 className="text-xs uppercase tracking-widest text-[var(--accent)] mb-4 flex items-center gap-2">
+                <Award size={14}/> {data.labels.certifications}
+              </h2>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {data.certifications.map((cert, idx) => (
+                  <div key={idx} className="bg-[var(--surface-alt)] px-3 py-2 rounded-lg">
+                    <p className="text-xs font-medium text-[var(--text)]">{cert.name}</p>
+                    <p className="text-[10px] text-[var(--text-muted)]">{cert.issuer} · {cert.date}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
         </main>
 
       </div>
