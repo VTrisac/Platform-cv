@@ -121,8 +121,11 @@ function selftest() {
 }
 
 // --- main ------------------------------------------------------------------
-const flags = process.argv.slice(2)
-if (flags.includes('--selftest')) {
+// Solo al ejecutarlo directo: `match`/`keywords` se importan desde otros scripts.
+const flags = import.meta.filename === process.argv[1] ? process.argv.slice(2) : ['--noop']
+if (flags.includes('--noop')) {
+  // importado como módulo
+} else if (flags.includes('--selftest')) {
   selftest()
 } else {
   const boards = await Promise.all(COMPANIES.map(board))
