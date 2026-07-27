@@ -21,9 +21,15 @@ const designs = [
   { id: 5, name: 'Timeline' },
 ];
 
+const urlParams = new URLSearchParams(window.location.search);
+
 const App = () => {
-  const [currentDesign, setCurrentDesign] = useState(3); // Tarjetas por defecto
-  const [language, setLanguage] = useState('es');
+  // ?design=0..4 y ?lang=es|en para generar PDFs sin interacción
+  const [currentDesign, setCurrentDesign] = useState(() => {
+    const d = Number(urlParams.get('design'));
+    return Number.isInteger(d) && d >= 0 && d <= 4 ? d : 3; // Tarjetas por defecto
+  });
+  const [language, setLanguage] = useState(urlParams.get('lang') === 'en' ? 'en' : 'es');
   const [themeId, setThemeId] = useState(() => {
     if (typeof window === 'undefined') return DEFAULT_THEME_ID;
     return localStorage.getItem('cvTheme') || DEFAULT_THEME_ID;
