@@ -29,6 +29,15 @@ Adapta el CV a la oferta pegada en $ARGUMENTS.
 - Longitud: igual o menor. Debe seguir cabiendo en 1 página de PDF: perfil <= 4 líneas, <= 3 achievements por puesto, frases cortas.
 - Si la oferta pide algo que el CV no tiene, NO lo añadas: menciónalo al usuario al final como gap.
 
+## Cobertura ATS
+
+Tras editar, extrae de la oferta las keywords duras (tecnologías, herramientas, metodologías, título del rol) y comprueba cuáles aparecen literalmente en `dataEN`. Imprime:
+
+- `Cobertura: N/M (X%)`
+- `Faltan: <keyword — dónde encajaría, o "gap real, no inventar">`
+
+Solo cuenta literales: un ATS busca strings, no sinónimos. Si una keyword falta pero el CV tiene el equivalente real (p. ej. pide "LangGraph" y tienes "LangChain"), dilo, no lo sustituyas.
+
 ## Al terminar
 
 1. Resume los cambios en 2-4 líneas y lista los gaps detectados.
