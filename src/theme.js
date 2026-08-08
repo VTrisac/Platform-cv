@@ -1,5 +1,27 @@
 export const themes = [
   {
+    // Paleta "Salvia & arena" del diseño de Pencil. Va la primera y es la
+    // predeterminada para que la previsualización A4 dentro de CV Studio no
+    // choque con la app que la envuelve.
+    id: 'sage',
+    name: 'Salvia',
+    tokens: {
+      '--bg': '#F5F1E6',
+      '--surface': '#FDFBF4',
+      '--surface-alt': '#EFEADB',
+      '--text': '#24261C',
+      '--text-muted': '#6C6F5C',
+      '--border': '#DFD8C4',
+      '--accent': '#5F7A56',
+      '--accent-2': '#48603F',
+      '--accent-3': '#8AA37E',
+      '--accent-contrast': '#FDFBF4',
+      '--chip-bg': '#E3EBDC',
+      '--chip-text': '#48603F',
+      '--shadow': '0 8px 24px rgba(36, 38, 28, 0.07)'
+    }
+  },
+  {
     id: 'violet',
     name: 'Violet',
     tokens: {
@@ -134,4 +156,4 @@ export const themes = [
   }
 ];
 
-export const DEFAULT_THEME_ID = 'violet';
+export const DEFAULT_THEME_ID = 'sage';

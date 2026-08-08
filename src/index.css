@@ -2,20 +2,44 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Paleta "Salvia & arena" por defecto. Importa: dentro de CV Studio los diseños
+   de CV leen estas variables directamente — el selector de tema solo existe en
+   el visor antiguo (?design=N) y allí las sobrescribe en :root al vuelo. */
 :root {
-  --bg: #f8fafc;
-  --surface: #ffffff;
-  --surface-alt: #eef2ff;
-  --text: #0f172a;
-  --text-muted: #475569;
-  --border: #e2e8f0;
-  --accent: #7c3aed;
-  --accent-2: #4f46e5;
-  --accent-3: #a855f7;
-  --accent-contrast: #ffffff;
-  --chip-bg: #eef2ff;
-  --chip-text: #4f46e5;
-  --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+  --bg: #F5F1E6;
+  --surface: #FDFBF4;
+  --surface-alt: #EFEADB;
+  --text: #24261C;
+  --text-muted: #6C6F5C;
+  --border: #DFD8C4;
+  --accent: #5F7A56;
+  --accent-2: #48603F;
+  --accent-3: #8AA37E;
+  --accent-contrast: #FDFBF4;
+  --chip-bg: #E3EBDC;
+  --chip-text: #48603F;
+  --shadow: 0 8px 24px rgba(36, 38, 28, 0.07);
+}
+
+/* CV Studio — paleta "Salvia & arena" del diseño de Pencil.
+   Va en su propio scope para no pelearse con los temas del visor de CV, que
+   siguen mandando dentro de la previsualización A4. */
+.studio {
+  --s-bg: #F5F1E6;
+  --s-surface: #FDFBF4;
+  --s-border: #DFD8C4;
+  --s-accent: #5F7A56;
+  --s-accent-dark: #48603F;
+  --s-text: #24261C;
+  --s-muted: #6C6F5C;
+  --s-chip: #E9E3D2;
+  --s-chip-green: #E3EBDC;
+  --s-shadow: 0 8px 24px rgba(36, 38, 28, 0.07);
+  --s-display: 'Fraunces', Georgia, serif;
+  --s-body: 'Inter', system-ui, sans-serif;
+  background: var(--s-bg);
+  color: var(--s-text);
+  font-family: var(--s-body);
 }
 
 .theme-transition,

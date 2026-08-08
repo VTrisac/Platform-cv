@@ -1,0 +1,60 @@
+import { useState } from 'react'
+import Topbar from './studio/Topbar'
+import Bento from './studio/Bento'
+import Ofertas from './studio/Ofertas'
+import Editor from './studio/Editor'
+import { useStudio } from './studio/store'
+
+// Shell de CV Studio. ponytail: sin react-router — tres vistas y un estado.
+// Una dependencia de routing para esto sería peso muerto.
+const Studio = () => {
+  const { ofertas, addOferta, updateOferta, removeOferta } = useStudio()
+  const [view, setView] = useState('bento')
+  const [actual, setActual] = useState(null)
+
+  const abrirEditor = (oferta) => {
+    setActual(oferta ?? null)
+    setView('editor')
+  }
+
+  const nueva = () => {
+    const empresa = window.prompt('Empresa:')
+    if (!empresa) return
+    const puesto = window.prompt('Puesto:') || 'Sin especificar'
+    const fecha = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+    addOferta({ empresa, puesto, fecha, variante: null })
+    setView('ofertas')
+  }
+
+  return (
+    <div className="studio min-h-screen flex flex-col">
+      <div className="no-print">
+        <Topbar view={view} onNav={setView} onNueva={nueva} />
+      </div>
+
+      {view === 'bento' && <Bento ofertas={ofertas} onNav={setView} onEditar={abrirEditor} />}
+
+      {view === 'ofertas' && (
+        <Ofertas
+          ofertas={ofertas}
+          onEditar={abrirEditor}
+          onEstado={(id, estado) => updateOferta(id, { estado })}
+          onBorrar={(id) => window.confirm('¿Eliminar esta oferta?') && removeOferta(id)}
+        />
+      )}
+
+      {view === 'editor' && (
+        <Editor
+          oferta={actual}
+          onBack={() => setView(actual ? 'ofertas' : 'bento')}
+          onGuardar={(nombre) => {
+            if (actual) updateOferta(actual.id, { variante: nombre })
+            setView('ofertas')
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+export default Studio
