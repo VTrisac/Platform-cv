@@ -2,6 +2,7 @@ import { useState, Suspense, lazy } from 'react'
 import { ArrowLeft, Sparkles, FileDown, Save, Loader2, TriangleAlert, ShieldCheck, Search } from 'lucide-react'
 import { dataES, dataEN } from '../data'
 import Auditoria from './Auditoria'
+import { apiPost, auditar as auditarOferta } from './api'
 
 const DESIGNS = [
   { id: 5, name: 'ATS', load: () => import('../designs/Design6ATS') },
@@ -9,26 +10,6 @@ const DESIGNS = [
   { id: 3, name: 'Tarjetas', load: () => import('../designs/Design4Cards') },
 ]
 const components = DESIGNS.map((d) => lazy(d.load))
-
-// Llama a un endpoint pidiendo la contraseña la primera vez y recordándola.
-// Compartido por auditar y adaptar para no duplicar el flujo del 401.
-async function apiPost(path, body, retryKey) {
-  const key = retryKey ?? localStorage.getItem('tailorKey') ?? ''
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-tailor-key': key },
-    body: JSON.stringify(body),
-  })
-  const json = await res.json()
-  if (res.status === 401) {
-    const asked = window.prompt('Contraseña de la app:')
-    if (!asked) throw new Error('Hace falta la contraseña.')
-    localStorage.setItem('tailorKey', asked)
-    return apiPost(path, body, asked)
-  }
-  if (!res.ok) throw new Error(json.error ?? `Error ${res.status}`)
-  return json
-}
 
 const Card = ({ title, children, right }) => (
   <div
@@ -59,12 +40,14 @@ const PASOS = [
 // Flujo en tres pasos: auditar la oferta -> decidir si hay encaje -> adaptar.
 // El orden importa: adaptar primero gastaba una llamada al modelo incluso en
 // ofertas que no valían la pena, y enterraba los gaps DESPUÉS de haber decidido.
-const Editor = ({ oferta, onBack, onGuardar, onDescartar }) => {
-  const [paso, setPaso] = useState('oferta')
-  const [lang, setLang] = useState(oferta?.variante?.endsWith('ES') ? 'es' : 'en')
+const Editor = ({ oferta, onBack, onGuardar, onDescartar, onAuditada }) => {
+  // Si la oferta ya trae auditoría guardada, se entra directo al informe: es
+  // el caso normal desde el tracker, y volver a auditar costaría otra llamada.
+  const [audit, setAudit] = useState(oferta?.auditoria ?? null)
+  const [paso, setPaso] = useState(oferta?.auditoria ? 'auditoria' : 'oferta')
+  const [lang, setLang] = useState(oferta?.lang ?? (oferta?.variante?.endsWith('ES') ? 'es' : 'en'))
   const [design, setDesign] = useState(0)
   const [texto, setTexto] = useState('')
-  const [audit, setAudit] = useState(null)
   const [nombre, setNombre] = useState(oferta?.variante ?? '')
   const [data, setData] = useState(null)
   const [meta, setMeta] = useState(null)
@@ -78,11 +61,11 @@ const Editor = ({ oferta, onBack, onGuardar, onDescartar }) => {
     if (!texto.trim()) return setError('Pega la URL de la oferta o su texto.')
     setLoading('auditar'); setError(null)
     try {
-      const esUrl = /^https?:\/\//i.test(texto.trim())
-      const a = await apiPost('/api/audit', { [esUrl ? 'url' : 'text']: texto.trim(), lang })
+      const a = await auditarOferta(texto, lang)
       setAudit(a)
       setNombre(`${a.empresa} · ${lang.toUpperCase()}`)
       setPaso('auditoria')
+      onAuditada?.(a, lang) // se guarda con la oferta, no se vuelve a pagar
     } catch (e) { setError(e.message) } finally { setLoading(null) }
   }
 

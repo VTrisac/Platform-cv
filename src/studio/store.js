@@ -57,8 +57,12 @@ export function useStudio() {
 
   return {
     ofertas: state.ofertas,
-    addOferta: (o) =>
-      setState((s) => ({ ...s, ofertas: [{ id: crypto.randomUUID(), estado: 'guardada', ...o }, ...s.ofertas] })),
+    // Devuelve la oferta creada: quien la añade necesita su id para abrirla.
+    addOferta: (o) => {
+      const nueva = { id: crypto.randomUUID(), estado: 'guardada', ...o }
+      setState((s) => ({ ...s, ofertas: [nueva, ...s.ofertas] }))
+      return nueva
+    },
     updateOferta: (id, patch) =>
       setState((s) => ({ ...s, ofertas: s.ofertas.map((o) => (o.id === id ? { ...o, ...patch } : o)) })),
     removeOferta: (id) => setState((s) => ({ ...s, ofertas: s.ofertas.filter((o) => o.id !== id) })),

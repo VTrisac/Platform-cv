@@ -3,6 +3,7 @@ import Topbar from './studio/Topbar'
 import Bento from './studio/Bento'
 import Ofertas from './studio/Ofertas'
 import Editor from './studio/Editor'
+import NuevaOferta from './studio/NuevaOferta'
 import { useStudio } from './studio/store'
 
 // Shell de CV Studio. ponytail: sin react-router — tres vistas y un estado.
@@ -11,26 +12,38 @@ const Studio = () => {
   const { ofertas, addOferta, updateOferta, removeOferta } = useStudio()
   const [view, setView] = useState('bento')
   const [actual, setActual] = useState(null)
+  const [modal, setModal] = useState(false)
 
   const abrirEditor = (oferta) => {
     setActual(oferta ?? null)
     setView('editor')
   }
 
-  const nueva = () => {
-    const empresa = window.prompt('Empresa:')
-    if (!empresa) return
-    const puesto = window.prompt('Puesto:') || 'Sin especificar'
-    const fecha = new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
-    addOferta({ empresa, puesto, fecha, variante: null })
-    setView('ofertas')
+  // La oferta se crea a partir de la auditoría: empresa, puesto y encaje salen
+  // del scraper. Se guarda la auditoría entera para que reabrirla no vuelva a
+  // gastar una llamada al modelo, y se salta directo al informe de encaje.
+  const guardarAuditada = (a, lang) => {
+    const oferta = {
+      empresa: a.empresa,
+      puesto: a.rol,
+      estado: a.recomendacion === 'descartar' ? 'descartada' : 'guardada',
+      fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+      variante: null,
+      auditoria: a,
+      lang,
+    }
+    setActual(addOferta(oferta))
+    setModal(false)
+    setView('editor')
   }
 
   return (
     <div className="studio min-h-screen flex flex-col">
       <div className="no-print">
-        <Topbar view={view} onNav={setView} onNueva={nueva} />
+        <Topbar view={view} onNav={setView} onNueva={() => setModal(true)} />
       </div>
+
+      {modal && <NuevaOferta onListo={guardarAuditada} onCerrar={() => setModal(false)} />}
 
       {view === 'bento' && <Bento ofertas={ofertas} onNav={setView} onEditar={abrirEditor} />}
 
@@ -50,6 +63,9 @@ const Studio = () => {
           onGuardar={(nombre) => {
             if (actual) updateOferta(actual.id, { variante: nombre })
             setView('ofertas')
+          }}
+          onAuditada={(a, lang) => {
+            if (actual) updateOferta(actual.id, { auditoria: a, lang, empresa: a.empresa, puesto: a.rol })
           }}
           // Descartar desde la auditoría: si la oferta ya estaba en el tracker
           // se marca; si venía de cero, se guarda descartada para no volver a

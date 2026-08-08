@@ -80,6 +80,7 @@ const Ofertas = ({ ofertas, onEditar, onEstado, onBorrar }) => {
         >
           <span className="w-[210px]">EMPRESA</span>
           <span className="flex-1">PUESTO</span>
+          <span className="w-[90px]">ENCAJE</span>
           <span className="w-[130px]">ESTADO</span>
           <span className="w-[170px]">VARIANTE</span>
           <span className="w-[100px]">FECHA</span>
@@ -101,6 +102,26 @@ const Ofertas = ({ ofertas, onEditar, onEstado, onBorrar }) => {
             <span className="w-[210px] text-sm font-semibold truncate">{o.empresa}</span>
             <span className="flex-1 text-sm truncate" style={{ color: 'var(--s-muted)' }}>
               {o.puesto}
+            </span>
+            {/* El % de imprescindibles, no un promedio: los valorables no
+                compensan un requisito bloqueante. "—" si no se ha auditado. */}
+            <span className="w-[90px]">
+              {o.auditoria?.encaje?.imprescindibles != null ? (
+                <span
+                  className="px-2 py-1 rounded-full text-xs font-bold"
+                  style={{
+                    background: o.auditoria.encaje.imprescindibles >= 75 ? '#E3EBDC'
+                      : o.auditoria.encaje.imprescindibles >= 50 ? '#F3EAD6' : '#F3E4E1',
+                    color: o.auditoria.encaje.imprescindibles >= 75 ? '#48603F'
+                      : o.auditoria.encaje.imprescindibles >= 50 ? '#8A6D2E' : '#8A4A3C',
+                  }}
+                  title={`${o.auditoria.encaje.bloqueantes.length} bloqueantes`}
+                >
+                  {o.auditoria.encaje.imprescindibles}%
+                </span>
+              ) : (
+                <span className="text-xs" style={{ color: 'var(--s-muted)' }}>—</span>
+              )}
             </span>
             <span className="w-[130px]">
               {/* Chip del diseño, pero editable: cambiar de estado es la acción
