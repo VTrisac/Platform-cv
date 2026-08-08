@@ -51,6 +51,21 @@ const Studio = () => {
             if (actual) updateOferta(actual.id, { variante: nombre })
             setView('ofertas')
           }}
+          // Descartar desde la auditoría: si la oferta ya estaba en el tracker
+          // se marca; si venía de cero, se guarda descartada para no volver a
+          // auditar lo mismo dentro de dos semanas.
+          onDescartar={(a) => {
+            if (actual) updateOferta(actual.id, { estado: 'descartada' })
+            else
+              addOferta({
+                empresa: a.empresa,
+                puesto: a.rol,
+                estado: 'descartada',
+                fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+                variante: null,
+              })
+            setView('ofertas')
+          }}
         />
       )}
     </div>

@@ -12,7 +12,11 @@ function apiDev(env) {
   return {
     name: 'api-dev',
     configureServer(server) {
-      server.middlewares.use('/api/tailor', async (req, res) => {
+      server.middlewares.use('/api', async (req, res, next) => {
+        // /api/tailor -> api/tailor.js, igual que hace Vercel.
+        const name = (req.url ?? '').split('?')[0].replace(/^\/+/, '')
+        if (!/^[a-z0-9_-]+$/i.test(name)) return next()
+
         Object.assign(process.env, env) // la API key sale de .env.local
         try {
           const chunks = []
@@ -26,7 +30,7 @@ function apiDev(env) {
             res.end(JSON.stringify(data))
           }
 
-          const { default: handler } = await server.ssrLoadModule('/api/tailor.js')
+          const { default: handler } = await server.ssrLoadModule(`/api/${name}.js`)
           await handler(req, res)
         } catch (e) {
           res.statusCode = 500

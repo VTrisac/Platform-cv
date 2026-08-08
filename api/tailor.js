@@ -37,7 +37,7 @@ export const strip = (html) => html
   .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n))
   .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
 
-async function fetchOffer(url) {
+export async function fetchOffer(url) {
   const m = LINKEDIN_ID.exec(url)
   const target = m ? GUEST + m[1] : url
   const res = await fetch(target, {
@@ -171,13 +171,16 @@ export function findInventions(cv, patch) {
   return [...terms].filter((t) => has(written, t) && !has(master, t))
 }
 
-export default async function handler(req, res) {
+// Puerta compartida por /api/tailor y /api/audit. Devuelve null si todo va
+// bien, o el error ya enviado; el llamante solo tiene que hacer return.
+//
+// La URL de Vercel es pública y cada llamada gasta créditos de tu cuenta.
+// ponytail: un secreto compartido, no OAuth. Un solo usuario, un solo secreto.
+// En producción se exige SIEMPRE: si falta la variable, no se atiende a nadie
+// (fallar cerrado). En local es opcional para poder probar sin fricción.
+export function gate(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Usa POST' })
 
-  // La URL de Vercel es pública y cada llamada gasta créditos de tu cuenta.
-  // ponytail: un secreto compartido, no OAuth. Un solo usuario, un solo secreto.
-  // En producción se exige SIEMPRE: si falta la variable, no se atiende a nadie
-  // (fallar cerrado). En local es opcional para poder probar sin fricción.
   const expected = process.env.TAILOR_PASSWORD
   if (process.env.VERCEL || expected) {
     if (!expected) {
@@ -193,6 +196,15 @@ export default async function handler(req, res) {
       error: 'Falta NVIDIA_API_KEY. En local: ponla en .env.local. Desplegado: vercel env add NVIDIA_API_KEY.',
     })
   }
+  return null
+}
+
+export const client = () => new OpenAI({ apiKey: process.env.NVIDIA_API_KEY, baseURL: BASE_URL })
+export { MODEL }
+
+export default async function handler(req, res) {
+  const blocked = gate(req, res)
+  if (blocked) return blocked
 
   try {
     const { url, text, lang = 'en' } = req.body ?? {}
@@ -210,8 +222,7 @@ export default async function handler(req, res) {
       skills: cv.skills,
     }
 
-    const client = new OpenAI({ apiKey: process.env.NVIDIA_API_KEY, baseURL: BASE_URL })
-    const completion = await client.chat.completions.create({
+    const completion = await client().chat.completions.create({
       model: MODEL,
       max_tokens: 8000,
       messages: [

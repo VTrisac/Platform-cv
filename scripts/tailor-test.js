@@ -5,6 +5,7 @@
 //   node scripts/tailor-test.js
 import { strict as a } from 'node:assert'
 import handler, { applyPatch, findInventions, strip } from '../api/tailor.js'
+import { puntuar, recomendar, limpiarVeredicto } from '../api/audit.js'
 import { dataEN } from '../src/data.js'
 
 // Un parche hostil: cambia empresas y fechas, añade stack que no tiene,
@@ -61,6 +62,47 @@ a.ok(!inv.includes('RAG'), 'RAG está en tu CV: no es invención')
 
 const honest = { ...evil, profile: 'Senior AI Engineer con Python y FastAPI.', gaps: ['No Ruby on Rails.'] }
 a.deepEqual(findInventions(dataEN, honest), [], 'sin contradicción, no avisa')
+
+// --- puntuación de encaje ---------------------------------------------------
+// Los imprescindibles y los valorables NO se promedian juntos: cumplir extras
+// no compensa fallar un requisito bloqueante, y mezclarlos daría un 70% alegre
+// en ofertas que en realidad no puedes pasar.
+const reqs = [
+  { texto: 'Python', tipo: 'imprescindible', encaje: 'si', evidencia: 'WeAi' },
+  { texto: 'Ruby on Rails', tipo: 'imprescindible', encaje: 'no', evidencia: 'no aparece' },
+  { texto: 'LangGraph', tipo: 'imprescindible', encaje: 'parcial', evidencia: 'usa LangChain' },
+  { texto: 'Inglés', tipo: 'valorable', encaje: 'si', evidencia: 'técnico' },
+]
+const p = puntuar(reqs)
+a.equal(p.imprescindibles, 50, '(1 + 0 + 0.5) / 3 = 50%')
+a.equal(p.valorables, 100, 'los valorables van aparte')
+a.deepEqual(p.bloqueantes, ['Ruby on Rails'], 'solo los imprescindibles con encaje "no"')
+a.equal(puntuar([]).imprescindibles, null, 'sin requisitos no se inventa un porcentaje')
+a.equal(puntuar([{ texto: 'x', tipo: 'valorable', encaje: 'si', evidencia: '' }]).imprescindibles, null,
+  'solo valorables: no hay nota de imprescindibles, no un 0 engañoso')
+
+// La recomendación se calcula aquí porque el modelo la daba incoherente
+// (devolvió "descartar" con el 100% de los imprescindibles cumplidos).
+a.equal(recomendar({ imprescindibles: 100, bloqueantes: [] }), 'aplicar')
+a.equal(recomendar({ imprescindibles: 90, bloqueantes: ['Rails'] }), 'aplicar_con_reservas',
+  'un solo bloqueante no descarta, pero avisa')
+a.equal(recomendar({ imprescindibles: 95, bloqueantes: ['Rails', 'Go'] }), 'descartar',
+  'dos bloqueantes descartan por alto que sea el porcentaje')
+a.equal(recomendar({ imprescindibles: 40, bloqueantes: [] }), 'descartar')
+a.equal(recomendar({ imprescindibles: 70, bloqueantes: [] }), 'aplicar_con_reservas')
+a.equal(recomendar({ imprescindibles: null, bloqueantes: [] }), 'aplicar', 'sin imprescindibles no bloquea')
+
+
+// El veredicto degenerado que se vio en producción: cientos de "si" seguidos.
+const bucle = 'si no parcial no ' + 'si '.repeat(200)
+const enc = { imprescindibles: 75, bloqueantes: ['Ruby on Rails'] }
+const limpio = limpiarVeredicto(bucle, enc)
+a.ok(!limpio.startsWith('si no parcial'), 'el bucle se descarta')
+a.ok(limpio.includes('75%') && limpio.includes('Ruby on Rails'), 'el sustituto sale de los números')
+a.equal(limpiarVeredicto('', enc), limpio, 'vacío usa el mismo sustituto')
+a.equal(limpiarVeredicto('Corto.', enc), limpio, 'demasiado corto también')
+const bueno = 'Encajas bien en la parte de IA generativa y agentes, pero la oferta exige presencialidad en Barcelona y experiencia directa con clientes que el CV no documenta.'
+a.equal(limpiarVeredicto(bueno, enc), bueno, 'un veredicto real se respeta tal cual')
 
 // --- la puerta del endpoint -------------------------------------------------
 // La URL de Vercel es pública y cada llamada gasta créditos: en producción esto
