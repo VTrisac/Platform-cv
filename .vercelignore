@@ -1,0 +1,9 @@
+# Nada de esto hace falta para construir la web ni la función /api/tailor.
+# ofertas/ son tus notas privadas de búsqueda: que no salgan de tu máquina.
+ofertas/
+*.pdf
+scripts/
+.venv/
+.agents/
+.claude/
+requirements.txt

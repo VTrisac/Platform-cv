@@ -1,7 +1,8 @@
 import { useState, useMemo, useEffect, Suspense, lazy } from 'react';
-import { FileDown, Globe } from 'lucide-react';
+import { FileDown, Globe, Wand2 } from 'lucide-react';
 import { dataES, dataEN } from './data';
 import { themes, DEFAULT_THEME_ID } from './theme';
+import TailorPanel from './TailorPanel';
 
 const designLoaders = [
   () => import('./designs/Design1Minimal'),
@@ -9,6 +10,7 @@ const designLoaders = [
   () => import('./designs/Design3Sidebar'),
   () => import('./designs/Design4Cards'),
   () => import('./designs/Design5Timeline'),
+  () => import('./designs/Design6ATS'),
 ];
 
 const designComponents = designLoaders.map((loader) => lazy(loader));
@@ -19,6 +21,7 @@ const designs = [
   { id: 3, name: 'Sidebar Color' },
   { id: 4, name: 'Tarjetas' },
   { id: 5, name: 'Timeline' },
+  { id: 6, name: 'ATS' },
 ];
 
 const urlParams = new URLSearchParams(window.location.search);
@@ -27,7 +30,7 @@ const App = () => {
   // ?design=0..4 y ?lang=es|en para generar PDFs sin interacción
   const [currentDesign, setCurrentDesign] = useState(() => {
     const d = Number(urlParams.get('design'));
-    return Number.isInteger(d) && d >= 0 && d <= 4 ? d : 3; // Tarjetas por defecto
+    return Number.isInteger(d) && d >= 0 && d < designLoaders.length ? d : 3; // Tarjetas por defecto
   });
   const [language, setLanguage] = useState(urlParams.get('lang') === 'en' ? 'en' : 'es');
   const [themeId, setThemeId] = useState(() => {
@@ -55,7 +58,14 @@ const App = () => {
     setLanguage(prev => prev === 'es' ? 'en' : 'es');
   };
 
-  const currentData = useMemo(() => (language === 'es' ? dataES : dataEN), [language]);
+  // El CV adaptado vive aquí, en memoria. src/data.js sigue siendo el maestro y
+  // no se toca nunca: recargar la página ya te devuelve al original.
+  const [tailored, setTailored] = useState(null);
+  const [showTailor, setShowTailor] = useState(false);
+
+  const master = useMemo(() => (language === 'es' ? dataES : dataEN), [language]);
+  // El parche se pidió para un idioma; si cambias de idioma vuelve el maestro.
+  const currentData = tailored?.lang === language ? tailored.data : master;
   const CurrentComponent = designComponents[currentDesign];
 
   return (
@@ -82,6 +92,23 @@ const App = () => {
             </button>
           ))}
         </div>
+
+        {/* Separador */}
+        <div className="w-px h-8 bg-[var(--border)]"></div>
+
+        {/* Adaptar a una oferta */}
+        <button
+          onClick={() => setShowTailor((v) => !v)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+            showTailor || tailored
+              ? 'bg-[var(--accent)] text-[var(--accent-contrast)]'
+              : 'text-[var(--text-muted)] hover:bg-[var(--surface-alt)]'
+          }`}
+          title="Adaptar el CV a una oferta"
+        >
+          <Wand2 size={16} />
+          <span className="font-bold">Adaptar</span>
+        </button>
 
         {/* Separador */}
         <div className="w-px h-8 bg-[var(--border)]"></div>
@@ -119,6 +146,18 @@ const App = () => {
           </div>
         </div>
       </div>
+
+      {showTailor && (
+        <TailorPanel
+          lang={language}
+          meta={tailored?.lang === language ? tailored : null}
+          onTailored={(json) => {
+            setTailored({ ...json, lang: language });
+            setCurrentDesign(designLoaders.length - 1); // el diseño ATS
+          }}
+          onReset={() => setTailored(null)}
+        />
+      )}
 
       {/* Diseño actual */}
       <Suspense fallback={<div className="p-8 text-[var(--text-muted)]">Cargando diseño…</div>}>

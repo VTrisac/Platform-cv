@@ -1,2 +1,11 @@
 node_modules/
 dist/
+.venv/
+__pycache__/
+.vercel/
+.env
+.env.local
+.env.*.local
+.vercel
+.env*
+node-compile-cache/

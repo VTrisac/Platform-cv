@@ -1,0 +1,2 @@
+# uv venv --python 3.13 .venv && uv pip install -r requirements.txt && .venv/bin/scrapling install
+scrapling[fetchers]==0.4.12
