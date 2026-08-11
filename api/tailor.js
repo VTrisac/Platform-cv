@@ -23,7 +23,7 @@ import { dataES, dataEN } from '../src/data.js'
 const MODEL = process.env.TAILOR_MODEL || 'nvidia/nemotron-3-super-120b-a12b'
 const BASE_URL = 'https://integrate.api.nvidia.com/v1'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const LINKEDIN_ID = /(?:currentJobId=|\/jobs\/view\/(?:[^/?]*-)?)(\d{6,})/
 const GUEST = 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/'

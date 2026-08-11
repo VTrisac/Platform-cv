@@ -11,7 +11,7 @@
 import { gate } from './tailor.js'
 import { dataEN } from '../src/data.js'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 // Todos verificados con --check el 27-07-2026.
 // ponytail: el token suele ser el slug de la empresa. Míralo en la URL de su

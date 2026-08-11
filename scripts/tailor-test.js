@@ -7,6 +7,7 @@ import { strict as a } from 'node:assert'
 import handler, { applyPatch, findInventions, strip } from '../api/tailor.js'
 import { puntuar, recomendar, limpiarVeredicto } from '../api/audit.js'
 import feed from '../api/feed.js'
+import { findFigures } from '../api/cover.js'
 import { dataEN } from '../src/data.js'
 
 // Un parche hostil: cambia empresas y fechas, añade stack que no tiene,
@@ -72,6 +73,16 @@ const invCarta = findInventions(dataEN, ['No experience with Kubernetes.'], cart
 a.deepEqual(invCarta, ['Kubernetes'], 'la carta que se contradice con sus gaps se caza igual')
 a.deepEqual(findInventions(dataEN, ['No Kubernetes.'], 'Built RAG systems in Python at WeAi.'), [],
   'una carta que se ciñe al CV no dispara el aviso')
+
+// Caso real observado con nemotron a la primera: el prompt le prohíbe hablar de
+// dinero y aun así escribió una pretensión salarial. Un número no es un término
+// declarado en gaps, así que findInventions no puede verlo.
+a.deepEqual(findFigures('mi aspiración salarial está en el rango de 65.000–70.000 € brutos'), ['70.000 €'],
+  'una cifra en euros se caza')
+a.deepEqual(findFigures('expecting around 70k for this role'), ['70k'], 'también el atajo "70k"')
+a.deepEqual(findFigures('$85,000 per year'), ['$85,000'], 'y el símbolo delante')
+a.deepEqual(findFigures('Entregué 3 proyectos para BBVA en 2025 con Python 3.11'), [],
+  'los números que no son dinero no molestan')
 
 // --- puntuación de encaje ---------------------------------------------------
 // Los imprescindibles y los valorables NO se promedian juntos: cumplir extras

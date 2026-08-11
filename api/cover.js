@@ -9,7 +9,7 @@
 import { gate, client, MODEL, findInventions } from './tailor.js'
 import { dataES, dataEN } from '../src/data.js'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const schema = {
   type: 'object',
@@ -30,7 +30,14 @@ const schema = {
   additionalProperties: false,
 }
 
-const SYSTEM = `Escribes la carta de presentación de un candidato para una oferta concreta.
+// "detailed thinking off" es el interruptor de razonamiento de nemotron. Aquí
+// hace falta: con él encendido se gastaba los 8000 tokens deliberando y volvía
+// cortado (502) a los 295 s. La auditoría y la adaptación no lo necesitan —sus
+// esquemas son rígidos y las anclan—, pero una carta es texto libre y sin esto
+// divaga hasta agotar el presupuesto. Medido.
+const SYSTEM = `detailed thinking off
+
+Escribes la carta de presentación de un candidato para una oferta concreta.
 
 REGLA ABSOLUTA: no inventas nada. Solo puedes usar hechos que YA están en el CV.
 Si la oferta pide algo que el CV no respalda, va en "gaps" y NO aparece en la carta.
@@ -40,9 +47,25 @@ Si la oferta pide algo que el CV no respalda, va en "gaps" y NO aparece en la ca
 - Cuerpo: dos o tres hechos del CV que respondan a lo que la oferta pide, citando
   la empresa o el proyecto real. Es lo único que convence.
 - Cierre: una frase. Sin "quedo a su entera disposición".
-- Sin encabezado, sin fecha, sin "Estimados señores" y sin firma: eso lo pone él.
+- Sin encabezado, sin fecha, sin "Estimado equipo", sin "Estimados señores" y sin
+  firma: empieza directamente por la primera frase del primer párrafo.
 - No repitas el CV entero: la carta explica lo que el CV no puede decir solo.
-- Nada de métricas, años ni porcentajes que no estén ya en el CV.`
+- Nada de métricas, años ni porcentajes que no estén ya en el CV.
+
+NUNCA menciones dinero. Ni pretensión salarial, ni rango, ni expectativas, ni
+disponibilidad, ni fecha de incorporación, ni preaviso. No los sabes, y una cifra
+inventada le compromete en una negociación real. Si la oferta pregunta por el
+salario, la carta lo ignora.`
+
+// El prompt le prohíbe hablar de dinero y aun así se inventó "65.000-70.000 €
+// brutos anuales" en la primera prueba real. Una cifra salarial inventada le
+// compromete en una negociación, así que no basta con pedirlo: se detecta.
+// findInventions no sirve aquí — solo caza términos declarados en gaps, y un
+// número no es un término.
+export function findFigures(carta) {
+  const re = /(?:\d[\d.,]*\s*(?:€|\$|EUR|USD|euros?|dólares?|k\b)|(?:€|\$)\s*\d[\d.,]*)/gi
+  return [...new Set((carta.match(re) ?? []).map((s) => s.trim()))]
+}
 
 export default async function handler(req, res) {
   const blocked = gate(req, res)
@@ -66,34 +89,48 @@ export default async function handler(req, res) {
       idiomas: cv.languages,
     }
 
-    const completion = await client().chat.completions.create({
-      model: MODEL,
-      max_tokens: 4000,
-      messages: [
-        { role: 'system', content: SYSTEM },
-        {
-          // El idioma al final del mensaje de usuario, no en el system: enterrado
-          // allí lo ignora y copia el idioma de la oferta (probado en tailor y audit).
-          role: 'user',
-          content: `CV DEL CANDIDATO:\n${JSON.stringify(resumen, null, 2)}\n\n---\n\nOFERTA:\n${oferta.slice(0, 40000)}\n\n---\n\n`
-            + `IDIOMA OBLIGATORIO DE SALIDA: ${lang === 'es' ? 'ESPAÑOL' : 'INGLÉS'}. `
-            + `Escribe la carta en ${lang === 'es' ? 'español' : 'inglés'} aunque la oferta esté en otro idioma. `
-            + `Los nombres de tecnologías y empresas no se traducen.`,
-        },
-      ],
-      response_format: { type: 'json_schema', json_schema: { name: 'carta', strict: true, schema } },
-    })
+    const mensajes = [
+      { role: 'system', content: SYSTEM },
+      {
+        // El idioma al final del mensaje de usuario, no en el system: enterrado
+        // allí lo ignora y copia el idioma de la oferta (probado en tailor y audit).
+        role: 'user',
+        content: `CV DEL CANDIDATO:\n${JSON.stringify(resumen, null, 2)}\n\n---\n\nOFERTA:\n${oferta.slice(0, 40000)}\n\n---\n\n`
+          + `IDIOMA OBLIGATORIO DE SALIDA: ${lang === 'es' ? 'ESPAÑOL' : 'INGLÉS'}. `
+          + `Escribe la carta en ${lang === 'es' ? 'español' : 'inglés'} aunque la oferta esté en otro idioma. `
+          + `Los nombres de tecnologías y empresas no se traducen.`,
+      },
+    ]
 
-    const choice = completion.choices?.[0]
+    // Medido sobre la oferta de Landbot: cuando sale bien son 256 tokens y 33 s;
+    // cuando el modelo se pone a divagar consume TODO el presupuesto y vuelve
+    // cortado. Con 8000 eso costaba 276-295 s y no cabía ni en el techo de 300.
+    //
+    // Así que el presupuesto es bajo a propósito: no porque la carta necesite
+    // poco (que también), sino para que la divagación muera pronto y el
+    // reintento salga barato. Tres intentos de ~40 s cabe; uno de 295 s no.
+    let choice, completion
+    for (let intento = 0; intento < 3; intento++) {
+      completion = await client().chat.completions.create({
+        model: MODEL,
+        max_tokens: 1200,
+        messages: mensajes,
+        response_format: { type: 'json_schema', json_schema: { name: 'carta', strict: true, schema } },
+      })
+      choice = completion.choices?.[0]
+      if (choice?.finish_reason !== 'length') break
+    }
     if (choice?.finish_reason === 'length') {
-      return res.status(502).json({ error: 'La carta se ha cortado. Prueba con una oferta más corta.' })
+      return res.status(502).json({ error: 'El modelo no ha conseguido escribir la carta en tres intentos. Vuelve a probar.' })
     }
     const { carta, gaps } = JSON.parse(choice.message.content)
 
     res.status(200).json({
       carta: carta.trim(),
       gaps,
-      inventions: findInventions(cv, gaps, carta),
+      // Dos redes distintas: una para lo que se contradice con sus propios
+      // gaps, otra para las cifras de dinero que no debería haber escrito.
+      inventions: [...findInventions(cv, gaps, carta), ...findFigures(carta)],
       usage: { input: completion.usage?.prompt_tokens, output: completion.usage?.completion_tokens },
     })
   } catch (e) {

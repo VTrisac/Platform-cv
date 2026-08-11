@@ -11,7 +11,7 @@
 import { fetchOffer, gate, client, MODEL } from './tailor.js'
 import { dataES, dataEN } from '../src/data.js'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 const schema = {
   type: 'object',
