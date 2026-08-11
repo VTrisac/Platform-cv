@@ -146,9 +146,14 @@ export default async function handler(req, res) {
       messages: [
         { role: 'system', content: SYSTEM },
         {
+          // Mismo problema y misma cura que en tailor.js: un "responde en X"
+          // suelto lo ignoraba y copiaba los requisitos literales de la oferta.
           role: 'user',
           content: `CV DEL CANDIDATO:\n${JSON.stringify(resumen, null, 2)}\n\n---\n\nOFERTA:\n${oferta.slice(0, 40000)}\n\n---\n\n`
-            + `Responde en ${lang === 'es' ? 'español' : 'inglés'}.`,
+            + `IDIOMA OBLIGATORIO DE SALIDA: ${lang === 'es' ? 'ESPAÑOL' : 'INGLÉS'}. `
+            + `Escribe en ${lang === 'es' ? 'español' : 'inglés'} el texto de cada requisito, la evidencia y el veredicto, `
+            + `aunque la oferta esté en otro idioma: tradúcelos, no los copies literales. `
+            + `Los nombres de tecnologías, empresas y puestos no se traducen.`,
         },
       ],
       response_format: { type: 'json_schema', json_schema: { name: 'auditoria', strict: true, schema } },
