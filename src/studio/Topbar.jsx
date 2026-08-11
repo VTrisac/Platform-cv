@@ -4,6 +4,7 @@ import { FileText, Plus } from 'lucide-react'
 // Se repite idéntica en las tres pantallas, así que vive aquí una sola vez.
 const NAV = [
   { id: 'bento', label: 'Resumen' },
+  { id: 'feed', label: 'Feed' },
   { id: 'ofertas', label: 'Ofertas' },
   { id: 'editor', label: 'Variantes' },
 ]

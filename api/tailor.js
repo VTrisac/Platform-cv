@@ -145,16 +145,19 @@ export function applyPatch(cv, patch) {
   return { data, dropped: [...new Set(dropped)] }
 }
 
-// Los campos de texto libre (profile, title, description, achievements) no se
-// pueden validar contra una lista como tech y skills. Pero hay una señal barata
-// y precisa: si el modelo declara algo en "gaps" y acto seguido lo escribe en el
-// CV, se está contradiciendo a sí mismo, y eso es exactamente una invención.
-// Medido: con nemotron ocurre a la primera ("Spec-Driven Development", "evals").
-export function findInventions(cv, patch) {
+// El texto libre no se puede validar contra una lista como tech y skills. Pero
+// hay una señal barata y precisa: si el modelo declara algo en "gaps" y acto
+// seguido lo escribe, se está contradiciendo a sí mismo, y eso es exactamente
+// una invención. Medido: con nemotron ocurre a la primera ("Spec-Driven
+// Development", "evals").
+//
+// `written` es el texto a vigilar, lo junta quien llama: en /api/tailor son los
+// campos reescritos del CV; en /api/cover, la carta entera.
+export function findInventions(cv, gaps, written) {
   const STOP = new Set(['No', 'Not', 'No explicit', 'The', 'A', 'An', 'Factorial', 'I'])
   // Frases en Mayúscula Inicial y siglas: "Spec-Driven Development", "MCP".
   const terms = new Set()
-  for (const g of patch.gaps ?? []) {
+  for (const g of gaps ?? []) {
     for (const raw of g.match(/\b[A-Z][A-Za-z0-9.+#-]*(?:[ -][A-Z][A-Za-z0-9.+#-]*)*/g) ?? []) {
       // El '.' va en la clase para no partir "Node.js", así que se cuela el
       // punto final de la frase: se recorta solo al final, nunca en medio.
@@ -162,8 +165,6 @@ export function findInventions(cv, patch) {
       if (m.length > 2 && !STOP.has(m)) terms.add(m)
     }
   }
-  const written = [patch.title, patch.profile,
-    ...patch.experience.flatMap((e) => [e.description, ...e.achievements])].join('\n')
   // Lo que ya estaba en tu CV es legítimo, aunque el modelo lo liste como gap.
   const master = JSON.stringify(cv)
   const has = (hay, needle) => hay.toLowerCase().includes(needle.toLowerCase())
@@ -171,14 +172,18 @@ export function findInventions(cv, patch) {
   return [...terms].filter((t) => has(written, t) && !has(master, t))
 }
 
-// Puerta compartida por /api/tailor y /api/audit. Devuelve null si todo va
-// bien, o el error ya enviado; el llamante solo tiene que hacer return.
+// Puerta compartida por /api/tailor, /api/audit y /api/feed. Devuelve null si
+// todo va bien, o el error ya enviado; el llamante solo tiene que hacer return.
 //
 // La URL de Vercel es pública y cada llamada gasta créditos de tu cuenta.
 // ponytail: un secreto compartido, no OAuth. Un solo usuario, un solo secreto.
 // En producción se exige SIEMPRE: si falta la variable, no se atiende a nadie
 // (fallar cerrado). En local es opcional para poder probar sin fricción.
-export function gate(req, res) {
+//
+// needsKey=false para los endpoints que no llaman al modelo (/api/feed): la
+// contraseña se sigue exigiendo igual, pero faltar la clave de NVIDIA no es
+// motivo para negarles servicio.
+export function gate(req, res, needsKey = true) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Usa POST' })
 
   const expected = process.env.TAILOR_PASSWORD
@@ -191,7 +196,7 @@ export function gate(req, res) {
     }
   }
 
-  if (!process.env.NVIDIA_API_KEY) {
+  if (needsKey && !process.env.NVIDIA_API_KEY) {
     return res.status(500).json({
       error: 'Falta NVIDIA_API_KEY. En local: ponla en .env.local. Desplegado: vercel env add NVIDIA_API_KEY.',
     })
@@ -256,7 +261,9 @@ export default async function handler(req, res) {
       company: patch.company,
       gaps: patch.gaps,
       dropped, // tech inventada: bloqueada automáticamente
-      inventions: findInventions(cv, patch), // texto libre: NO se puede bloquear, se avisa
+      // texto libre: NO se puede bloquear como tech/skills, solo avisar
+      inventions: findInventions(cv, patch.gaps, [patch.title, patch.profile,
+        ...patch.experience.flatMap((e) => [e.description, ...e.achievements])].join('\n')),
       usage: { input: completion.usage?.prompt_tokens, output: completion.usage?.completion_tokens },
     })
   } catch (e) {

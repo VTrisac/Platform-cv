@@ -1,38 +1,42 @@
 import { useState } from 'react'
 import Topbar from './studio/Topbar'
 import Bento from './studio/Bento'
+import Feed from './studio/Feed'
 import Ofertas from './studio/Ofertas'
 import Editor from './studio/Editor'
 import NuevaOferta from './studio/NuevaOferta'
 import { useStudio } from './studio/store'
 
-// Shell de CV Studio. ponytail: sin react-router — tres vistas y un estado.
+// La oferta se crea a partir de la auditoría: empresa, puesto y encaje salen
+// del scraper, no los escribes tú. Se guarda la auditoría entera para que
+// reabrirla no vuelva a gastar una llamada al modelo.
+const desdeAuditoria = (a, lang) => ({
+  empresa: a.empresa,
+  puesto: a.rol,
+  estado: a.recomendacion === 'descartar' ? 'descartada' : 'guardada',
+  fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+  variante: null,
+  auditoria: a,
+  lang,
+})
+
+// Shell de CV Studio. ponytail: sin react-router — cuatro vistas y un estado.
 // Una dependencia de routing para esto sería peso muerto.
 const Studio = () => {
-  const { ofertas, addOferta, updateOferta, removeOferta } = useStudio()
+  const { ofertas, feed, setFeed, preset, setPreset, addOferta, updateOferta, removeOferta } = useStudio()
   const [view, setView] = useState('bento')
   const [actual, setActual] = useState(null)
+  const [urlInicial, setUrlInicial] = useState(null)
   const [modal, setModal] = useState(false)
 
-  const abrirEditor = (oferta) => {
+  const abrirEditor = (oferta, url = null) => {
     setActual(oferta ?? null)
+    setUrlInicial(url)
     setView('editor')
   }
 
-  // La oferta se crea a partir de la auditoría: empresa, puesto y encaje salen
-  // del scraper. Se guarda la auditoría entera para que reabrirla no vuelva a
-  // gastar una llamada al modelo, y se salta directo al informe de encaje.
   const guardarAuditada = (a, lang) => {
-    const oferta = {
-      empresa: a.empresa,
-      puesto: a.rol,
-      estado: a.recomendacion === 'descartar' ? 'descartada' : 'guardada',
-      fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
-      variante: null,
-      auditoria: a,
-      lang,
-    }
-    setActual(addOferta(oferta))
+    setActual(addOferta(desdeAuditoria(a, lang)))
     setModal(false)
     setView('editor')
   }
@@ -47,6 +51,17 @@ const Studio = () => {
 
       {view === 'bento' && <Bento ofertas={ofertas} onNav={setView} onEditar={abrirEditor} />}
 
+      {view === 'feed' && (
+        <Feed
+          feed={feed}
+          setFeed={setFeed}
+          preset={preset}
+          setPreset={setPreset}
+          ofertas={ofertas}
+          onAuditar={(url) => abrirEditor(null, url)}
+        />
+      )}
+
       {view === 'ofertas' && (
         <Ofertas
           ofertas={ofertas}
@@ -59,27 +74,26 @@ const Studio = () => {
       {view === 'editor' && (
         <Editor
           oferta={actual}
+          urlInicial={urlInicial}
           onBack={() => setView(actual ? 'ofertas' : 'bento')}
           onGuardar={(nombre) => {
             if (actual) updateOferta(actual.id, { variante: nombre })
             setView('ofertas')
           }}
+          // Sin oferta previa (desde el feed o desde "Adaptar a una oferta") la
+          // auditoría no se guardaba en ningún sitio y se perdía al volver:
+          // aquí se crea la oferta, igual que hace el modal de nueva oferta.
           onAuditada={(a, lang) => {
             if (actual) updateOferta(actual.id, { auditoria: a, lang, empresa: a.empresa, puesto: a.rol })
+            else setActual(addOferta(desdeAuditoria(a, lang)))
           }}
-          // Descartar desde la auditoría: si la oferta ya estaba en el tracker
-          // se marca; si venía de cero, se guarda descartada para no volver a
-          // auditar lo mismo dentro de dos semanas.
-          onDescartar={(a) => {
+          // La carta se guarda con la oferta, igual que la auditoría: volver a
+          // abrirla no debe costar otra llamada al modelo.
+          onCarta={(carta) => actual && updateOferta(actual.id, { carta })}
+          // Descartar desde la auditoría. Siempre hay oferta que marcar: para
+          // llegar aquí ha habido una auditoría, y onAuditada ya la creó.
+          onDescartar={() => {
             if (actual) updateOferta(actual.id, { estado: 'descartada' })
-            else
-              addOferta({
-                empresa: a.empresa,
-                puesto: a.rol,
-                estado: 'descartada',
-                fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
-                variante: null,
-              })
             setView('ofertas')
           }}
         />

@@ -22,3 +22,6 @@ export async function apiPost(path, body, retryKey) {
 // Una URL suelta se scrapea; cualquier otra cosa es el texto de la oferta.
 export const auditar = (entrada, lang) =>
   apiPost('/api/audit', { [/^https?:\/\//i.test(entrada.trim()) ? 'url' : 'text']: entrada.trim(), lang })
+
+// Sin preset, el servidor usa los valores de siempre.
+export const buscarFeed = (preset) => apiPost('/api/feed', preset ?? {})

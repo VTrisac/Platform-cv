@@ -1,5 +1,5 @@
 import { useState, Suspense, lazy } from 'react'
-import { ArrowLeft, Sparkles, FileDown, Save, Loader2, TriangleAlert, ShieldCheck, Search } from 'lucide-react'
+import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, ShieldCheck, TriangleAlert } from 'lucide-react'
 import { dataES, dataEN } from '../data'
 import Auditoria from './Auditoria'
 import { apiPost, auditar as auditarOferta } from './api'
@@ -40,17 +40,21 @@ const PASOS = [
 // Flujo en tres pasos: auditar la oferta -> decidir si hay encaje -> adaptar.
 // El orden importa: adaptar primero gastaba una llamada al modelo incluso en
 // ofertas que no valían la pena, y enterraba los gaps DESPUÉS de haber decidido.
-const Editor = ({ oferta, onBack, onGuardar, onDescartar, onAuditada }) => {
+const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada, onCarta }) => {
   // Si la oferta ya trae auditoría guardada, se entra directo al informe: es
   // el caso normal desde el tracker, y volver a auditar costaría otra llamada.
   const [audit, setAudit] = useState(oferta?.auditoria ?? null)
   const [paso, setPaso] = useState(oferta?.auditoria ? 'auditoria' : 'oferta')
   const [lang, setLang] = useState(oferta?.lang ?? (oferta?.variante?.endsWith('ES') ? 'es' : 'en'))
   const [design, setDesign] = useState(0)
-  const [texto, setTexto] = useState('')
+  // Del feed llega la URL ya puesta: la auditoría la scrapea igual que si la
+  // hubieras pegado tú, así que no hace falta otro camino para esto.
+  const [texto, setTexto] = useState(urlInicial ?? '')
   const [nombre, setNombre] = useState(oferta?.variante ?? '')
   const [data, setData] = useState(null)
   const [meta, setMeta] = useState(null)
+  const [carta, setCarta] = useState(oferta?.carta ?? null)
+  const [cartaInv, setCartaInv] = useState([])
   const [loading, setLoading] = useState(null)
   const [error, setError] = useState(null)
 
@@ -77,6 +81,18 @@ const Editor = ({ oferta, onBack, onGuardar, onDescartar, onAuditada }) => {
       const j = await apiPost('/api/tailor', { text: audit.texto, lang })
       setData(j.data); setMeta(j); setPaso('cv')
     } catch (e) { setError(e.message); setPaso('auditoria') } finally { setLoading(null) }
+  }
+
+  // Llamada aparte de la adaptación: no toda oferta merece carta y adaptar ya
+  // tarda ~35 s. Se reenvía el mismo texto que scrapeó la auditoría.
+  const generarCarta = async () => {
+    setLoading('carta'); setError(null)
+    try {
+      const j = await apiPost('/api/cover', { text: audit.texto, lang })
+      setCarta(j.carta)
+      setCartaInv(j.inventions ?? [])
+      onCarta?.(j.carta)
+    } catch (e) { setError(e.message) } finally { setLoading(null) }
   }
 
   return (
@@ -229,6 +245,48 @@ const Editor = ({ oferta, onBack, onGuardar, onDescartar, onAuditada }) => {
                   rows={7}
                   style={{ ...field, resize: 'vertical' }}
                 />
+              </Card>
+              <Card
+                title="CARTA DE PRESENTACIÓN"
+                right={carta && (
+                  <button
+                    onClick={() => navigator.clipboard.writeText(carta)}
+                    className="flex items-center gap-1.5 text-xs font-semibold"
+                    style={{ color: 'var(--s-muted)' }}
+                    title="Copiar al portapapeles"
+                  >
+                    <Copy size={13} /> Copiar
+                  </button>
+                )}
+              >
+                {carta ? (
+                  <>
+                    <textarea
+                      value={carta}
+                      onChange={(e) => { setCarta(e.target.value); onCarta?.(e.target.value) }}
+                      rows={12}
+                      style={{ ...field, resize: 'vertical' }}
+                    />
+                    {/* Misma señal que en el CV: la carta es texto libre y no se
+                        puede filtrar, solo avisar de lo que se contradice. */}
+                    {cartaInv.length > 0 && (
+                      <p className="text-xs flex gap-1.5 p-2 rounded-lg" style={{ background: '#F9EDEA', color: '#8A4A3C' }}>
+                        <TriangleAlert size={13} className="shrink-0 mt-0.5" />
+                        <span><b>Revisa la carta:</b> menciona {cartaInv.join(', ')}, que no está en tu CV.</span>
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <button
+                    onClick={generarCarta}
+                    disabled={loading === 'carta'}
+                    className="flex items-center gap-2 px-3.5 py-2.5 rounded-[10px] text-[13px] font-semibold border w-fit disabled:opacity-50"
+                    style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)' }}
+                  >
+                    {loading === 'carta' ? <Loader2 size={15} className="animate-spin" /> : <Mail size={15} style={{ color: 'var(--s-accent)' }} />}
+                    {loading === 'carta' ? 'Escribiendo…' : 'Generar carta'}
+                  </button>
+                )}
               </Card>
               <Card title="NOMBRE DE LA VARIANTE">
                 <input value={nombre} onChange={(e) => setNombre(e.target.value)} style={field} />

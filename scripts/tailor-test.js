@@ -6,6 +6,7 @@
 import { strict as a } from 'node:assert'
 import handler, { applyPatch, findInventions, strip } from '../api/tailor.js'
 import { puntuar, recomendar, limpiarVeredicto } from '../api/audit.js'
+import feed from '../api/feed.js'
 import { dataEN } from '../src/data.js'
 
 // Un parche hostil: cambia empresas y fechas, añade stack que no tiene,
@@ -55,13 +56,22 @@ const contradictory = {
   profile: 'Expert in Spec-Driven Development and evals frameworks, plus Python and RAG.',
   gaps: ['No explicit mention of Spec-Driven Development.', 'No experience with evals frameworks.'],
 }
-const inv = findInventions(dataEN, contradictory)
+const escrito = (p) => [p.title, p.profile, ...p.experience.flatMap((e) => [e.description, ...e.achievements])].join('\n')
+const inv = findInventions(dataEN, contradictory.gaps, escrito(contradictory))
 a.ok(inv.includes('Spec-Driven Development'), 'detecta lo que el propio modelo dijo que faltaba')
 a.ok(!inv.includes('Python'), 'Python está en tu CV: no es invención')
 a.ok(!inv.includes('RAG'), 'RAG está en tu CV: no es invención')
 
 const honest = { ...evil, profile: 'Senior AI Engineer con Python y FastAPI.', gaps: ['No Ruby on Rails.'] }
-a.deepEqual(findInventions(dataEN, honest), [], 'sin contradicción, no avisa')
+a.deepEqual(findInventions(dataEN, honest.gaps, escrito(honest)), [], 'sin contradicción, no avisa')
+
+// La carta es texto libre de principio a fin: applyPatch no puede filtrar nada
+// ahí, así que esta es la ÚNICA red que tiene. Mismo detector, otro texto.
+const cartaMentirosa = 'I have shipped production Kubernetes clusters and built RAG systems in Python.'
+const invCarta = findInventions(dataEN, ['No experience with Kubernetes.'], cartaMentirosa)
+a.deepEqual(invCarta, ['Kubernetes'], 'la carta que se contradice con sus gaps se caza igual')
+a.deepEqual(findInventions(dataEN, ['No Kubernetes.'], 'Built RAG systems in Python at WeAi.'), [],
+  'una carta que se ciñe al CV no dispara el aviso')
 
 // --- puntuación de encaje ---------------------------------------------------
 // Los imprescindibles y los valorables NO se promedian juntos: cumplir extras
@@ -107,21 +117,27 @@ a.equal(limpiarVeredicto(bueno, enc), bueno, 'un veredicto real se respeta tal c
 // --- la puerta del endpoint -------------------------------------------------
 // La URL de Vercel es pública y cada llamada gasta créditos: en producción esto
 // tiene que fallar CERRADO. 500/401 aquí significan "no ha llegado al modelo".
-const call = async (env, headers = {}) => {
+const call = async (h, env, headers = {}) => {
   for (const k of ['VERCEL', 'TAILOR_PASSWORD', 'NVIDIA_API_KEY']) delete process.env[k]
   Object.assign(process.env, env)
   const res = { code: 0, body: null }
   res.status = (c) => { res.code = c; return res }
   res.json = (d) => { res.body = d; return res }
-  await handler({ method: 'POST', headers, body: { text: 'x'.repeat(500), lang: 'en' } }, res)
+  await h({ method: 'POST', headers, body: { text: 'x'.repeat(500), lang: 'en' } }, res)
   return res
 }
 const PW = { VERCEL: '1', TAILOR_PASSWORD: 's3cr3t' }
-a.equal((await call({ VERCEL: '1' })).code, 500, 'prod sin TAILOR_PASSWORD: cerrado a todos')
-a.equal((await call(PW)).code, 401, 'prod sin enviar contraseña: 401')
-a.equal((await call(PW, { 'x-tailor-key': 'mala' })).code, 401, 'contraseña incorrecta: 401')
+a.equal((await call(handler, { VERCEL: '1' })).code, 500, 'prod sin TAILOR_PASSWORD: cerrado a todos')
+a.equal((await call(handler, PW)).code, 401, 'prod sin enviar contraseña: 401')
+a.equal((await call(handler, PW, { 'x-tailor-key': 'mala' })).code, 401, 'contraseña incorrecta: 401')
 // 500 = pasó la puerta y murió por falta de API key, que es lo que se comprueba.
-a.equal((await call(PW, { 'x-tailor-key': 's3cr3t' })).code, 500, 'contraseña correcta: pasa')
-a.equal((await call({})).code, 500, 'en local sin nada configurado: pasa')
+a.equal((await call(handler, PW, { 'x-tailor-key': 's3cr3t' })).code, 500, 'contraseña correcta: pasa')
+a.equal((await call(handler, {})).code, 500, 'en local sin nada configurado: pasa')
+
+// /api/feed pasa needsKey=false porque no llama al modelo. Eso NO puede
+// ablandar la contraseña: sigue siendo una URL pública que sale a la red.
+a.equal((await call(feed, { VERCEL: '1' })).code, 500, 'feed en prod sin TAILOR_PASSWORD: cerrado')
+a.equal((await call(feed, PW)).code, 401, 'feed en prod sin contraseña: 401')
+a.equal((await call(feed, PW, { 'x-tailor-key': 'mala' })).code, 401, 'feed con contraseña incorrecta: 401')
 
 console.log(`ok — ${dropped.length} inventos bloqueados (${dropped.join(', ')}); puerta cerrada en prod`)

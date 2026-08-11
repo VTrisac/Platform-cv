@@ -33,6 +33,8 @@ const SEED = [
   { empresa: 'TheFork', puesto: 'Backend Engineer', estado: 'guardada', variante: null, fecha: '15 jul' },
 ]
 
+const hoy = () => new Date().toISOString().slice(0, 10)
+
 const load = () => {
   try {
     const raw = localStorage.getItem(KEY)
@@ -57,6 +59,20 @@ export function useStudio() {
 
   return {
     ofertas: state.ofertas,
+    // El feed es dato derivado —lo que hay en los tableros AHORA—, así que se
+    // cachea por día en vez de guardarse: esto sustituye al cron. Si la marca
+    // es de hoy, abrir Studio no vuelve a salir a la red.
+    // Se exige `preset` además de la fecha: una caché guardada por una versión
+    // anterior del endpoint no lo trae, y sin él el panel de criterios no tiene
+    // de dónde partir. Caducarla es más barato que defenderse campo a campo.
+    feed: state.feed?.fecha === hoy() && state.feed.preset ? state.feed : null,
+    setFeed: (feed) => setState((s) => ({ ...s, feed: { ...feed, fecha: hoy() } })),
+    // null = sin tocar: el servidor aplica los criterios de siempre. En cuanto
+    // editas algo se guarda el objeto entero y manda él.
+    preset: state.preset ?? null,
+    // Cambiar los criterios invalida el feed cacheado: si no, verías el
+    // resultado viejo hasta mañana y parecería que el panel no hace nada.
+    setPreset: (preset) => setState((s) => ({ ...s, preset, feed: null })),
     // Devuelve la oferta creada: quien la añade necesita su id para abrirla.
     addOferta: (o) => {
       const nueva = { id: crypto.randomUUID(), estado: 'guardada', ...o }

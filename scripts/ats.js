@@ -14,7 +14,7 @@ import { strict as a } from 'node:assert'
 import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dataES, dataEN } from '../src/data.js'
-import { match } from './feed.js'
+import { match } from '../api/feed.js'
 
 // --- extracción ------------------------------------------------------------
 // ponytail: pdfminer via el venv en vez de una lib npm. Es el parser que usan
