@@ -10,7 +10,7 @@
 //   node scripts/feed.js --selftest      -> comprueba la lógica de filtrado
 import { strict as a } from 'node:assert'
 import { readFileSync, readdirSync } from 'node:fs'
-import { COMPANIES, UBICACION, board, buscar, filtrar, iso, keywords, match, salarioDe } from '../api/feed.js'
+import { COMPANIES, UBICACION, board, buscar, filtrar, iso, keywords, match, notaDe, salarioDe } from '../api/feed.js'
 
 // Anthropic lista varias sedes separadas por "|": rompería la tabla markdown.
 const cell = (s) => (s ?? '').replace(/\|/g, '/').trim()
@@ -53,10 +53,29 @@ function selftest() {
   a.equal(salarioDe('founded in 2026, 3 projects, Python 3.11'), null,
     'los números que no son dinero no son un sueldo')
 
+  // --- la nota de encaje: proporción de lo que pide la oferta que cubres ---
+  // Lo que hace que la nota signifique algo: la oferta de Rails no puede sacar
+  // lo mismo que la de Python solo por ser larga.
+  const rails = notaDe('We work with Ruby on Rails, PostgreSQL, AWS, Kubernetes and Docker')
+  const tuyo = notaDe('We work with Python, FastAPI, PostgreSQL, Docker and React')
+  a.ok(tuyo.nota > rails.nota, `tu stack (${tuyo.nota}) debe puntuar más que uno ajeno (${rails.nota})`)
+  a.equal(tuyo.nota, 10, 'cubrir las 5 que pide es un 10')
+  a.ok(rails.nota <= 5, 'cubrir 2 de 6 no llega al aprobado')
+  a.ok(rails.stack.includes('Ruby') && rails.stack.includes('Kubernetes'),
+    'el stack incluye lo que NO tienes: es el denominador')
+  a.ok(!rails.hits.includes('Ruby'), 'hits sigue siendo solo lo tuyo')
+
+  // El suelo del denominador: sin él, una mención suelta daría un 10 vacío.
+  a.equal(notaDe('We use Python').nota, 3, 'una sola coincidencia no es un 10')
+  a.equal(notaDe('Python and Docker').nota, 5, 'dos de dos, con suelo 4, es un 5')
+  a.equal(notaDe('We build spreadsheets').nota, 0, 'nada tuyo es un 0')
+  a.ok(notaDe('Python, FastAPI, Django, Docker, PostgreSQL, React, TypeScript').nota === 10,
+    'siete tuyas y ninguna ajena: 10')
+
   // --- filtrar: cada criterio y su motivo de descarte ----------------------
   const hoy = new Date('2026-08-12T12:00:00Z')
   const oferta = (p) => ({ title: 'Backend Engineer', location: 'Barcelona', fecha: '2026-08-12', text: 'Python and Docker', ...p })
-  const solo = (jobs, crit) => filtrar(jobs, { hoy, minHits: 1, ...crit })
+  const solo = (jobs, crit) => filtrar(jobs, { hoy, minNota: 1, ...crit })
 
   a.equal(solo([oferta({})], {}).pasan.length, 1, 'una oferta normal pasa')
   a.equal(solo([oferta({ location: 'Tokyo' })], {}).descartes['ubicación'], 1)
@@ -93,10 +112,19 @@ function selftest() {
   a.equal(solo([oferta({ text: 'Python and Docker' })], { ia: 'con' }).descartes['sin IA'], 1)
   a.equal(solo([oferta({ text: 'Python with LLM agents' })], { ia: 'sin' }).descartes['con IA'], 1)
 
-  a.equal(solo([oferta({ text: 'Python' })], { minHits: 5 }).descartes['pocas coincidencias'], 1)
+  a.equal(solo([oferta({ text: 'Python' })], { minNota: 5 }).descartes['encaje bajo'], 1,
+    'un 3 no pasa el mínimo de 5')
+  a.equal(solo([oferta({ text: 'Python and Docker' })], { minNota: 5 }).pasan.length, 1, 'un 5 sí')
   a.ok(!('text' in (solo([oferta({})], {}).pasan[0])), 'el texto crudo no viaja al cliente')
 
-  console.log(`ok — ${keywords.length} keywords del CV; filtros y fechas verificados`)
+  // Se ordena por nota, no por número de coincidencias.
+  const ordenadas = solo([
+    oferta({ title: 'A', text: 'Python, Docker, SQL, Java, React, Ruby, Rails, AWS, Kubernetes, Terraform' }),
+    oferta({ title: 'B', text: 'Python, FastAPI, Django, Docker' }),
+  ], {}).pasan
+  a.equal(ordenadas[0].title, 'B', 'cubrir todo lo que piden gana a coincidir mucho en una oferta larga')
+
+  console.log(`ok — ${keywords.length} keywords del CV; nota, filtros y fechas verificados`)
 }
 
 // --- main ------------------------------------------------------------------
@@ -122,12 +150,13 @@ if (flags.includes('--selftest')) {
 
   console.log(`# Feed — ${jobs.length} de ${total} ofertas${ventana !== 'todo' ? ` (ventana: ${ventana})` : ''}`)
   console.log(motivos ? `\nDescartadas: ${motivos}.\n` : '')
-  console.log('| # | Fecha | Empresa | Puesto | Ubicación | € | Match |')
-  console.log('|---|-------|---------|--------|-----------|---|-------|')
+  console.log('| Encaje | Fecha | Empresa | Puesto | Ubicación | € | Cubres |')
+  console.log('|--------|-------|---------|--------|-----------|---|--------|')
   for (const r of jobs) {
     const mark = seen.includes(r.company.toLowerCase()) ? ' ·visto' : ''
-    console.log(`| ${r.hits.length} | ${r.fecha ?? '—'} | ${cell(r.company)}${mark} | [${cell(r.title)}](${r.url}) `
-      + `| ${cell(r.location)} | ${r.salario ? `${Math.round(r.salario / 1000)}k` : '—'} | ${r.hits.slice(0, 6).join(', ')} |`)
+    console.log(`| ${r.nota}/10 | ${r.fecha ?? '—'} | ${cell(r.company)}${mark} | [${cell(r.title)}](${r.url}) `
+      + `| ${cell(r.location)} | ${r.salario ? `${Math.round(r.salario / 1000)}k` : '—'} `
+      + `| ${r.hits.length}/${r.stack.length}: ${r.hits.slice(0, 5).join(', ')} |`)
   }
 
   if (dead.length) console.error(`\n⚠ sin resultados (token o ATS cambiado): ${dead.map((d) => d.name).join(', ')}`)

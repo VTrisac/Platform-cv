@@ -204,7 +204,10 @@ const Criterios = ({ preset, setPreset, feed, lenguajesCV }) => {
         </button>
       </Card>
 
-      <Card title="TABLEROS DE EMPRESA" hint="El token es el slug de su página de empleo: boards.greenhouse.io/token, jobs.lever.co/token, token.workable.com.">
+      <Card
+        title="TABLEROS DE EMPRESA"
+        hint="El token es el slug de su página de empleo: boards.greenhouse.io/token, jobs.lever.co/token, token.workable.com. La nota de encaje es qué proporción del stack que pide la oferta cubres tú: un 10 es cubrirlo entero."
+      >
         {tableros.map((t, i) => {
           const cambiar = (patch) => guardar(busquedas, tableros.map((x, n) => (n === i ? { ...x, ...patch } : x)))
           return (
@@ -229,12 +232,15 @@ const Criterios = ({ preset, setPreset, feed, lenguajesCV }) => {
             <Plus size={14} /> Añadir empresa
           </button>
           <label className="flex items-center gap-2 text-xs ml-auto" style={{ color: 'var(--s-muted)' }}>
-            Mínimo de coincidencias con tu CV
+            Nota mínima de encaje (sobre 10)
             <input
               type="number"
               min={0}
-              value={c.minHits}
-              onChange={(e) => editar({ minHits: Number(e.target.value) })}
+              max={10}
+              // ?? 5: un preset guardado antes de que la nota existiera trae
+              // minHits y no minNota, y el campo saldría vacío.
+              value={c.minNota ?? 5}
+              onChange={(e) => editar({ minNota: Number(e.target.value) })}
               style={{ ...campo, width: 70 }}
             />
           </label>

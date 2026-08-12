@@ -2,7 +2,7 @@
 // LinkedIn, baja la descripción de cada oferta y aplica los filtros baratos —los
 // que salen del texto y no cuestan una llamada al modelo.
 //
-// POST /api/feed  { empresas?, ubicacion?, minHits?, desde?, ...filtros }
+// POST /api/feed  { empresas?, ubicacion?, minNota?, ventana?, ...filtros }
 //   -> { jobs[], total, descartes{}, dead[], preset }
 //
 // Vive en api/ y no en scripts/ porque .vercelignore excluye scripts/ del
@@ -52,7 +52,9 @@ export const COMPANIES = [
 ]
 
 export const UBICACION = 'barcelona|madrid|valencia|spain|españa|remote|emea|europe'
-export const MIN_HITS = 2
+// Nota mínima de encaje, sobre 10. Cinco es "cubres la mitad de lo que piden";
+// por debajo de eso la oferta no merece ni que la leas.
+export const MIN_NOTA = 5
 
 // Los tres valores que acepta la ventana temporal, y su traducción al filtro
 // nativo de LinkedIn (f_TPR). Comprobado: r86400 devuelve solo las últimas 24 h.
@@ -80,6 +82,37 @@ export const match = (text, terms = keywords) =>
     const esc = k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     return new RegExp(`(?<![a-z0-9+#.])${esc}(?![a-z0-9+#])`, 'i').test(text)
   })
+
+// Lo que TÚ no tienes pero las ofertas piden. Sin esto no se puede medir encaje,
+// solo contar aciertos: una oferta de Ruby on Rails que además mencione Docker
+// puntuaría igual que una de Python y FastAPI, porque las dos darían un acierto.
+// Con esto, la de Rails baja — pide cinco cosas y cubres una.
+// ponytail: una lista corta y a mano, no una taxonomía. Añade lo que veas salir.
+const AJENAS = [
+  'Ruby', 'Rails', 'Go', 'Golang', 'Rust', 'PHP', 'Laravel', 'Symfony', '.NET', 'Scala',
+  'Elixir', 'Perl', 'Kotlin', 'Swift', 'Objective-C', 'Angular', 'Svelte', 'Ember',
+  'AWS', 'Kubernetes', 'Terraform', 'Ansible', 'Jenkins', 'Kafka', 'RabbitMQ', 'Spark',
+  'Hadoop', 'Snowflake', 'Databricks', 'Airflow', 'dbt', 'Tableau', 'PowerBI', 'Looker',
+  'Salesforce', 'SAP', 'Magento', 'Shopify', 'WordPress', 'Drupal', 'Flutter',
+  'React Native', 'Unity', 'Unreal', 'Selenium', 'Cypress', 'Puppeteer',
+  'PyTorch', 'TensorFlow', 'Keras', 'scikit-learn', 'Hugging Face', 'Kubeflow', 'MLflow',
+]
+
+// El vocabulario con el que se lee el stack de una oferta: lo tuyo y lo ajeno.
+export const VOCABULARIO = [...new Set([...keywords, ...AJENAS])]
+
+// La nota de encaje, de 0 a 10: qué proporción de lo que pide la oferta cubres.
+//
+// El denominador tiene suelo 4 a propósito. Sin él, una oferta que solo nombra
+// "Python" te daría un 10 por una sola coincidencia, y ese 10 no significaría
+// nada: no hay señal suficiente para afirmar que encajas. Con el suelo, hacen
+// falta al menos cuatro tecnologías tuyas para llegar al 10.
+export function notaDe(texto) {
+  const stack = match(texto, VOCABULARIO)
+  const mios = match(texto, keywords)
+  const nota = Math.min(10, Math.round((10 * mios.length) / Math.max(stack.length, 4)))
+  return { nota, stack, hits: mios }
+}
 
 // Fechas: cada fuente la da en su formato (ISO, epoch en milisegundos, o solo
 // el día). Todas acaban en YYYY-MM-DD, que es con lo que se compara.
@@ -308,7 +341,7 @@ export function filtrarCabecera(jobs, { ubicacion = UBICACION, ventana = 'todo',
 
 // Lo que necesita la descripción completa.
 export function filtrarTexto(jobs, {
-  minHits = MIN_HITS, salarioMin = 0, descartarSinSalario = false,
+  minNota = MIN_NOTA, salarioMin = 0, descartarSinSalario = false,
   modalidades = [], lenguajes = [], ia = 'indiferente',
 } = {}) {
   const { pasan, descartes } = cribar(jobs, (j) => {
@@ -322,14 +355,17 @@ export function filtrarTexto(jobs, {
     if (lenguajes.length && !lenguajes.every((l) => match(texto, [l]).length)) return 'falta lenguaje'
     if (ia === 'con' && !IA.test(texto)) return 'sin IA'
     if (ia === 'sin' && IA.test(texto)) return 'con IA'
-    j.hits = match(texto)
-    if (j.hits.length < minHits) return 'pocas coincidencias'
+    Object.assign(j, notaDe(texto))
+    if (j.nota < minNota) return 'encaje bajo'
     return null
   })
 
   // El texto crudo son decenas de KB por oferta y nadie lo lee al otro lado.
+  // A igual nota, primero la que cubre más tecnologías: un 8 sobre 10 pedidas
+  // pesa más que un 8 sobre 4.
   return {
-    pasan: pasan.map(({ text, pendiente, ...j }) => j).sort((a, b) => b.hits.length - a.hits.length),
+    pasan: pasan.map(({ text, pendiente, ...j }) => j)
+      .sort((a, b) => b.nota - a.nota || b.hits.length - a.hits.length),
     descartes,
   }
 }
@@ -371,7 +407,7 @@ export async function buscar(preset = {}) {
     preset: {
       empresas, ventana,
       ubicacion: preset.ubicacion ?? UBICACION,
-      minHits: preset.minHits ?? MIN_HITS,
+      minNota: preset.minNota ?? MIN_NOTA,
       veto: preset.veto ?? [],
       salarioMin: preset.salarioMin ?? 0,
       descartarSinSalario: preset.descartarSinSalario ?? false,

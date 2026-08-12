@@ -115,13 +115,13 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
           className="flex items-center gap-4 px-5 py-2.5 text-xs font-semibold"
           style={{ background: '#F5F1E6', color: 'var(--s-muted)', letterSpacing: '0.3px' }}
         >
-          <span className="w-[50px]">MATCH</span>
+          <span className="w-[60px]">ENCAJE</span>
           <span className="w-[90px]">FECHA</span>
           <span className="w-[150px]">EMPRESA</span>
           <span className="flex-1">PUESTO</span>
           <span className="w-[160px]">UBICACIÓN</span>
           <span className="w-[90px]">SALARIO</span>
-          <span className="w-[220px]">COINCIDENCIAS</span>
+          <span className="w-[220px]">CUBRES</span>
           <span className="w-[90px] text-right">ACCIONES</span>
         </div>
 
@@ -139,15 +139,16 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
               className="flex items-center gap-4 px-5 py-3.5 border-t"
               style={{ borderColor: 'var(--s-border)', opacity: yaVista ? 0.55 : 1 }}
             >
-              <span className="w-[50px]">
+              <span className="w-[60px]">
                 <span
                   className="px-2 py-1 rounded-full text-xs font-bold"
                   style={{
-                    background: j.hits.length >= 5 ? '#E3EBDC' : j.hits.length >= 3 ? '#F3EAD6' : '#EFEADB',
-                    color: j.hits.length >= 5 ? '#48603F' : j.hits.length >= 3 ? '#8A6D2E' : '#6C6F5C',
+                    background: j.nota >= 8 ? '#E3EBDC' : j.nota >= 6 ? '#F3EAD6' : '#EFEADB',
+                    color: j.nota >= 8 ? '#48603F' : j.nota >= 6 ? '#8A6D2E' : '#6C6F5C',
                   }}
+                  title={`Cubres ${j.hits.length} de las ${j.stack.length} tecnologías que pide`}
                 >
-                  {j.hits.length}
+                  {j.nota}/10
                 </span>
               </span>
               <span className="w-[90px] text-[13px]" style={{ color: 'var(--s-muted)' }}>{j.fecha ?? '—'}</span>
@@ -168,8 +169,14 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
               <span className="w-[90px] text-[13px]" style={{ color: j.salario ? 'var(--s-accent-dark)' : 'var(--s-muted)' }}>
                 {j.salario ? `${Math.round(j.salario / 1000)}k €` : 'sin salario'}
               </span>
-              <span className="w-[220px] text-xs truncate" style={{ color: 'var(--s-muted)' }} title={j.hits.join(', ')}>
-                {j.hits.join(', ')}
+              {/* Los dos números que hay detrás de la nota: qué cubres y de
+                  cuánto. Un 8 de 10 pedidas no es lo mismo que un 8 de 4. */}
+              <span
+                className="w-[220px] text-xs truncate"
+                style={{ color: 'var(--s-muted)' }}
+                title={`Pide: ${j.stack.join(', ')}`}
+              >
+                <b>{j.hits.length}/{j.stack.length}</b> · {j.hits.join(', ')}
               </span>
               <span className="w-[90px] flex items-center justify-end">
                 {yaVista ? (
