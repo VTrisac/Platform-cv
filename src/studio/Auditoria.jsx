@@ -95,6 +95,18 @@ const Auditoria = ({ a, onAdaptar, onDescartar }) => {
 
         <p className="text-sm leading-relaxed" style={{ color: 'var(--s-muted)' }}>{a.veredicto}</p>
 
+        {/* El filtro que ninguna palabra clave puede aplicar. Se enseña la
+            frase exacta: si te descarta una oferta, quieres poder juzgarla. */}
+        {a.ingles && (
+          <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: '#F9EDEA', color: '#8A4A3C' }}>
+            <TriangleAlert size={14} className="shrink-0 mt-0.5" />
+            <span>
+              <b>Inglés imprescindible:</b> «{a.ingles}». Con el filtro activo en Criterios, esta oferta
+              queda descartada automáticamente.
+            </span>
+          </div>
+        )}
+
         {a.encaje.bloqueantes.length > 0 && (
           <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: '#F9EDEA', color: '#8A4A3C' }}>
             <TriangleAlert size={14} className="shrink-0 mt-0.5" />

@@ -5,6 +5,7 @@ import { FileText, Plus } from 'lucide-react'
 const NAV = [
   { id: 'bento', label: 'Resumen' },
   { id: 'feed', label: 'Feed' },
+  { id: 'criterios', label: 'Criterios' },
   { id: 'ofertas', label: 'Ofertas' },
   { id: 'editor', label: 'Variantes' },
 ]

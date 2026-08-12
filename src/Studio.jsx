@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Topbar from './studio/Topbar'
 import Bento from './studio/Bento'
 import Feed from './studio/Feed'
+import Criterios from './studio/Criterios'
 import Ofertas from './studio/Ofertas'
 import Editor from './studio/Editor'
 import NuevaOferta from './studio/NuevaOferta'
@@ -10,10 +11,15 @@ import { useStudio } from './studio/store'
 // La oferta se crea a partir de la auditoría: empresa, puesto y encaje salen
 // del scraper, no los escribes tú. Se guarda la auditoría entera para que
 // reabrirla no vuelva a gastar una llamada al modelo.
-const desdeAuditoria = (a, lang) => ({
+//
+// El filtro de inglés se aplica AQUÍ y no en el feed porque solo la auditoría
+// sabe distinguir "se valora inglés" de "inglés imprescindible": es la única
+// que ha clasificado los requisitos. Descartada, pero guardada con su motivo
+// para que puedas leer qué frase la tumbó.
+const desdeAuditoria = (a, lang, excluirIngles) => ({
   empresa: a.empresa,
   puesto: a.rol,
-  estado: a.recomendacion === 'descartar' ? 'descartada' : 'guardada',
+  estado: a.recomendacion === 'descartar' || (excluirIngles && a.ingles) ? 'descartada' : 'guardada',
   fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
   variante: null,
   auditoria: a,
@@ -35,8 +41,12 @@ const Studio = () => {
     setView('editor')
   }
 
+  // El criterio efectivo: el tuyo si has tocado la pantalla, y si no el que el
+  // servidor dice haber aplicado.
+  const excluirIngles = (preset ?? feed?.preset)?.excluirInglesImprescindible ?? false
+
   const guardarAuditada = (a, lang) => {
-    setActual(addOferta(desdeAuditoria(a, lang)))
+    setActual(addOferta(desdeAuditoria(a, lang, excluirIngles)))
     setModal(false)
     setView('editor')
   }
@@ -56,9 +66,18 @@ const Studio = () => {
           feed={feed}
           setFeed={setFeed}
           preset={preset}
-          setPreset={setPreset}
           ofertas={ofertas}
           onAuditar={(url) => abrirEditor(null, url)}
+          onCriterios={() => setView('criterios')}
+        />
+      )}
+
+      {view === 'criterios' && (
+        <Criterios
+          preset={preset}
+          setPreset={setPreset}
+          feed={feed}
+          lenguajesCV={feed?.keywords ?? []}
         />
       )}
 
@@ -84,8 +103,12 @@ const Studio = () => {
           // auditoría no se guardaba en ningún sitio y se perdía al volver:
           // aquí se crea la oferta, igual que hace el modal de nueva oferta.
           onAuditada={(a, lang) => {
-            if (actual) updateOferta(actual.id, { auditoria: a, lang, empresa: a.empresa, puesto: a.rol })
-            else setActual(addOferta(desdeAuditoria(a, lang)))
+            if (actual) {
+              updateOferta(actual.id, {
+                auditoria: a, lang, empresa: a.empresa, puesto: a.rol,
+                ...(excluirIngles && a.ingles ? { estado: 'descartada' } : {}),
+              })
+            } else setActual(addOferta(desdeAuditoria(a, lang, excluirIngles)))
           }}
           // La carta se guarda con la oferta, igual que la auditoría: volver a
           // abrirla no debe costar otra llamada al modelo.

@@ -104,6 +104,20 @@ export function limpiarVeredicto(v, encaje) {
   ].join(' ')
 }
 
+// "No quiero ofertas donde el inglés sea imprescindible" no se puede resolver
+// con palabras clave: "English" aparece en casi toda oferta técnica, la mitad de
+// las veces como "English is a plus". La diferencia entre eso y "English C1
+// required" es criterio, y la auditoría ya lo ha aplicado al clasificar cada
+// requisito como imprescindible o valorable. Aquí solo se lee esa clasificación.
+//
+// Bloquea cuando el inglés es imprescindible, se cumpla o no: es lo que pediste.
+// Si algún día prefieres que solo bloquee cuando NO lo cumples, es añadir
+// `&& r.encaje !== 'si'`.
+export function bloqueaIngles(requisitos = []) {
+  const IDIOMA = /\b(ingl[ée]s|english)\b/i
+  return requisitos.find((r) => r.tipo === 'imprescindible' && IDIOMA.test(r.texto))?.texto ?? null
+}
+
 // La recomendación se calcula, no se le pregunta al modelo: devolvía
 // "descartar" con el 100% de los imprescindibles cumplidos.
 export function recomendar({ imprescindibles, bloqueantes }) {
@@ -171,6 +185,9 @@ export default async function handler(req, res) {
       encaje,
       veredicto: limpiarVeredicto(a.veredicto, encaje),
       recomendacion: recomendar(encaje),
+      // El texto del requisito, no un booleano: si te descarta una oferta,
+      // quieres leer exactamente qué exigía antes de fiarte del filtro.
+      ingles: bloqueaIngles(a.requisitos),
       texto: oferta, // para el paso 3, sin volver a scrapear
       usage: { input: completion.usage?.prompt_tokens, output: completion.usage?.completion_tokens },
     })

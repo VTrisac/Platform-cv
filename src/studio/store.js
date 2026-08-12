@@ -66,7 +66,13 @@ export function useStudio() {
     // anterior del endpoint no lo trae, y sin él el panel de criterios no tiene
     // de dónde partir. Caducarla es más barato que defenderse campo a campo.
     feed: state.feed?.fecha === hoy() && state.feed.preset ? state.feed : null,
-    setFeed: (feed) => setState((s) => ({ ...s, feed: { ...feed, fecha: hoy() } })),
+    // Si alguna fuente falló por algo pasajero (LinkedIn limitando el ritmo,
+    // un 5xx) el resultado se enseña pero NO se sella con la fecha: si no, un
+    // límite de ritmo de un minuto te dejaría el feed vacío hasta mañana.
+    setFeed: (feed) => setState((s) => ({
+      ...s,
+      feed: { ...feed, fecha: feed.dead?.some((d) => d.reintentable) ? null : hoy() },
+    })),
     // null = sin tocar: el servidor aplica los criterios de siempre. En cuanto
     // editas algo se guarda el objeto entero y manda él.
     preset: state.preset ?? null,

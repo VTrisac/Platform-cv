@@ -5,7 +5,7 @@
 //   node scripts/tailor-test.js
 import { strict as a } from 'node:assert'
 import handler, { applyPatch, findInventions, strip } from '../api/tailor.js'
-import { puntuar, recomendar, limpiarVeredicto } from '../api/audit.js'
+import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles } from '../api/audit.js'
 import feed from '../api/feed.js'
 import { findFigures } from '../api/cover.js'
 import { dataEN } from '../src/data.js'
@@ -101,6 +101,24 @@ a.deepEqual(p.bloqueantes, ['Ruby on Rails'], 'solo los imprescindibles con enca
 a.equal(puntuar([]).imprescindibles, null, 'sin requisitos no se inventa un porcentaje')
 a.equal(puntuar([{ texto: 'x', tipo: 'valorable', encaje: 'si', evidencia: '' }]).imprescindibles, null,
   'solo valorables: no hay nota de imprescindibles, no un 0 engañoso')
+
+// --- inglés imprescindible --------------------------------------------------
+// La distinción que ninguna palabra clave puede hacer: "English" sale en las dos
+// frases, pero solo una es un requisito que te descarta la oferta.
+a.equal(bloqueaIngles([
+  { texto: 'Fluent English for daily communication', tipo: 'imprescindible', encaje: 'parcial', evidencia: '' },
+]), 'Fluent English for daily communication', 'inglés exigido: bloquea')
+a.equal(bloqueaIngles([
+  { texto: 'English is a plus', tipo: 'valorable', encaje: 'si', evidencia: '' },
+]), null, 'inglés valorable: no bloquea')
+a.equal(bloqueaIngles([
+  { texto: 'Inglés técnico imprescindible', tipo: 'imprescindible', encaje: 'si', evidencia: 'Inglés (Técnico)' },
+]), 'Inglés técnico imprescindible', 'bloquea aunque lo cumplas: es lo pedido')
+a.equal(bloqueaIngles([
+  { texto: 'English-speaking team', tipo: 'imprescindible', encaje: 'si', evidencia: '' },
+]), 'English-speaking team', 'también en inglés, el CV puede estar en EN')
+a.equal(bloqueaIngles([{ texto: 'Python', tipo: 'imprescindible', encaje: 'si', evidencia: '' }]), null)
+a.equal(bloqueaIngles([]), null, 'sin requisitos no revienta')
 
 // La recomendación se calcula aquí porque el modelo la daba incoherente
 // (devolvió "descartar" con el 100% de los imprescindibles cumplidos).
