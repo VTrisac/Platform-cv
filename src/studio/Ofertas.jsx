@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Search, FileDown, Pencil, Sparkles, FileText, Trash2 } from 'lucide-react'
+import { Search, ExternalLink, Sparkles, FileText, Send, Trash2 } from 'lucide-react'
 import { ESTADOS } from './store'
 
 // Pantalla "Ofertas — Tracker" del diseño: cabecera con recuento, buscador,
@@ -84,7 +84,7 @@ const Ofertas = ({ ofertas, onEditar, onEstado, onBorrar }) => {
           <span className="w-[130px]">ESTADO</span>
           <span className="w-[170px]">VARIANTE</span>
           <span className="w-[100px]">FECHA</span>
-          <span className="w-[90px] text-right">ACCIONES</span>
+          <span className="w-[120px] text-right">ACCIONES</span>
         </div>
 
         {visibles.length === 0 && (
@@ -140,10 +140,10 @@ const Ofertas = ({ ofertas, onEditar, onEstado, onBorrar }) => {
                 ))}
               </select>
             </span>
-            <span className="w-[170px]">
+            <span className="w-[170px] flex flex-col gap-1">
               {o.variante ? (
                 <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium w-fit"
                   style={{ background: 'var(--s-chip-green)', color: 'var(--s-accent-dark)' }}
                 >
                   <FileText size={12} /> {o.variante}
@@ -153,16 +153,24 @@ const Ofertas = ({ ofertas, onEditar, onEstado, onBorrar }) => {
                   sin variante
                 </span>
               )}
+              {/* Lista para enviar = tiene CV adaptado y carta. El envío es tuyo. */}
+              {o.variante && o.carta && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold" style={{ color: 'var(--s-accent)' }}>
+                  <Send size={10} /> lista para enviar
+                </span>
+              )}
             </span>
             <span className="w-[100px] text-[13px]" style={{ color: 'var(--s-muted)' }}>
               {o.fecha}
             </span>
-            <span className="w-[90px] flex items-center justify-end gap-3.5">
-              <button onClick={() => onEditar(o)} title="Adaptar CV a esta oferta">
+            <span className="w-[120px] flex items-center justify-end gap-3.5">
+              {o.url && (
+                <a href={o.url} target="_blank" rel="noreferrer" title="Abrir la oferta para postular">
+                  <ExternalLink size={16} style={{ color: 'var(--s-accent-dark)' }} />
+                </a>
+              )}
+              <button onClick={() => onEditar(o)} title="Preparar / editar candidatura">
                 <Sparkles size={16} style={{ color: 'var(--s-accent)' }} />
-              </button>
-              <button onClick={() => onEditar(o)} title="Editar variante">
-                <Pencil size={16} style={{ color: 'var(--s-muted)' }} />
               </button>
               <button onClick={() => onBorrar(o.id)} title="Eliminar oferta">
                 <Trash2 size={16} style={{ color: 'var(--s-muted)' }} />

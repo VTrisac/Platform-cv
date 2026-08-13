@@ -11,7 +11,8 @@
     "oferta": ".venv/bin/python scripts/oferta.py",
     "pdf": ".venv/bin/python scripts/pdf.py",
     "ats": "node scripts/ats.js",
-    "test": "node scripts/tailor-test.js && node scripts/ats.js --selftest && node scripts/feed.js --selftest"
+    "set-password": "node scripts/set-password.js",
+    "test": "node scripts/tailor-test.js && node scripts/ats.js --selftest && node scripts/feed.js --selftest && node scripts/set-password.js --selftest"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

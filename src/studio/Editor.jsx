@@ -1,5 +1,5 @@
 import { useState, Suspense, lazy } from 'react'
-import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react'
 import { dataES, dataEN } from '../data'
 import Auditoria from './Auditoria'
 import { apiPost, auditar as auditarOferta } from './api'
@@ -61,6 +61,10 @@ const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada
   const cv = data ?? (lang === 'es' ? dataES : dataEN)
   const Preview = components[design]
 
+  // La URL de origen para postular: lo pegado si es un enlace, o la que ya
+  // traía la oferta. Se persiste con la auditoría.
+  const fuenteUrl = /^https?:\/\//i.test(texto.trim()) ? texto.trim() : (oferta?.url ?? null)
+
   const auditar = async () => {
     if (!texto.trim()) return setError('Pega la URL de la oferta o su texto.')
     setLoading('auditar'); setError(null)
@@ -69,7 +73,33 @@ const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada
       setAudit(a)
       setNombre(`${a.empresa} · ${lang.toUpperCase()}`)
       setPaso('auditoria')
-      onAuditada?.(a, lang) // se guarda con la oferta, no se vuelve a pagar
+      onAuditada?.(a, lang, fuenteUrl) // se guarda con la oferta, no se vuelve a pagar
+    } catch (e) { setError(e.message) } finally { setLoading(null) }
+  }
+
+  // Preparar la candidatura entera de un tirón: auditar -> si hay encaje,
+  // adaptar el CV -> escribir la carta. Deja todo listo para que el envío lo
+  // des tú. Si la auditoría recomienda descartar, se para ahí y no gasta las
+  // dos llamadas siguientes en una oferta que no vale la pena.
+  const prepararTodo = async () => {
+    if (!texto.trim()) return setError('Pega la URL de la oferta o su texto.')
+    setError(null)
+    try {
+      setLoading('auditar')
+      // `a.texto` (recién scrapeado), no el estado `audit`: setState es async y
+      // aún no habría cuajado para los dos pasos siguientes.
+      const a = await auditarOferta(texto, lang)
+      setAudit(a); setNombre(`${a.empresa} · ${lang.toUpperCase()}`); setPaso('auditoria')
+      onAuditada?.(a, lang, fuenteUrl)
+      if (a.recomendacion === 'descartar') return // se para, decides tú desde el informe
+
+      setLoading('adaptar')
+      const j = await apiPost('/api/tailor', { text: a.texto, lang })
+      setData(j.data); setMeta(j); setPaso('cv')
+
+      setLoading('carta')
+      const c = await apiPost('/api/cover', { text: a.texto, lang })
+      setCarta(c.carta); setCartaInv(c.inventions ?? []); onCarta?.(c.carta)
     } catch (e) { setError(e.message) } finally { setLoading(null) }
   }
 
@@ -174,17 +204,31 @@ const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada
                 style={{ ...field, resize: 'vertical' }}
               />
               <p className="text-xs" style={{ color: 'var(--s-muted)' }}>
-                Primero se audita: verás requisito por requisito si encajas, antes de tocar el CV.
+                «Preparar todo» audita, y si encajas adapta el CV y escribe la carta, dejándolo
+                listo para que envíes tú. «Solo auditar» se queda en el informe de encaje.
               </p>
-              <button
-                onClick={auditar}
-                disabled={loading === 'auditar'}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold w-fit disabled:opacity-50"
-                style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
-              >
-                {loading === 'auditar' ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
-                {loading === 'auditar' ? 'Auditando…' : 'Auditar oferta'}
-              </button>
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={prepararTodo}
+                  disabled={!!loading}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold w-fit disabled:opacity-50"
+                  style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+                >
+                  {loading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                  {loading === 'auditar' ? 'Auditando…'
+                    : loading === 'adaptar' ? 'Adaptando el CV…'
+                    : loading === 'carta' ? 'Escribiendo la carta…'
+                    : 'Preparar todo'}
+                </button>
+                <button
+                  onClick={auditar}
+                  disabled={!!loading}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold w-fit border disabled:opacity-50"
+                  style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)', color: 'var(--s-muted)' }}
+                >
+                  <Search size={15} /> Solo auditar
+                </button>
+              </div>
               {error && (
                 <p className="text-xs flex gap-1.5" style={{ color: '#8A4A3C' }}>
                   <TriangleAlert size={13} className="shrink-0 mt-0.5" />{error}

@@ -8,6 +8,7 @@
 // imposible que invente un empleo aunque el prompt falle. Y las tecnologías se
 // filtran contra las del CV maestro, así que tampoco puede añadir un stack que
 // no tienes.
+import { scryptSync, timingSafeEqual } from 'node:crypto'
 import OpenAI from 'openai'
 import { dataES, dataEN } from '../src/data.js'
 
@@ -172,13 +173,29 @@ export function findInventions(cv, gaps, written) {
   return [...terms].filter((t) => has(written, t) && !has(master, t))
 }
 
-// Puerta compartida por /api/tailor, /api/audit y /api/feed. Devuelve null si
-// todo va bien, o el error ya enviado; el llamante solo tiene que hacer return.
+// Verifica una contraseña contra un hash `salt:derivado` (hex) de scrypt, en
+// tiempo constante. scrypt es stdlib: ni bcrypt ni ninguna dependencia. El
+// mismo formato que genera scripts/set-password.js.
+export function verifyPassword(password, stored) {
+  const [salt, hex] = String(stored).split(':')
+  if (!salt || !hex) return false
+  const esperado = Buffer.from(hex, 'hex')
+  const recibido = scryptSync(String(password), salt, esperado.length)
+  // Longitudes distintas harían petar timingSafeEqual: se descarta antes.
+  return esperado.length === recibido.length && timingSafeEqual(esperado, recibido)
+}
+
+// Puerta compartida por /api/tailor, /api/audit, /api/feed y /api/cover. Devuelve
+// null si todo va bien, o el error ya enviado; el llamante solo hace return.
 //
 // La URL de Vercel es pública y cada llamada gasta créditos de tu cuenta.
 // ponytail: un secreto compartido, no OAuth. Un solo usuario, un solo secreto.
-// En producción se exige SIEMPRE: si falta la variable, no se atiende a nadie
+// En producción se exige SIEMPRE: si falta el secreto, no se atiende a nadie
 // (fallar cerrado). En local es opcional para poder probar sin fricción.
+//
+// El secreto se guarda hasheado en TAILOR_PASSWORD_HASH; TAILOR_PASSWORD en
+// claro sigue valiendo como camino de compatibilidad, para que un despliegue no
+// te deje fuera mientras migras. Pon el hash, comprueba, y borra la clave clara.
 //
 // needsKey=false para los endpoints que no llaman al modelo (/api/feed): la
 // contraseña se sigue exigiendo igual, pero faltar la clave de NVIDIA no es
@@ -186,14 +203,15 @@ export function findInventions(cv, gaps, written) {
 export function gate(req, res, needsKey = true) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Usa POST' })
 
-  const expected = process.env.TAILOR_PASSWORD
-  if (process.env.VERCEL || expected) {
-    if (!expected) {
-      return res.status(500).json({ error: 'Falta TAILOR_PASSWORD en el entorno: el endpoint queda cerrado.' })
+  const hash = process.env.TAILOR_PASSWORD_HASH
+  const claro = process.env.TAILOR_PASSWORD
+  if (process.env.VERCEL || hash || claro) {
+    if (!hash && !claro) {
+      return res.status(500).json({ error: 'Falta TAILOR_PASSWORD_HASH en el entorno: el endpoint queda cerrado.' })
     }
-    if (req.headers['x-tailor-key'] !== expected) {
-      return res.status(401).json({ error: 'Contraseña incorrecta.' })
-    }
+    const enviada = req.headers['x-tailor-key'] ?? ''
+    const ok = hash ? verifyPassword(enviada, hash) : enviada === claro
+    if (!ok) return res.status(401).json({ error: 'Contraseña incorrecta.' })
   }
 
   if (needsKey && !process.env.NVIDIA_API_KEY) {

@@ -16,13 +16,14 @@ import { useStudio } from './studio/store'
 // sabe distinguir "se valora inglés" de "inglés imprescindible": es la única
 // que ha clasificado los requisitos. Descartada, pero guardada con su motivo
 // para que puedas leer qué frase la tumbó.
-const desdeAuditoria = (a, lang, excluirIngles) => ({
+const desdeAuditoria = (a, lang, excluirIngles, url = null) => ({
   empresa: a.empresa,
   puesto: a.rol,
   estado: a.recomendacion === 'descartar' || (excluirIngles && a.ingles) ? 'descartada' : 'guardada',
   fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
   variante: null,
   auditoria: a,
+  url, // el enlace para postular; null si pegaste el texto a mano
   lang,
 })
 
@@ -102,13 +103,14 @@ const Studio = () => {
           // Sin oferta previa (desde el feed o desde "Adaptar a una oferta") la
           // auditoría no se guardaba en ningún sitio y se perdía al volver:
           // aquí se crea la oferta, igual que hace el modal de nueva oferta.
-          onAuditada={(a, lang) => {
+          onAuditada={(a, lang, url) => {
             if (actual) {
               updateOferta(actual.id, {
                 auditoria: a, lang, empresa: a.empresa, puesto: a.rol,
+                ...(url ? { url } : {}), // no pisar una URL guardada con null
                 ...(excluirIngles && a.ingles ? { estado: 'descartada' } : {}),
               })
-            } else setActual(addOferta(desdeAuditoria(a, lang, excluirIngles)))
+            } else setActual(addOferta(desdeAuditoria(a, lang, excluirIngles, url)))
           }}
           // La carta se guarda con la oferta, igual que la auditoría: volver a
           // abrirla no debe costar otra llamada al modelo.

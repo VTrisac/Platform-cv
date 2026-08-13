@@ -4,10 +4,11 @@
 //
 //   node scripts/tailor-test.js
 import { strict as a } from 'node:assert'
-import handler, { applyPatch, findInventions, strip } from '../api/tailor.js'
+import handler, { applyPatch, findInventions, strip, verifyPassword } from '../api/tailor.js'
 import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles } from '../api/audit.js'
 import feed from '../api/feed.js'
 import { findFigures } from '../api/cover.js'
+import { hashPassword } from './set-password.js'
 import { dataEN } from '../src/data.js'
 
 // Un parche hostil: cambia empresas y fechas, añade stack que no tiene,
@@ -147,7 +148,7 @@ a.equal(limpiarVeredicto(bueno, enc), bueno, 'un veredicto real se respeta tal c
 // La URL de Vercel es pública y cada llamada gasta créditos: en producción esto
 // tiene que fallar CERRADO. 500/401 aquí significan "no ha llegado al modelo".
 const call = async (h, env, headers = {}) => {
-  for (const k of ['VERCEL', 'TAILOR_PASSWORD', 'NVIDIA_API_KEY']) delete process.env[k]
+  for (const k of ['VERCEL', 'TAILOR_PASSWORD', 'TAILOR_PASSWORD_HASH', 'NVIDIA_API_KEY']) delete process.env[k]
   Object.assign(process.env, env)
   const res = { code: 0, body: null }
   res.status = (c) => { res.code = c; return res }
@@ -155,18 +156,32 @@ const call = async (h, env, headers = {}) => {
   await h({ method: 'POST', headers, body: { text: 'x'.repeat(500), lang: 'en' } }, res)
   return res
 }
-const PW = { VERCEL: '1', TAILOR_PASSWORD: 's3cr3t' }
-a.equal((await call(handler, { VERCEL: '1' })).code, 500, 'prod sin TAILOR_PASSWORD: cerrado a todos')
-a.equal((await call(handler, PW)).code, 401, 'prod sin enviar contraseña: 401')
-a.equal((await call(handler, PW, { 'x-tailor-key': 'mala' })).code, 401, 'contraseña incorrecta: 401')
+
+// verifyPassword: valida su contraseña y ninguna otra, y no revienta con basura.
+const HASH = hashPassword('s3cr3t')
+a.ok(verifyPassword('s3cr3t', HASH), 'el hash valida su contraseña')
+a.ok(!verifyPassword('mala', HASH), 'y rechaza otra')
+a.ok(!verifyPassword('s3cr3t', 'sin-dos-puntos'), 'un hash con formato roto no valida, no revienta')
+
+// La puerta, con el hash (el camino nuevo).
+const HPW = { VERCEL: '1', TAILOR_PASSWORD_HASH: HASH }
+a.equal((await call(handler, { VERCEL: '1' })).code, 500, 'prod sin secreto: cerrado a todos')
+a.equal((await call(handler, HPW)).code, 401, 'prod sin enviar contraseña: 401')
+a.equal((await call(handler, HPW, { 'x-tailor-key': 'mala' })).code, 401, 'contraseña incorrecta: 401')
 // 500 = pasó la puerta y murió por falta de API key, que es lo que se comprueba.
-a.equal((await call(handler, PW, { 'x-tailor-key': 's3cr3t' })).code, 500, 'contraseña correcta: pasa')
+a.equal((await call(handler, HPW, { 'x-tailor-key': 's3cr3t' })).code, 500, 'contraseña correcta: pasa')
 a.equal((await call(handler, {})).code, 500, 'en local sin nada configurado: pasa')
+
+// El camino de compatibilidad con TAILOR_PASSWORD en claro sigue vivo hasta que
+// se borre la variable tras migrar.
+const PW = { VERCEL: '1', TAILOR_PASSWORD: 's3cr3t' }
+a.equal((await call(handler, PW)).code, 401, 'clara: sin contraseña, 401')
+a.equal((await call(handler, PW, { 'x-tailor-key': 's3cr3t' })).code, 500, 'clara: contraseña correcta pasa')
 
 // /api/feed pasa needsKey=false porque no llama al modelo. Eso NO puede
 // ablandar la contraseña: sigue siendo una URL pública que sale a la red.
-a.equal((await call(feed, { VERCEL: '1' })).code, 500, 'feed en prod sin TAILOR_PASSWORD: cerrado')
-a.equal((await call(feed, PW)).code, 401, 'feed en prod sin contraseña: 401')
-a.equal((await call(feed, PW, { 'x-tailor-key': 'mala' })).code, 401, 'feed con contraseña incorrecta: 401')
+a.equal((await call(feed, { VERCEL: '1' })).code, 500, 'feed en prod sin secreto: cerrado')
+a.equal((await call(feed, HPW)).code, 401, 'feed en prod sin contraseña: 401')
+a.equal((await call(feed, HPW, { 'x-tailor-key': 'mala' })).code, 401, 'feed con contraseña incorrecta: 401')
 
 console.log(`ok — ${dropped.length} inventos bloqueados (${dropped.join(', ')}); puerta cerrada en prod`)
