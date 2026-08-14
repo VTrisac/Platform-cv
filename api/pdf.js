@@ -39,13 +39,19 @@ export default async function handler(req, res) {
   const { html, styles = [], css = '', filename = 'CV.pdf' } = req.body ?? {}
   if (!html) return res.status(400).json({ error: 'Falta el HTML del CV.' })
 
+  // El <base> es lo que hace que la foto aparezca: los diseños la referencian
+  // como /foto.jpg (URL relativa), y al renderizar aquí Chromium no sabe contra
+  // qué dominio resolverla. El origen sale de la propia petición (el despliegue
+  // se sirve su /foto.jpg a sí mismo; en local, localhost).
+  const origin = `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers.host}`
+
   // Los estilos llegan de dos formas para funcionar tanto desplegado como en
   // local: `styles` son los <link> del build (Chromium los baja), `css` es el
   // texto de los <style> inline que Vite inyecta en dev. El div.studio replica
   // el contexto donde los diseños leen sus variables CSS (--s-*). @page fija los
   // márgenes que el navegador no ponía.
   const enlaces = styles.map((h) => `<link rel="stylesheet" href="${h}">`).join('')
-  const doc = `<!doctype html><html><head><meta charset="utf-8">${enlaces}`
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><base href="${origin}/">${enlaces}`
     + `<style>${css}</style>`
     + `<style>@page{size:A4;margin:5mm}html,body{margin:0;padding:0;background:#fff}</style>`
     + `</head><body><div class="studio">${html}</div></body></html>`
