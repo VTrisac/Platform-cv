@@ -25,3 +25,27 @@ export const auditar = (entrada, lang) =>
 
 // Sin preset, el servidor usa los valores de siempre.
 export const buscarFeed = (preset) => apiPost('/api/feed', preset ?? {})
+
+// Manda el HTML del CV ya renderizado a que Chromium lo imprima limpio, y
+// dispara la descarga. No usa apiPost porque la respuesta es un PDF binario,
+// no JSON, pero repite el mismo baile del 401.
+export async function descargarPdf({ html, styles, css, filename }, retryKey) {
+  const key = retryKey ?? localStorage.getItem('tailorKey') ?? ''
+  const res = await fetch('/api/pdf', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-tailor-key': key },
+    body: JSON.stringify({ html, styles, css, filename }),
+  })
+  if (res.status === 401) {
+    const asked = window.prompt('Contraseña de la app:')
+    if (!asked) throw new Error('Hace falta la contraseña.')
+    localStorage.setItem('tailorKey', asked)
+    return descargarPdf({ html, styles, css, filename }, asked)
+  }
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Error ${res.status}`)
+
+  const url = URL.createObjectURL(await res.blob())
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename })
+  a.click()
+  URL.revokeObjectURL(url)
+}

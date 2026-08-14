@@ -1,8 +1,8 @@
-import { useState, Suspense, lazy } from 'react'
+import { useRef, useState, Suspense, lazy } from 'react'
 import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react'
 import { dataES, dataEN } from '../data'
 import Auditoria from './Auditoria'
-import { apiPost, auditar as auditarOferta } from './api'
+import { apiPost, auditar as auditarOferta, descargarPdf } from './api'
 
 const DESIGNS = [
   { id: 5, name: 'ATS', load: () => import('../designs/Design6ATS') },
@@ -57,9 +57,27 @@ const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada
   const [cartaInv, setCartaInv] = useState([])
   const [loading, setLoading] = useState(null)
   const [error, setError] = useState(null)
+  const previewRef = useRef(null)
 
   const cv = data ?? (lang === 'es' ? dataES : dataEN)
   const Preview = components[design]
+
+  // Manda el HTML del CV que se ve a que Chromium lo imprima limpio en el
+  // servidor. Sustituye a window.print(), que estampaba cabecera y pie del
+  // navegador. Se envían los <link> del build y el CSS inline de dev para que
+  // el PDF salga con estilo en los dos sitios.
+  const bajarPdf = async () => {
+    if (!previewRef.current) return
+    setLoading('pdf'); setError(null)
+    try {
+      await descargarPdf({
+        html: previewRef.current.innerHTML,
+        styles: [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href),
+        css: [...document.querySelectorAll('style')].map((s) => s.textContent).join('\n'),
+        filename: `${(nombre || `${cv.name}`).replace(/[·\s]+/g, '_')}.pdf`,
+      })
+    } catch (e) { setError(e.message) } finally { setLoading(null) }
+  }
 
   // La URL de origen para postular: lo pegado si es un enlace, o la que ya
   // traía la oferta. Se persiste con la auditoría.
@@ -159,11 +177,13 @@ const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada
         {paso === 'cv' && (
           <div className="flex items-center gap-2.5">
             <button
-              onClick={() => window.print()}
-              className="flex items-center gap-2 px-3.5 py-2.5 rounded-[10px] text-[13px] font-semibold border"
+              onClick={bajarPdf}
+              disabled={loading === 'pdf'}
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-[10px] text-[13px] font-semibold border disabled:opacity-50"
               style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)' }}
             >
-              <FileDown size={15} /> PDF
+              {loading === 'pdf' ? <Loader2 size={15} className="animate-spin" /> : <FileDown size={15} />}
+              {loading === 'pdf' ? 'Generando…' : 'Descargar PDF'}
             </button>
             <button
               onClick={() => onGuardar(nombre)}
@@ -360,6 +380,7 @@ const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada
                 </span>
               </div>
               <div
+                ref={previewRef}
                 className="flex-1 overflow-auto rounded-[20px] border"
                 style={{ background: '#fff', borderColor: 'var(--s-border)', boxShadow: 'var(--s-shadow)' }}
               >
