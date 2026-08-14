@@ -10,7 +10,7 @@
 //   node scripts/feed.js --selftest      -> comprueba la lógica de filtrado
 import { strict as a } from 'node:assert'
 import { readFileSync, readdirSync } from 'node:fs'
-import { COMPANIES, UBICACION, board, buscar, filtrar, iso, keywords, match, notaDe, salarioDe } from '../api/feed.js'
+import { COMPANIES, UBICACION, board, buscar, deduplicar, filtrar, iso, keywords, match, notaDe, salarioDe } from '../api/feed.js'
 
 // Anthropic lista varias sedes separadas por "|": rompería la tabla markdown.
 const cell = (s) => (s ?? '').replace(/\|/g, '/').trim()
@@ -69,6 +69,15 @@ function selftest() {
   a.equal(notaDe('We use Python').nota, 3, 'una sola coincidencia no es un 10')
   a.equal(notaDe('Python and Docker').nota, 5, 'dos de dos, con suelo 4, es un 5')
   a.equal(notaDe('We build spreadsheets').nota, 0, 'nada tuyo es un 0')
+
+  // --- deduplicado: la misma oferta llega por varias búsquedas y páginas ----
+  const liA = { url: 'https://es.linkedin.com/jobs/view/ai-engineer-at-acme-4451911121', title: 'AI Engineer' }
+  const liB = { url: 'https://www.linkedin.com/jobs/view/4451911121', title: 'AI Engineer' } // mismo id, otra URL
+  const otra = { url: 'https://es.linkedin.com/jobs/view/backend-at-acme-4400000000', title: 'Backend' }
+  const dedup = deduplicar([liA, liB, otra, { ...otra }])
+  a.equal(dedup.length, 2, 'mismo id de LinkedIn = una sola, aunque cambie la URL o la búsqueda')
+  a.equal(deduplicar([{ url: 'https://boards.greenhouse.io/x/jobs/1' }, { url: 'https://boards.greenhouse.io/x/jobs/1' }]).length, 1,
+    'los tableros se deduplican por URL')
   a.ok(notaDe('Python, FastAPI, Django, Docker, PostgreSQL, React, TypeScript').nota === 10,
     'siete tuyas y ninguna ajena: 10')
 

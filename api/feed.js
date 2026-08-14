@@ -379,10 +379,32 @@ export function filtrar(jobs, criterios = {}) {
 // --- búsqueda --------------------------------------------------------------
 // Todos los criterios son parámetros con los valores de siempre por defecto:
 // sin preset se comporta igual que el CLI de toda la vida.
+// La misma oferta llega por varios sitios: dos búsquedas de LinkedIn que se
+// solapan ("AI Engineer" y "Backend Engineer" pescan la misma), y la paginación
+// del guest endpoint repite tarjetas. Se deduplica por el id numérico de
+// LinkedIn (estable entre búsquedas y páginas) y por URL en el resto.
+// ponytail: no cruza fuentes distintas —la misma oferta en LinkedIn y en el
+// tablero de la empresa tiene URLs distintas y no se detecta—. Es raro y no
+// vale la pena; si molesta, se añade una clave empresa+puesto normalizada.
+export const claveDedup = (j) => {
+  const m = /\/jobs\/view\/(?:[^/?]*-)?(\d{6,})/.exec(j.url ?? '')
+  return m ? `li:${m[1]}` : (j.url || `${j.company}|${j.title}`.toLowerCase())
+}
+
+export function deduplicar(jobs) {
+  const vistos = new Set()
+  return jobs.filter((j) => {
+    const k = claveDedup(j)
+    if (vistos.has(k)) return false
+    vistos.add(k)
+    return true
+  })
+}
+
 export async function buscar(preset = {}) {
   const { empresas = COMPANIES, ventana = 'todo' } = preset
   const boards = await Promise.all(empresas.map((c) => board(c, { ventana })))
-  const jobs = boards.flatMap((b) => b.jobs)
+  const jobs = deduplicar(boards.flatMap((b) => b.jobs))
 
   // Cabecera -> detalle -> texto. Bajar la descripción es lo caro y lo que se
   // le pide al servidor de otro, así que solo se hace sobre lo que ya ha pasado
