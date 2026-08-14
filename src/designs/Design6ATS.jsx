@@ -43,7 +43,7 @@ const Design6ATS = ({ data }) => {
 
   return (
     <div
-      className="bg-white min-h-screen py-12 px-4 text-black print-a4"
+      className="bg-white min-h-screen py-12 px-4 text-black print-a4 print-ats"
       style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
     >
       <div className="max-w-[800px] mx-auto leading-[1.35]">

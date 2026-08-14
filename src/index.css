@@ -82,6 +82,15 @@
     zoom: 0.9;
   }
 
+  /* El diseño ATS es el más largo (6 puestos + 10 certificaciones) y se salía
+     a una segunda página casi vacía. Un pelín menos de zoom lo cuadra en una
+     sola A4, que es lo que espera un reclutador al abrirlo. Medido: a 0.82
+     cabe entero; el texto sigue siendo extraíble (npm run ats lo verifica).
+     Regla posterior y misma especificidad que .print-a4, así que gana. */
+  .print-ats {
+    zoom: 0.82;
+  }
+
   .print-avoid-break {
     break-inside: avoid;
   }
