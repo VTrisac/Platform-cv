@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "CV Studio · Aplicar",
+  "version": "1.0.0",
+  "description": "Rellena el formulario de candidatura con el CV adaptado en CV Studio y adjunta el PDF. Nunca pulsa enviar.",
+  "permissions": ["storage", "tabs"],
+  "host_permissions": [
+    "https://cv-victor-trisac.vercel.app/*",
+    "https://cv-victor-trisac-*.vercel.app/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "https://*.greenhouse.io/*",
+    "https://*.lever.co/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.workable.com/*",
+    "https://*.linkedin.com/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://*.smartrecruiters.com/*",
+    "https://*.recruitee.com/*",
+    "https://*.teamtailor.com/*",
+    "https://*.personio.de/*",
+    "https://*.factorialhr.com/*",
+    "https://remoteok.com/*"
+  ],
+  "optional_host_permissions": ["*://*/*"],
+  "background": { "service_worker": "sw.js" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://cv-victor-trisac.vercel.app/*",
+        "https://cv-victor-trisac-*.vercel.app/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://*.greenhouse.io/*",
+        "https://*.lever.co/*",
+        "https://*.ashbyhq.com/*",
+        "https://*.workable.com/*",
+        "https://*.linkedin.com/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://*.smartrecruiters.com/*",
+        "https://*.recruitee.com/*",
+        "https://*.teamtailor.com/*",
+        "https://*.personio.de/*",
+        "https://*.factorialhr.com/*"
+      ],
+      "js": ["campos.js", "rellenar.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "action": { "default_popup": "popup.html", "default_title": "CV Studio" }
+}

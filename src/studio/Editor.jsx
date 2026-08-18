@@ -1,8 +1,9 @@
-import { useRef, useState, Suspense, lazy } from 'react'
-import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react'
+import { useEffect, useRef, useState, Suspense, lazy } from 'react'
+import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, Send, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react'
 import { dataES, dataEN } from '../data'
+import { conPerfil } from '../perfil'
 import Auditoria from './Auditoria'
-import { apiPost, auditar as auditarOferta, descargarPdf } from './api'
+import { apiPost, auditar as auditarOferta, aplicar as mandarAExtension, base64, descargarPdf, hayExtension, INSTALAR, pdfBlob } from './api'
 
 const DESIGNS = [
   { id: 5, name: 'ATS', load: () => import('../designs/Design6ATS') },
@@ -40,18 +41,20 @@ const PASOS = [
 // Flujo en tres pasos: auditar la oferta -> decidir si hay encaje -> adaptar.
 // El orden importa: adaptar primero gastaba una llamada al modelo incluso en
 // ofertas que no valían la pena, y enterraba los gaps DESPUÉS de haber decidido.
-const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada, onCarta }) => {
+const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, onDescartar, onAuditada, onCarta, onAplicado }) => {
   // Si la oferta ya trae auditoría guardada, se entra directo al informe: es
   // el caso normal desde el tracker, y volver a auditar costaría otra llamada.
   const [audit, setAudit] = useState(oferta?.auditoria ?? null)
-  const [paso, setPaso] = useState(oferta?.auditoria ? 'auditoria' : 'oferta')
+  // Con el CV ya adaptado guardado se entra directo al paso 3: reabrir una
+  // oferta del tracker no debe volver a pagar la adaptación.
+  const [paso, setPaso] = useState(oferta?.cv ? 'cv' : oferta?.auditoria ? 'auditoria' : 'oferta')
   const [lang, setLang] = useState(oferta?.lang ?? (oferta?.variante?.endsWith('ES') ? 'es' : 'en'))
   const [design, setDesign] = useState(0)
   // Del feed llega la URL ya puesta: la auditoría la scrapea igual que si la
   // hubieras pegado tú, así que no hace falta otro camino para esto.
   const [texto, setTexto] = useState(urlInicial ?? '')
   const [nombre, setNombre] = useState(oferta?.variante ?? '')
-  const [data, setData] = useState(null)
+  const [data, setData] = useState(oferta?.cv ?? null)
   const [meta, setMeta] = useState(null)
   const [carta, setCarta] = useState(oferta?.carta ?? null)
   const [cartaInv, setCartaInv] = useState([])
@@ -62,6 +65,30 @@ const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada
   const cv = data ?? (lang === 'es' ? dataES : dataEN)
   const Preview = components[design]
 
+  // Los diseños se cargan con import() dinámico y Suspense. Si se manda a
+  // imprimir antes de que resuelva, Chromium imprime el "Cargando…" y sale un
+  // PDF de nueve caracteres. Pasó de verdad al aplicar desde el tracker, que no
+  // da tiempo a que cargue porque no lo pulsa un humano.
+  // El índice se pasa a mano: setDesign no actualiza la variable de este cierre,
+  // así que al aplicar habría esperado al diseño anterior.
+  const esperarPreview = async (idx = design, i = 0) => {
+    await DESIGNS[idx].load()
+    if ((previewRef.current?.textContent ?? '').length > 200 || i > 30) return
+    await new Promise((r) => setTimeout(r, 100))
+    return esperarPreview(idx, i + 1)
+  }
+
+  // El HTML que se ve, tal cual, para que Chromium lo imprima. Lo comparten
+  // descargar y aplicar: el PDF que se adjunta es el mismo que te bajas.
+  const paraImprimir = (filename) => ({
+    html: previewRef.current.innerHTML,
+    styles: [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href),
+    css: [...document.querySelectorAll('style')].map((s) => s.textContent).join('\n'),
+    filename,
+  })
+
+  const nombreFichero = () => `${(nombre || cv.name).replace(/[·\s]+/g, '_')}.pdf`
+
   // Manda el HTML del CV que se ve a que Chromium lo imprima limpio en el
   // servidor. Sustituye a window.print(), que estampaba cabecera y pie del
   // navegador. Se envían los <link> del build y el CSS inline de dev para que
@@ -70,18 +97,56 @@ const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada
     if (!previewRef.current) return
     setLoading('pdf'); setError(null)
     try {
-      await descargarPdf({
-        html: previewRef.current.innerHTML,
-        styles: [...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href),
-        css: [...document.querySelectorAll('style')].map((s) => s.textContent).join('\n'),
-        filename: `${(nombre || `${cv.name}`).replace(/[·\s]+/g, '_')}.pdf`,
-      })
+      await esperarPreview()
+      await descargarPdf(paraImprimir(nombreFichero()))
     } catch (e) { setError(e.message) } finally { setLoading(null) }
   }
 
   // La URL de origen para postular: lo pegado si es un enlace, o la que ya
   // traía la oferta. Se persiste con la auditoría.
   const fuenteUrl = /^https?:\/\//i.test(texto.trim()) ? texto.trim() : (oferta?.url ?? null)
+
+  // Aplicar: genera el PDF, arma el paquete y se lo pasa a la extensión, que
+  // abre la oferta y rellena el formulario en TU sesión. Aquí no se puede
+  // hacer: una web no toca el formulario de otro dominio, lo prohíbe el
+  // navegador. Y la extensión no pulsa enviar: eso lo confirmas tú.
+  const aplicar = async () => {
+    if (!fuenteUrl) return setError('Esta oferta no tiene enlace. Pega su URL en el paso 1 o inscríbete a mano.')
+    if (!hayExtension()) return setError(INSTALAR)
+    setLoading('aplicar'); setError(null)
+    try {
+      // Al portal solo sube el diseño ATS: es el único que un parser lee bien.
+      // Si estabas mirando otro, se cambia y se espera al repintado, porque el
+      // PDF sale del DOM y no de los datos.
+      if (design !== 0) setDesign(0)
+      await esperarPreview(0)
+      const filename = nombreFichero()
+      const blob = await pdfBlob(paraImprimir(filename))
+      await mandarAExtension({
+        url: fuenteUrl,
+        origin: window.location.origin,
+        key: localStorage.getItem('tailorKey') ?? '',
+        lang,
+        perfil: conPerfil(perfil),
+        carta,
+        oferta: { empresa: audit?.empresa, puesto: audit?.rol, texto: audit?.texto },
+        cv: { nombre: filename, tipo: 'application/pdf', base64: await base64(blob) },
+      })
+      onAplicado?.()
+    } catch (e) { setError(e.message) } finally { setLoading(null) }
+  }
+
+  // Desde el tracker se entra con el "Aplicar" ya pulsado: es la acción que
+  // pediste, no otra pantalla intermedia. La bandera evita repetirlo si el
+  // componente vuelve a renderizar.
+  const disparado = useRef(false)
+  useEffect(() => {
+    if (autoAplicar && paso === 'cv' && data && !disparado.current) {
+      disparado.current = true
+      aplicar()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAplicar, paso, data])
 
   const auditar = async () => {
     if (!texto.trim()) return setError('Pega la URL de la oferta o su texto.')
@@ -186,11 +251,21 @@ const Editor = ({ oferta, urlInicial, onBack, onGuardar, onDescartar, onAuditada
               {loading === 'pdf' ? 'Generando…' : 'Descargar PDF'}
             </button>
             <button
-              onClick={() => onGuardar(nombre)}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold"
-              style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+              onClick={() => onGuardar(nombre, data)}
+              className="flex items-center gap-2 px-3.5 py-2.5 rounded-[10px] text-[13px] font-semibold border"
+              style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)' }}
             >
               <Save size={15} /> Guardar variante
+            </button>
+            <button
+              onClick={aplicar}
+              disabled={!!loading}
+              title={fuenteUrl ? `Rellenar el formulario de ${fuenteUrl}` : 'Esta oferta no tiene enlace'}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
+              style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+            >
+              {loading === 'aplicar' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
+              {loading === 'aplicar' ? 'Preparando…' : 'Aplicar'}
             </button>
           </div>
         )}

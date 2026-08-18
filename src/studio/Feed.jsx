@@ -122,7 +122,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
           <span className="w-[160px]">UBICACIÓN</span>
           <span className="w-[90px]">SALARIO</span>
           <span className="w-[220px]">CUBRES</span>
-          <span className="w-[90px] text-right">ACCIONES</span>
+          <span className="w-[150px] text-right">ACCIONES</span>
         </div>
 
         {!loading && jobs.length === 0 && (
@@ -178,7 +178,19 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
               >
                 <b>{j.hits.length}/{j.stack.length}</b> · {j.hits.join(', ')}
               </span>
-              <span className="w-[90px] flex items-center justify-end">
+              {/* Aquí no hay "Aplicar": sin auditar y sin adaptar no hay nada
+                  que mandar, y saltarse ese orden es justo lo que no quieres. */}
+              <span className="w-[150px] flex items-center justify-end gap-3">
+                <a
+                  href={j.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Abrir la oferta en el portal"
+                  className="flex items-center gap-1.5 text-xs font-semibold"
+                  style={{ color: 'var(--s-accent-dark)' }}
+                >
+                  <ExternalLink size={13} /> Abrir
+                </a>
                 {yaVista ? (
                   <span className="text-xs" style={{ color: 'var(--s-muted)' }}>en tracker</span>
                 ) : (

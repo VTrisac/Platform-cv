@@ -14,7 +14,7 @@ const Chip = ({ estado }) => {
   )
 }
 
-const Ofertas = ({ ofertas, onEditar, onEstado, onBorrar }) => {
+const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar }) => {
   const [q, setQ] = useState('')
   const [filtro, setFiltro] = useState(null)
 
@@ -84,7 +84,7 @@ const Ofertas = ({ ofertas, onEditar, onEstado, onBorrar }) => {
           <span className="w-[130px]">ESTADO</span>
           <span className="w-[170px]">VARIANTE</span>
           <span className="w-[100px]">FECHA</span>
-          <span className="w-[120px] text-right">ACCIONES</span>
+          <span className="w-[180px] text-right">ACCIONES</span>
         </div>
 
         {visibles.length === 0 && (
@@ -163,17 +163,40 @@ const Ofertas = ({ ofertas, onEditar, onEstado, onBorrar }) => {
             <span className="w-[100px] text-[13px]" style={{ color: 'var(--s-muted)' }}>
               {o.fecha}
             </span>
-            <span className="w-[120px] flex items-center justify-end gap-3.5">
+            <span className="w-[180px] flex items-center justify-end gap-2.5">
+              {/* Con CV adaptado y enlace ya hay algo que mandar, así que la
+                  acción es aplicar. Sin las dos cosas, lo que toca es prepararla. */}
+              {o.url && o.cv ? (
+                <button
+                  onClick={() => onAplicar(o)}
+                  title="Rellenar el formulario del portal con este CV. No lo envía: confirmas tú."
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
+                  style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+                >
+                  <Send size={12} /> Aplicar
+                </button>
+              ) : (
+                <button
+                  onClick={() => onEditar(o)}
+                  title="Auditar la oferta y adaptar el CV"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border"
+                  style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)', color: 'var(--s-muted)' }}
+                >
+                  <Sparkles size={12} style={{ color: 'var(--s-accent)' }} /> Preparar
+                </button>
+              )}
+              {o.url && o.cv && (
+                <button onClick={() => onEditar(o)} title="Ver o editar la candidatura">
+                  <Sparkles size={15} style={{ color: 'var(--s-accent)' }} />
+                </button>
+              )}
               {o.url && (
-                <a href={o.url} target="_blank" rel="noreferrer" title="Abrir la oferta para postular">
-                  <ExternalLink size={16} style={{ color: 'var(--s-accent-dark)' }} />
+                <a href={o.url} target="_blank" rel="noreferrer" title="Abrir la oferta en el portal">
+                  <ExternalLink size={15} style={{ color: 'var(--s-accent-dark)' }} />
                 </a>
               )}
-              <button onClick={() => onEditar(o)} title="Preparar / editar candidatura">
-                <Sparkles size={16} style={{ color: 'var(--s-accent)' }} />
-              </button>
               <button onClick={() => onBorrar(o.id)} title="Eliminar oferta">
-                <Trash2 size={16} style={{ color: 'var(--s-muted)' }} />
+                <Trash2 size={15} style={{ color: 'var(--s-muted)' }} />
               </button>
             </span>
           </div>

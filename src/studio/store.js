@@ -76,6 +76,10 @@ export function useStudio() {
     // null = sin tocar: el servidor aplica los criterios de siempre. En cuanto
     // editas algo se guarda el objeto entero y manda él.
     preset: state.preset ?? null,
+    // Los datos de candidatura que no salen del CV (visado, salario, preaviso).
+    // null = todavía sin tocar; PERFIL de src/perfil.js manda.
+    perfil: state.perfil ?? null,
+    setPerfil: (perfil) => setState((s) => ({ ...s, perfil })),
     // Cambiar los criterios invalida el feed cacheado: si no, verías el
     // resultado viejo hasta mañana y parecería que el panel no hace nada.
     setPreset: (preset) => setState((s) => ({ ...s, preset, feed: null })),

@@ -6,6 +6,7 @@ import Criterios from './studio/Criterios'
 import Ofertas from './studio/Ofertas'
 import Editor from './studio/Editor'
 import NuevaOferta from './studio/NuevaOferta'
+import Perfil from './studio/Perfil'
 import { useStudio } from './studio/store'
 
 // La oferta se crea a partir de la auditoría: empresa, puesto y encaje salen
@@ -30,15 +31,19 @@ const desdeAuditoria = (a, lang, excluirIngles, url = null) => ({
 // Shell de CV Studio. ponytail: sin react-router — cuatro vistas y un estado.
 // Una dependencia de routing para esto sería peso muerto.
 const Studio = () => {
-  const { ofertas, feed, setFeed, preset, setPreset, addOferta, updateOferta, removeOferta } = useStudio()
+  const { ofertas, feed, setFeed, preset, setPreset, perfil, setPerfil, addOferta, updateOferta, removeOferta } = useStudio()
   const [view, setView] = useState('bento')
   const [actual, setActual] = useState(null)
   const [urlInicial, setUrlInicial] = useState(null)
+  const [autoAplicar, setAutoAplicar] = useState(false)
   const [modal, setModal] = useState(false)
 
-  const abrirEditor = (oferta, url = null) => {
+  // `aplicar` entra en el editor con el botón ya pulsado: desde el tracker, una
+  // oferta que ya tiene CV adaptado no necesita otra pantalla de por medio.
+  const abrirEditor = (oferta, url = null, aplicar = false) => {
     setActual(oferta ?? null)
     setUrlInicial(url)
+    setAutoAplicar(aplicar)
     setView('editor')
   }
 
@@ -86,20 +91,32 @@ const Studio = () => {
         <Ofertas
           ofertas={ofertas}
           onEditar={abrirEditor}
+          onAplicar={(o) => abrirEditor(o, null, true)}
           onEstado={(id, estado) => updateOferta(id, { estado })}
           onBorrar={(id) => window.confirm('¿Eliminar esta oferta?') && removeOferta(id)}
         />
       )}
 
+      {view === 'perfil' && <Perfil perfil={perfil} setPerfil={setPerfil} />}
+
       {view === 'editor' && (
         <Editor
           oferta={actual}
           urlInicial={urlInicial}
+          perfil={perfil}
+          autoAplicar={autoAplicar}
           onBack={() => setView(actual ? 'ofertas' : 'bento')}
-          onGuardar={(nombre) => {
-            if (actual) updateOferta(actual.id, { variante: nombre })
+          // El CV adaptado se guarda con la oferta, no solo su nombre: sin
+          // esto, reabrirla desde el tracker volvía a pagar la adaptación y no
+          // había nada que mandar al portal.
+          onGuardar={(nombre, cv) => {
+            if (actual) updateOferta(actual.id, { variante: nombre, ...(cv ? { cv } : {}) })
             setView('ofertas')
           }}
+          // Pulsar "Aplicar" no es enviar —la extensión no toca ese botón—,
+          // pero es lo que vas a hacer a continuación. El desplegable del
+          // tracker lo corrige en un clic si te arrepientes.
+          onAplicado={() => actual && updateOferta(actual.id, { estado: 'enviada' })}
           // Sin oferta previa (desde el feed o desde "Adaptar a una oferta") la
           // auditoría no se guardaba en ningún sitio y se perdía al volver:
           // aquí se crea la oferta, igual que hace el modal de nueva oferta.

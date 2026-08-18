@@ -8,6 +8,7 @@ const NAV = [
   { id: 'criterios', label: 'Criterios' },
   { id: 'ofertas', label: 'Ofertas' },
   { id: 'editor', label: 'Variantes' },
+  { id: 'perfil', label: 'Perfil' },
 ]
 
 const Topbar = ({ view, onNav, onNueva }) => (

@@ -7,3 +7,6 @@ scripts/
 .agents/
 .claude/
 requirements.txt
+
+# La extensión se carga en tu Chrome, no se sirve desde Vercel.
+extension/
