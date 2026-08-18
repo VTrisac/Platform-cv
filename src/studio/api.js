@@ -8,14 +8,19 @@ export async function apiPost(path, body, retryKey) {
     headers: { 'content-type': 'application/json', 'x-tailor-key': key },
     body: JSON.stringify(body),
   })
-  const json = await res.json()
+  // .catch: cuando la función se pasa del techo de tiempo, Vercel devuelve una
+  // página de error en HTML, no JSON, y el res.json() pelado reventaba con un
+  // "Unexpected token '<'" en vez de decir qué había pasado.
+  const json = await res.json().catch(() => ({}))
   if (res.status === 401) {
     const asked = window.prompt('Contraseña de la app:')
     if (!asked) throw new Error('Hace falta la contraseña.')
     localStorage.setItem('tailorKey', asked)
     return apiPost(path, body, asked)
   }
-  if (!res.ok) throw new Error(json.error ?? `Error ${res.status}`)
+  if (!res.ok) throw new Error(json.error ?? (res.status === 504
+    ? 'La llamada ha tardado demasiado y el servidor la ha cortado. Vuelve a probar.'
+    : `Error ${res.status}`))
   return json
 }
 
@@ -46,6 +51,10 @@ export async function descargarPdf({ html, styles, css, filename }, retryKey) {
 
   const url = URL.createObjectURL(await res.blob())
   const a = Object.assign(document.createElement('a'), { href: url, download: filename })
+  // Colgado del documento y revocado después: un <a> suelto no dispara la
+  // descarga fuera de Chrome, y revocar en la misma vuelta la aborta.
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }

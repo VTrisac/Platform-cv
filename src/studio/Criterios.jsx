@@ -9,7 +9,10 @@ import { Info, Plus, Trash2 } from 'lucide-react'
 // El preset vive en localStorage y viaja a /api/feed en cada búsqueda. Mientras
 // sea null manda el servidor con sus valores de siempre; en cuanto tocas algo
 // se guarda entero y mandas tú.
-const ATS = ['greenhouse', 'lever', 'ashby', 'workable', 'remoteok', 'adzuna']
+// Sin adzuna: su fuente existe en api/feed.js pero necesita ADZUNA_APP_ID y
+// ADZUNA_APP_KEY, que no están puestas. Ofrecerla era ofrecer una opción que
+// solo puede devolver "faltan las claves". Vuelve a la lista cuando las haya.
+const ATS = ['greenhouse', 'lever', 'ashby', 'workable', 'remoteok']
 const VENTANAS = [['24h', 'Últimas 24 horas'], ['semana', 'Última semana'], ['todo', 'Sin límite']]
 const MODALIDADES = [['presencial', 'Presencial'], ['hibrido', 'Híbrido'], ['remoto', 'Remoto']]
 const IA = [['indiferente', 'Indiferente'], ['con', 'Solo con IA'], ['sin', 'Solo sin IA']]

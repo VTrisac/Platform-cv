@@ -23,12 +23,14 @@ function apiDev(env) {
           for await (const c of req) chunks.push(c)
           req.body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString()) : {}
 
-          // Vercel da res.status().json(); node http no.
+          // Vercel da res.status().json() y res.send(); node http no. Sin send()
+          // el shim no servía /api/pdf, que devuelve un Buffer, no JSON.
           res.status = (code) => { res.statusCode = code; return res }
           res.json = (data) => {
             res.setHeader('content-type', 'application/json')
             res.end(JSON.stringify(data))
           }
+          res.send = (data) => res.end(data)
 
           const { default: handler } = await server.ssrLoadModule(`/api/${name}.js`)
           await handler(req, res)

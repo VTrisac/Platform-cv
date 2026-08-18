@@ -13,9 +13,8 @@ import OpenAI from 'openai'
 import { dataES, dataEN } from '../src/data.js'
 
 // NVIDIA NIM habla el protocolo de OpenAI, de ahí el SDK. El modelo es abierto,
-// no es Claude. Verificado contra la API real: llama-3.3-70b acepta
-// response_format json_schema con strict:true, así que el JSON viene garantizado
-// por el servidor y no hacen falta reintentos de parseo.
+// no es Claude. NO se usa json_schema: ver pedirJSON(), su decodificación
+// restringida se atasca con este modelo y devuelve la respuesta cortada.
 // Medido contra la oferta de Factorial con este mismo código:
 //   nemotron-3-super-120b-a12b  17-24s  ✓ (MoE, 12B activos: por eso vuela)
 //   meta/llama-3.3-70b-instruct    112s  ✗ texto corrupto, perfil en otro idioma
@@ -38,15 +37,57 @@ export const strip = (html) => html
   .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n))
   .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
 
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36'
+const bajar = (url) => fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20000) })
+
+// Ashby y compañía son React puro: el HTML no trae ni una línea de la oferta,
+// y strip() devolvía menos de 400 caracteres, así que el scrape moría con un
+// "pide login" que era mentira. Pero sí publican la oferta entera en el
+// <script type="application/ld+json"> de schema.org, que strip() borraba junto
+// con el resto de scripts. Es un estándar, no un apaño para un portal: lo
+// sirven Ashby, Greenhouse, Indeed, InfoJobs y cualquiera que quiera salir en
+// Google for Jobs.
+export function jobPosting(html) {
+  for (const [, crudo] of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      // Algunos lo envuelven en @graph o en un array; se aplana y se busca.
+      const d = JSON.parse(crudo)
+      const nodos = [d, ...(d['@graph'] ?? []), ...(Array.isArray(d) ? d : [])]
+      const j = nodos.find((n) => n?.['@type'] === 'JobPosting' && n.description)
+      if (j) return strip([j.title, j.hiringOrganization?.name, j.jobLocation?.address?.addressLocality, j.description].filter(Boolean).join('\n'))
+    } catch {
+      // Un ld+json roto no debe tumbar el scrape: se prueba el siguiente.
+    }
+  }
+  return null
+}
+
+// Workable sirve una cáscara vacía SIN ld+json, pero tiene API pública. La
+// cuenta no está en el enlace corto (/j/<code>), solo aparece tras la
+// redirección — de ahí que se mire res.url y no la URL que te pasaron.
+const WORKABLE = /apply\.workable\.com\/([^/]+)\/j\/([^/?]+)/
+
 export async function fetchOffer(url) {
   const m = LINKEDIN_ID.exec(url)
-  const target = m ? GUEST + m[1] : url
-  const res = await fetch(target, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36' },
-    signal: AbortSignal.timeout(20000),
-  })
+  const res = await bajar(m ? GUEST + m[1] : url)
   if (!res.ok) throw new Error(`El portal respondió ${res.status}. Pega el texto de la oferta a mano.`)
-  const text = strip(await res.text())
+  const html = await res.text()
+
+  const wk = WORKABLE.exec(res.url)
+  // El JSON de la API no lleva etiquetas, pero la descripción de dentro sí:
+  // strip() la limpia igual que haría con una página.
+  if (wk) {
+    const api = strip(await (await bajar(`https://apply.workable.com/api/v2/accounts/${wk[1]}/jobs/${wk[2]}`)).text())
+    if (api.length >= 400) return api
+  }
+
+  // Se queda el más largo de los dos, no el ld+json siempre: en RemoteOK el
+  // ld+json trae 1.000 caracteres y la página 13.000. El modelo tolera el ruido
+  // de una página entera mucho mejor que la falta de media oferta.
+  const plano = strip(html)
+  const ld = jobPosting(html) ?? ''
+  const text = ld.length > plano.length ? ld : plano
+
   if (text.length < 400) throw new Error('Apenas se ha extraído texto: la oferta pide login. Pega el texto a mano.')
   return text
 }
@@ -112,6 +153,12 @@ hechos que YA están en el CV. Si la oferta pide algo que el CV no respalda, va 
 // maestro. Es la garantía real del "no inventes": código, no prompt.
 export function applyPatch(cv, patch) {
   const dropped = []
+  // Sin decodificación restringida el parche puede venir incompleto (un puesto
+  // de menos, skills sin una categoría). Antes lo garantizaba el esquema; ahora
+  // lo garantiza esto: lo que falte se queda como está en el CV maestro, que es
+  // el comportamiento correcto de un parche.
+  const original = (i) => ({ description: cv.experience[i].description, achievements: cv.experience[i].achievements, tech: cv.experience[i].tech })
+  const puesto = (i) => ({ ...original(i), ...(patch.experience?.[i] ?? {}) })
   // Compara ignorando el matiz entre paréntesis ("Python (Expert)" ≡ "Python")
   // pero devuelve SIEMPRE el string del CV maestro, nunca el del modelo: así
   // reordenar funciona sin que se pierdan los matices que tú escribiste.
@@ -131,16 +178,19 @@ export function applyPatch(cv, patch) {
   // propiedades se evalúan en orden, así que `dropped` se copiaría vacío.
   const data = {
     ...cv,
-    title: patch.title,
-    profile: patch.profile,
-    experience: cv.experience.map((e, i) => ({
-      ...e, // project, role y dates intactos por construcción
-      description: patch.experience[i].description,
-      achievements: patch.experience[i].achievements.slice(0, 3),
-      tech: keepKnown(patch.experience[i].tech, e.tech),
-    })),
+    title: patch.title || cv.title,
+    profile: patch.profile || cv.profile,
+    experience: cv.experience.map((e, i) => {
+      const p = puesto(i)
+      return {
+        ...e, // project, role y dates intactos por construcción
+        description: p.description,
+        achievements: (p.achievements ?? e.achievements).slice(0, 3),
+        tech: keepKnown(p.tech ?? [], e.tech),
+      }
+    }),
     skills: Object.fromEntries(
-      Object.entries(cv.skills).map(([k, v]) => [k, keepKnown(patch.skills[k] ?? [], v)])
+      Object.entries(cv.skills).map(([k, v]) => [k, keepKnown(patch.skills?.[k] ?? [], v)])
     ),
   }
   return { data, dropped: [...new Set(dropped)] }
@@ -222,8 +272,59 @@ export function gate(req, res, needsKey = true) {
   return null
 }
 
-export const client = () => new OpenAI({ apiKey: process.env.NVIDIA_API_KEY, baseURL: BASE_URL })
+// timeout y maxRetries explícitos: por defecto el SDK reintenta dos veces y
+// espera 10 minutos, así que una llamada atascada se comía el techo de 300 s de
+// la función sin que nadie viera por qué. Mejor fallar a los 100 s y decirlo.
+export const client = () => new OpenAI({
+  apiKey: process.env.NVIDIA_API_KEY, baseURL: BASE_URL, timeout: 120000, maxRetries: 1,
+})
 export { MODEL }
+
+// La única forma de pedirle JSON al modelo, compartida por /api/tailor,
+// /api/audit y /api/cover.
+//
+// NO usa response_format json_schema. La decodificación restringida de NIM se
+// atasca con este modelo: deja de emitir a mitad del objeto y RELLENA CON
+// ESPACIOS hasta agotar max_tokens, así que la llamada vuelve con
+// finish_reason "length" y el JSON incompleto. Es la tercera vez que la
+// decodificación restringida rompe algo aquí (antes fue el minLength que
+// degeneraba el veredicto en un bucle). Medido sobre la misma oferta:
+//   json_schema strict:true    0 de 6 respuestas buenas
+//   json_schema strict:false   0 de 2   (NIM la restringe igual)
+//   json_object                5 de 5, y además más rápido
+// El esquema viaja en el prompt —con sus `description`, que es donde el modelo
+// lee cuánto escribir en cada campo— y el JSON se valida aquí. La garantía
+// anti-invención nunca fue el esquema: es applyPatch, que es código.
+export async function pedirJSON({ system, user, schema, max_tokens = 8000 }) {
+  let completion
+  try {
+    completion = await client().chat.completions.create({
+      model: MODEL,
+      max_tokens,
+      messages: [
+        { role: 'system', content: `${system}\n\nDevuelve SOLO un objeto JSON, sin texto alrededor, con este esquema exacto:\n${JSON.stringify(schema)}` },
+        { role: 'user', content: user },
+      ],
+      response_format: { type: 'json_object' },
+    })
+  } catch (e) {
+    // El SDK dice "Request timed out." y nada más. Aquí se sabe contra qué se
+    // estaba hablando, así que se dice.
+    throw new Error(/timed? ?out/i.test(e.message)
+      ? 'El modelo no ha respondido a tiempo (NVIDIA va lento ahora mismo). Vuelve a probar.'
+      : e.message)
+  }
+  const choice = completion.choices?.[0]
+  // Algún modelo envuelve el JSON en ```json … ```. Quitarlo es una línea.
+  const crudo = String(choice?.message?.content ?? '').trim().replace(/^```(?:json)?|```$/g, '').trim()
+  try {
+    return { datos: JSON.parse(crudo), usage: completion.usage }
+  } catch {
+    throw new Error(choice?.finish_reason === 'length'
+      ? 'La respuesta del modelo se ha cortado. Prueba con una oferta más corta.'
+      : 'El modelo no ha devuelto JSON válido. Vuelve a intentarlo.')
+  }
+}
 
 export default async function handler(req, res) {
   const blocked = gate(req, res)
@@ -245,31 +346,16 @@ export default async function handler(req, res) {
       skills: cv.skills,
     }
 
-    const completion = await client().chat.completions.create({
-      model: MODEL,
-      max_tokens: 8000,
-      messages: [
-        { role: 'system', content: SYSTEM },
-        {
-          // El idioma va aquí y al final, no en el system: enterrado allí lo
-          // ignoraba y devolvía inglés con el CV en español (probado).
-          role: 'user',
-          content: `CV actual:\n${JSON.stringify(editable, null, 2)}\n\n---\n\nOFERTA:\n${offer.slice(0, 40000)}\n\n---\n\n`
-            + `IDIOMA OBLIGATORIO DE SALIDA: ${lang === 'es' ? 'ESPAÑOL' : 'INGLÉS'}. `
-            + `Escribe title, profile, description y achievements en ${lang === 'es' ? 'español' : 'inglés'}, `
-            + `aunque la oferta esté en otro idioma. Los nombres de tecnologías no se traducen.`,
-        },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: { name: 'cv_patch', strict: true, schema: schema(cv.experience.length) },
-      },
+    const { datos: patch, usage } = await pedirJSON({
+      system: SYSTEM,
+      schema: schema(cv.experience.length),
+      // El idioma va aquí y al final, no en el system: enterrado allí lo
+      // ignoraba y devolvía inglés con el CV en español (probado).
+      user: `CV actual:\n${JSON.stringify(editable, null, 2)}\n\n---\n\nOFERTA:\n${offer.slice(0, 40000)}\n\n---\n\n`
+        + `IDIOMA OBLIGATORIO DE SALIDA: ${lang === 'es' ? 'ESPAÑOL' : 'INGLÉS'}. `
+        + `Escribe title, profile, description y achievements en ${lang === 'es' ? 'español' : 'inglés'}, `
+        + `aunque la oferta esté en otro idioma. Los nombres de tecnologías no se traducen.`,
     })
-    const choice = completion.choices?.[0]
-    if (choice?.finish_reason === 'length') {
-      return res.status(502).json({ error: 'La respuesta se ha cortado. Prueba con una oferta más corta.' })
-    }
-    const patch = JSON.parse(choice.message.content)
 
     const { data, dropped } = applyPatch(cv, patch)
 
@@ -277,12 +363,14 @@ export default async function handler(req, res) {
       data,
       role: patch.role,
       company: patch.company,
-      gaps: patch.gaps,
+      gaps: patch.gaps ?? [],
       dropped, // tech inventada: bloqueada automáticamente
       // texto libre: NO se puede bloquear como tech/skills, solo avisar
-      inventions: findInventions(cv, patch.gaps, [patch.title, patch.profile,
-        ...patch.experience.flatMap((e) => [e.description, ...e.achievements])].join('\n')),
-      usage: { input: completion.usage?.prompt_tokens, output: completion.usage?.completion_tokens },
+      // Se vigila el CV YA aplicado, no el parche: si el parche vino incompleto
+      // lo que acaba en el PDF es data, y es eso lo que hay que revisar.
+      inventions: findInventions(cv, patch.gaps, [data.title, data.profile,
+        ...data.experience.flatMap((e) => [e.description, ...e.achievements])].join('\n')),
+      usage: { input: usage?.prompt_tokens, output: usage?.completion_tokens },
     })
   } catch (e) {
     res.status(500).json({ error: e.message })

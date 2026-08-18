@@ -8,7 +8,7 @@
 // `texto` es la oferta ya scrapeada: el paso 3 la reenvía a /api/tailor tal
 // cual, así no se baja dos veces ni se arriesga a que el portal cambie entre
 // una llamada y la otra.
-import { fetchOffer, gate, client, MODEL } from './tailor.js'
+import { fetchOffer, gate, pedirJSON } from './tailor.js'
 import { dataES, dataEN } from '../src/data.js'
 
 export const maxDuration = 300
@@ -40,9 +40,13 @@ const schema = {
         additionalProperties: false,
       },
     },
-    // Sin minLength: con json_schema estricto, un mínimo de longitud hace que
-    // el modelo rellene hasta alcanzarlo y degenere en bucle ("si si si si…").
-    // Observado en producción. La longitud se corrige en código, no aquí.
+    // Sin minLength: con decodificación restringida, un mínimo de longitud hacía
+    // que el modelo rellenase hasta alcanzarlo y degenerase en bucle ("si si si
+    // si…"). Observado en producción. La longitud se corrige en código, no aquí.
+    // La `description` sí importa y mucho: es lo único que sostiene el largo del
+    // veredicto ahora que el esquema viaja en el prompt. Sin ella el modelo
+    // contesta con una palabra y limpiarVeredicto() acaba sustituyéndolo
+    // siempre por el resumen calculado (medido: 2, 4 y 11 caracteres).
     veredicto: {
       type: 'string',
       description: 'Dos o tres FRASES completas explicando el encaje. No una palabra suelta.',
@@ -154,30 +158,23 @@ export default async function handler(req, res) {
       certificaciones: cv.certifications.map((c) => c.name),
     }
 
-    const completion = await client().chat.completions.create({
-      model: MODEL,
-      max_tokens: 8000,
-      messages: [
-        { role: 'system', content: SYSTEM },
-        {
-          // Mismo problema y misma cura que en tailor.js: un "responde en X"
-          // suelto lo ignoraba y copiaba los requisitos literales de la oferta.
-          role: 'user',
-          content: `CV DEL CANDIDATO:\n${JSON.stringify(resumen, null, 2)}\n\n---\n\nOFERTA:\n${oferta.slice(0, 40000)}\n\n---\n\n`
-            + `IDIOMA OBLIGATORIO DE SALIDA: ${lang === 'es' ? 'ESPAÑOL' : 'INGLÉS'}. `
-            + `Escribe en ${lang === 'es' ? 'español' : 'inglés'} el texto de cada requisito, la evidencia y el veredicto, `
-            + `aunque la oferta esté en otro idioma: tradúcelos, no los copies literales. `
-            + `Los nombres de tecnologías, empresas y puestos no se traducen.`,
-        },
-      ],
-      response_format: { type: 'json_schema', json_schema: { name: 'auditoria', strict: true, schema } },
+    const { datos: a, usage } = await pedirJSON({
+      system: SYSTEM,
+      schema,
+      // Una auditoría son hasta 14 requisitos con su evidencia, y el modelo
+      // razona 1.000-2.000 tokens antes de escribir el primero. Con 8000 se
+      // cortaba en ofertas normales de LinkedIn (medido). Ver pedirJSON.
+      max_tokens: 16000,
+      // Mismo problema y misma cura que en tailor.js: un "responde en X"
+      // suelto lo ignoraba y copiaba los requisitos literales de la oferta.
+      user: `CV DEL CANDIDATO:\n${JSON.stringify(resumen, null, 2)}\n\n---\n\nOFERTA:\n${oferta.slice(0, 40000)}\n\n---\n\n`
+        + `IDIOMA OBLIGATORIO DE SALIDA: ${lang === 'es' ? 'ESPAÑOL' : 'INGLÉS'}. `
+        + `Escribe en ${lang === 'es' ? 'español' : 'inglés'} el texto de cada requisito, la evidencia y el veredicto, `
+        + `aunque la oferta esté en otro idioma: tradúcelos, no los copies literales. `
+        + `Los nombres de tecnologías, empresas y puestos no se traducen.`,
     })
 
-    const choice = completion.choices?.[0]
-    if (choice?.finish_reason === 'length') {
-      return res.status(502).json({ error: 'La auditoría se ha cortado. Prueba con una oferta más corta.' })
-    }
-    const a = JSON.parse(choice.message.content)
+    a.requisitos = normalizar(a.requisitos)
     const encaje = puntuar(a.requisitos)
 
     res.status(200).json({
@@ -189,11 +186,32 @@ export default async function handler(req, res) {
       // quieres leer exactamente qué exigía antes de fiarte del filtro.
       ingles: bloqueaIngles(a.requisitos),
       texto: oferta, // para el paso 3, sin volver a scrapear
-      usage: { input: completion.usage?.prompt_tokens, output: completion.usage?.completion_tokens },
+      usage: { input: usage?.prompt_tokens, output: usage?.completion_tokens },
     })
   } catch (e) {
     res.status(500).json({ error: e.message })
   }
+}
+
+// Los enums (`tipo`, `encaje`) los garantizaba la decodificación restringida.
+// Ahora los garantiza esto. Importa más de lo que parece: puntuar() haría NaN
+// con un encaje desconocido y la pantalla de auditoría reventaría al buscar su
+// icono. Ante la duda, "parcial" e "imprescindible": la lectura prudente, que
+// es la que pide el prompt.
+export function normalizar(requisitos) {
+  // Sin tildes: el modelo escribe en español y devuelve "Sí" tanto como "si".
+  const uno = (v, validos, porDefecto) => {
+    const s = String(v ?? '').trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+    return validos.find((x) => x === s || s.startsWith(x)) ?? porDefecto
+  }
+  return (Array.isArray(requisitos) ? requisitos : [])
+    .filter((r) => r && String(r.texto ?? '').trim())
+    .map((r) => ({
+      texto: String(r.texto).trim(),
+      evidencia: String(r.evidencia ?? '').trim(),
+      tipo: uno(r.tipo, ['imprescindible', 'valorable'], 'imprescindible'),
+      encaje: uno(r.encaje, ['si', 'parcial', 'no'], 'parcial'),
+    }))
 }
 
 // Los imprescindibles mandan: cumplir extras valorables no compensa fallar un

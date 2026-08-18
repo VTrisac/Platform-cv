@@ -4,8 +4,8 @@
 //
 //   node scripts/tailor-test.js
 import { strict as a } from 'node:assert'
-import handler, { applyPatch, findInventions, strip, verifyPassword } from '../api/tailor.js'
-import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles } from '../api/audit.js'
+import handler, { applyPatch, findInventions, strip, verifyPassword, jobPosting } from '../api/tailor.js'
+import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles, normalizar } from '../api/audit.js'
 import feed from '../api/feed.js'
 import { findFigures } from '../api/cover.js'
 import { hashPassword } from './set-password.js'
@@ -45,6 +45,50 @@ a.deepEqual([...data.skills.backend].sort(), [...dataEN.skills.backend].sort(), 
 // El modelo pidió "Python" a secas; se reordena, pero conserva TU matiz.
 a.equal(data.skills.backend[0], 'Python (Expert)', 'lo pedido va primero, con el string del CV')
 a.ok(dropped.includes('Go'), 'Go no está en tu CV: bloqueado')
+
+// --- parche incompleto ------------------------------------------------------
+// Ya no hay decodificación restringida que garantice la forma del parche (se
+// atascaba y devolvía la respuesta a medias), así que la garantía es esta: lo
+// que falte se queda como está en el CV maestro. Un parche a medias tiene que
+// dar un CV entero, no reventar.
+const cojo = { title: '', profile: 'Solo el perfil.', experience: [{ description: 'primero', achievements: ['uno'], tech: [] }] }
+const { data: d2 } = applyPatch(dataEN, cojo)
+a.equal(d2.experience.length, dataEN.experience.length, 'los puestos que faltan salen del CV maestro')
+a.equal(d2.experience[0].description, 'primero', 'el puesto que sí venía se aplica')
+a.equal(d2.experience[1].description, dataEN.experience[1].description, 'el que no venía queda intacto')
+a.equal(d2.title, dataEN.title, 'un title vacío no borra el tuyo')
+a.equal(d2.profile, 'Solo el perfil.')
+a.deepEqual([...d2.skills.backend].sort(), [...dataEN.skills.backend].sort(), 'sin skills en el parche, no se pierde ninguna')
+a.doesNotThrow(() => applyPatch(dataEN, {}), 'un parche vacío no revienta')
+
+// --- enums que ya no garantiza el servidor ----------------------------------
+// puntuar() haría NaN con un encaje desconocido y la pantalla reventaría al
+// buscar su icono. normalizar() los devuelve al redil, prudente por defecto.
+const sucios = normalizar([
+  { texto: 'Python', tipo: 'IMPRESCINDIBLE', encaje: 'Sí', evidencia: 'WeAi' },
+  { texto: 'Rails', tipo: 'must-have', encaje: 'ninguno', evidencia: '' },
+  { texto: '  ', tipo: 'valorable', encaje: 'si', evidencia: 'vacío' },
+  null,
+])
+a.equal(sucios.length, 2, 'los requisitos sin texto se caen')
+a.equal(sucios[0].encaje, 'si', '"Sí" con mayúscula y tilde es "si"')
+a.equal(sucios[1].tipo, 'imprescindible', 'un tipo desconocido cae en el lado prudente')
+a.equal(sucios[1].encaje, 'parcial', 'un encaje desconocido cae en "parcial", no en NaN')
+a.ok(Number.isInteger(puntuar(sucios).imprescindibles), 'puntuar da un número, no NaN')
+a.deepEqual(normalizar(undefined), [], 'sin requisitos no revienta')
+
+// --- ofertas que solo existen en un <script> --------------------------------
+// Ashby y compañía sirven React puro: sin esto el scrape moría con un "pide
+// login" que era mentira.
+const ashby = `<html><head><script type="application/ld+json">${JSON.stringify({
+  '@type': 'JobPosting', title: 'Senior Engineer',
+  hiringOrganization: { name: 'Preply' }, description: '<p>We use <b>React</b> and Python.</p>',
+})}</script></head><body><div id="root"></div></body></html>`
+const extraido = jobPosting(ashby)
+a.ok(extraido.includes('Senior Engineer') && extraido.includes('Preply') && extraido.includes('React'),
+  'la oferta sale del ld+json, ya limpia de etiquetas')
+a.equal(jobPosting('<html><body>sin ld+json</body></html>'), null, 'sin ld+json devuelve null, no revienta')
+a.equal(jobPosting('<script type="application/ld+json">{roto</script>'), null, 'un ld+json roto no tumba el scrape')
 
 // El limpiador de HTML del scraping.
 a.equal(strip('<p>Senior <b>AI</b> Engineer</p>').replace(/\s+/g, ' ').trim(), 'Senior AI Engineer')
