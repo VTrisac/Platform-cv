@@ -12,7 +12,7 @@ import { Info, Plus, Trash2 } from 'lucide-react'
 // Sin adzuna: su fuente existe en api/feed.js pero necesita ADZUNA_APP_ID y
 // ADZUNA_APP_KEY, que no están puestas. Ofrecerla era ofrecer una opción que
 // solo puede devolver "faltan las claves". Vuelve a la lista cuando las haya.
-const ATS = ['greenhouse', 'lever', 'ashby', 'workable', 'remoteok']
+const ATS = ['greenhouse', 'lever', 'ashby', 'workable', 'workday', 'amazon', 'remoteok']
 const VENTANAS = [['24h', 'Últimas 24 horas'], ['semana', 'Última semana'], ['todo', 'Sin límite']]
 const MODALIDADES = [['presencial', 'Presencial'], ['hibrido', 'Híbrido'], ['remoto', 'Remoto']]
 const IA = [['indiferente', 'Indiferente'], ['con', 'Solo con IA'], ['sin', 'Solo sin IA']]
@@ -57,9 +57,9 @@ const Pills = ({ opciones, valor, onChange, multi }) => (
   </div>
 )
 
-const Criterios = ({ preset, setPreset, feed, lenguajesCV }) => {
-  // Sin preset propio se edita a partir del que el servidor dice haber usado.
-  const c = preset ?? feed?.preset
+const Criterios = ({ preset, setPreset, base, lenguajesCV }) => {
+  // Sin preset propio se edita a partir del que el servidor dice usar de fábrica.
+  const c = preset ?? base?.preset
 
   if (!c) {
     return (
@@ -81,6 +81,12 @@ const Criterios = ({ preset, setPreset, feed, lenguajesCV }) => {
   const guardar = (nuevasBusquedas, nuevosTableros) =>
     editar({ empresas: [...nuevasBusquedas, ...nuevosTableros] })
 
+  // Las de fábrica que tu preset no tiene. Se comparan por ats+token, no por
+  // nombre: renombrar "New Relic" a "NewRelic" no debe duplicarla.
+  const tiene = new Set(fuentes.map((f) => `${f.ats}|${f.token}`))
+  const faltan = (base?.empresasPorDefecto ?? [])
+    .filter((f) => f.ats !== 'linkedin' && !tiene.has(`${f.ats}|${f.token}`))
+
   return (
     <div className="p-8 flex flex-col gap-6 max-w-[1100px]">
       <div className="flex flex-col gap-1.5">
@@ -101,11 +107,11 @@ const Criterios = ({ preset, setPreset, feed, lenguajesCV }) => {
           <Pills opciones={IA} valor={c.ia} onChange={(ia) => editar({ ia })} />
         </Card>
 
-        <Card title="MODALIDAD" hint="Sin marcar nada, entran todas. Se lee del texto de la oferta.">
+        <Card title="MODALIDAD" hint="Sin marcar nada, entran todas. Se busca la palabra en el texto: si la oferta no la dice, se descarta. Casi ninguna oferta presencial se declara presencial — pone una ciudad y ya.">
           <Pills multi opciones={MODALIDADES} valor={c.modalidades} onChange={(modalidades) => editar({ modalidades })} />
         </Card>
 
-        <Card title="LENGUAJES OBLIGATORIOS" hint="Salen de tu CV. Se exigen TODOS los que marques.">
+        <Card title="LENGUAJES OBLIGATORIOS" hint="Los de tu CV. Se exigen TODOS a la vez: marcar dos deja fuera cualquier oferta que no nombre los dos. Sin marcar nada, no filtra.">
           <Pills
             multi
             opciones={lenguajesCV.map((l) => [l, l])}
@@ -209,7 +215,7 @@ const Criterios = ({ preset, setPreset, feed, lenguajesCV }) => {
 
       <Card
         title="TABLEROS DE EMPRESA"
-        hint="El token es el slug de su página de empleo: boards.greenhouse.io/token, jobs.lever.co/token, token.workable.com. La nota de encaje es qué proporción del stack que pide la oferta cubres tú: un 10 es cubrirlo entero."
+        hint="El token es el slug de su página de empleo: boards.greenhouse.io/token, jobs.lever.co/token, token.workable.com. Workday lleva cuatro trozos separados por «|» — inquilino|centro|sitio|búsqueda, que salen de inquilino.centro.myworkdayjobs.com/sitio — porque su tablero es global y hay que acotarlo. Amazon lleva «puesto|ubicación»."
       >
         {tableros.map((t, i) => {
           const cambiar = (patch) => guardar(busquedas, tableros.map((x, n) => (n === i ? { ...x, ...patch } : x)))
@@ -234,20 +240,38 @@ const Criterios = ({ preset, setPreset, feed, lenguajesCV }) => {
           >
             <Plus size={14} /> Añadir empresa
           </button>
-          <label className="flex items-center gap-2 text-xs ml-auto" style={{ color: 'var(--s-muted)' }}>
-            Nota mínima de encaje (sobre 10)
-            <input
-              type="number"
-              min={0}
-              max={10}
-              // ?? 5: un preset guardado antes de que la nota existiera trae
-              // minHits y no minNota, y el campo saldría vacío.
-              value={c.minNota ?? 5}
-              onChange={(e) => editar({ minNota: Number(e.target.value) })}
-              style={{ ...campo, width: 70 }}
-            />
-          </label>
+          {/* Tu preset guarda TU lista de empresas y gana sobre la del servidor,
+              así que una empresa nueva ahí no te llega nunca. Esto es el puente. */}
+          {faltan.length > 0 && (
+            <button
+              onClick={() => guardar(busquedas, [...tableros, ...faltan])}
+              className="flex items-center gap-1.5 text-xs font-semibold"
+              style={{ color: 'var(--s-accent)' }}
+              title={faltan.map((f) => f.name).join(', ')}
+            >
+              <Plus size={14} /> Añadir las {faltan.length} que faltan ({faltan.slice(0, 3).map((f) => f.name).join(', ')}{faltan.length > 3 ? '…' : ''})
+            </button>
+          )}
         </div>
+      </Card>
+
+      {/* Estaba dentro de la tarjeta de tableros, donde parecía que solo valía
+          para ellos. Se aplica a TODAS las fuentes, LinkedIn incluido. */}
+      <Card title="NOTA MÍNIMA DE ENCAJE" hint="Se aplica a todas las fuentes, no solo a los tableros. Es la proporción del stack que pide la oferta que tú cubres: un 10 es cubrirlo entero, un 5 la mitad.">
+        <label className="flex items-center gap-2 text-sm">
+          Descartar por debajo de
+          <input
+            type="number"
+            min={0}
+            max={10}
+            // ?? 5: un preset guardado antes de que la nota existiera trae
+            // minHits y no minNota, y el campo saldría vacío.
+            value={c.minNota ?? 5}
+            onChange={(e) => editar({ minNota: Number(e.target.value) })}
+            style={{ ...campo, width: 70 }}
+          />
+          sobre 10
+        </label>
       </Card>
 
       <div className="flex items-center gap-4">

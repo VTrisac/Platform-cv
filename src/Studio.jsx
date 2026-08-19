@@ -28,10 +28,16 @@ const desdeAuditoria = (a, lang, excluirIngles, url = null) => ({
   lang,
 })
 
+// `feed.keywords` son las 36 tecnologías del CV enteras: RAG, JWT, n8n,
+// Industrial Automation, Tailwind CSS… Ofrecerlas TODAS como "lenguajes
+// obligatorios" —que se exigen todos a la vez— vaciaba el feed y el único motivo
+// que veías era un "falta lenguaje" sin más. Se ofrecen solo lenguajes de verdad.
+const LENGUAJES = ['Python', 'Java', 'JavaScript', 'TypeScript', 'SQL', 'HTML5', 'CSS3']
+
 // Shell de CV Studio. ponytail: sin react-router — cuatro vistas y un estado.
 // Una dependencia de routing para esto sería peso muerto.
 const Studio = () => {
-  const { ofertas, feed, setFeed, preset, setPreset, perfil, setPerfil, addOferta, updateOferta, removeOferta } = useStudio()
+  const { ofertas, feed, setFeed, base, preset, setPreset, perfil, setPerfil, addOferta, updateOferta, removeOferta } = useStudio()
   const [view, setView] = useState('bento')
   const [actual, setActual] = useState(null)
   const [urlInicial, setUrlInicial] = useState(null)
@@ -49,7 +55,7 @@ const Studio = () => {
 
   // El criterio efectivo: el tuyo si has tocado la pantalla, y si no el que el
   // servidor dice haber aplicado.
-  const excluirIngles = (preset ?? feed?.preset)?.excluirInglesImprescindible ?? false
+  const excluirIngles = (preset ?? base?.preset)?.excluirInglesImprescindible ?? false
 
   const guardarAuditada = (a, lang) => {
     setActual(addOferta(desdeAuditoria(a, lang, excluirIngles)))
@@ -82,8 +88,8 @@ const Studio = () => {
         <Criterios
           preset={preset}
           setPreset={setPreset}
-          feed={feed}
-          lenguajesCV={feed?.keywords ?? []}
+          base={base}
+          lenguajesCV={(base?.keywords ?? []).filter((k) => LENGUAJES.includes(k))}
         />
       )}
 
@@ -113,6 +119,11 @@ const Studio = () => {
             if (actual) updateOferta(actual.id, { variante: nombre, ...(cv ? { cv } : {}) })
             setView('ofertas')
           }}
+          // Lo mismo que onGuardar pero SIN navegar: se dispara solo, en cuanto
+          // el CV existe. Antes el CV solo se guardaba si pulsabas "Guardar
+          // variante", y sin él el tracker no tenía nada que mandar al portal:
+          // por eso el botón "Aplicar" no aparecía nunca.
+          onCV={(nombre, cv) => actual && updateOferta(actual.id, { variante: nombre, cv })}
           // Pulsar "Aplicar" no es enviar —la extensión no toca ese botón—,
           // pero es lo que vas a hacer a continuación. El desplegable del
           // tracker lo corrige en un clic si te arrepientes.

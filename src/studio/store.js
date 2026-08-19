@@ -66,11 +66,19 @@ export function useStudio() {
     // anterior del endpoint no lo trae, y sin él el panel de criterios no tiene
     // de dónde partir. Caducarla es más barato que defenderse campo a campo.
     feed: state.feed?.fecha === hoy() && state.feed.preset ? state.feed : null,
+    // Lo que el servidor dice ser de fábrica: su preset, las keywords del CV y
+    // su lista de empresas. Vive APARTE del feed cacheado a propósito: cambiar un
+    // criterio invalida los resultados, pero no cambia lo que es por defecto.
+    // Cuando esto salía de `feed`, tocar cualquier criterio dejaba la pantalla de
+    // criterios sin nada de donde partir y el botón de "volver a los criterios
+    // por defecto" era un callejón sin salida.
+    base: state.base ?? null,
     // Si alguna fuente falló por algo pasajero (LinkedIn limitando el ritmo,
     // un 5xx) el resultado se enseña pero NO se sella con la fecha: si no, un
     // límite de ritmo de un minuto te dejaría el feed vacío hasta mañana.
     setFeed: (feed) => setState((s) => ({
       ...s,
+      base: { preset: feed.preset, keywords: feed.keywords, empresasPorDefecto: feed.empresasPorDefecto },
       feed: { ...feed, fecha: feed.dead?.some((d) => d.reintentable) ? null : hoy() },
     })),
     // null = sin tocar: el servidor aplica los criterios de siempre. En cuanto
@@ -82,6 +90,7 @@ export function useStudio() {
     setPerfil: (perfil) => setState((s) => ({ ...s, perfil })),
     // Cambiar los criterios invalida el feed cacheado: si no, verías el
     // resultado viejo hasta mañana y parecería que el panel no hace nada.
+    // `base` no se toca: es de donde parte la pantalla de criterios.
     setPreset: (preset) => setState((s) => ({ ...s, preset, feed: null })),
     // Devuelve la oferta creada: quien la añade necesita su id para abrirla.
     addOferta: (o) => {

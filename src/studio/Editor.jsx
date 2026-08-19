@@ -3,7 +3,7 @@ import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, Send, ShieldChe
 import { dataES, dataEN } from '../data'
 import { conPerfil } from '../perfil'
 import Auditoria from './Auditoria'
-import { apiPost, auditar as auditarOferta, aplicar as mandarAExtension, base64, descargarPdf, hayExtension, INSTALAR, pdfBlob } from './api'
+import { apiPost, auditar as auditarOferta, aplicar as mandarAExtension, base64, descargarPdf, hayExtension, INSTALAR, nombrePdf, olvidarCarpeta, pdfBlob } from './api'
 
 const DESIGNS = [
   { id: 5, name: 'ATS', load: () => import('../designs/Design6ATS') },
@@ -41,7 +41,7 @@ const PASOS = [
 // Flujo en tres pasos: auditar la oferta -> decidir si hay encaje -> adaptar.
 // El orden importa: adaptar primero gastaba una llamada al modelo incluso en
 // ofertas que no valían la pena, y enterraba los gaps DESPUÉS de haber decidido.
-const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, onDescartar, onAuditada, onCarta, onAplicado }) => {
+const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, onCV, onDescartar, onAuditada, onCarta, onAplicado }) => {
   // Si la oferta ya trae auditoría guardada, se entra directo al informe: es
   // el caso normal desde el tracker, y volver a auditar costaría otra llamada.
   const [audit, setAudit] = useState(oferta?.auditoria ?? null)
@@ -60,6 +60,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
   const [cartaInv, setCartaInv] = useState([])
   const [loading, setLoading] = useState(null)
   const [error, setError] = useState(null)
+  const [guardado, setGuardado] = useState(null)
   const previewRef = useRef(null)
 
   const cv = data ?? (lang === 'es' ? dataES : dataEN)
@@ -87,7 +88,12 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
     filename,
   })
 
-  const nombreFichero = () => `${(nombre || cv.name).replace(/[·\s]+/g, '_')}.pdf`
+  // El nombre de la variante, que es lo que se guarda con la oferta.
+  const variante = () => `${audit?.empresa ?? oferta?.empresa ?? 'Oferta'} · ${lang.toUpperCase()}`
+
+  // La empresa y el puesto ya los sabe la auditoría: el nombre sale de ahí.
+  const nombreFichero = () =>
+    nombrePdf(audit?.empresa ?? oferta?.empresa, audit?.rol ?? oferta?.puesto, lang)
 
   // Manda el HTML del CV que se ve a que Chromium lo imprima limpio en el
   // servidor. Sustituye a window.print(), que estampaba cabecera y pie del
@@ -98,7 +104,8 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
     setLoading('pdf'); setError(null)
     try {
       await esperarPreview()
-      await descargarPdf(paraImprimir(nombreFichero()))
+      const carpeta = await descargarPdf(paraImprimir(nombreFichero()))
+      setGuardado(carpeta ? `Guardado en ${carpeta}/${nombreFichero()}` : null)
     } catch (e) { setError(e.message) } finally { setLoading(null) }
   }
 
@@ -179,6 +186,10 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
       setLoading('adaptar')
       const j = await apiPost('/api/tailor', { text: a.texto, lang })
       setData(j.data); setMeta(j); setPaso('cv')
+      // Se guarda con la oferta AQUÍ, igual que la auditoría y la carta. Sin
+      // esto el CV solo vivía en este componente: al volver al tracker no había
+      // nada que mandar al portal y por eso el botón "Aplicar" no salía nunca.
+      onCV?.(`${a.empresa} · ${lang.toUpperCase()}`, j.data)
 
       setLoading('carta')
       const c = await apiPost('/api/cover', { text: a.texto, lang })
@@ -193,6 +204,8 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
       // ni se arriesga a que el portal devuelva algo distinto.
       const j = await apiPost('/api/tailor', { text: audit.texto, lang })
       setData(j.data); setMeta(j); setPaso('cv')
+      setNombre(variante())
+      onCV?.(variante(), j.data)
     } catch (e) { setError(e.message); setPaso('auditoria') } finally { setLoading(null) }
   }
 
@@ -356,6 +369,36 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
         {paso === 'cv' && (
           <div className="flex gap-6 h-full">
             <div className="w-[420px] flex flex-col gap-4 overflow-auto no-print shrink-0">
+              {/* En el paso 3 no había DÓNDE enseñar un error: bajarPdf() y
+                  aplicar() llamaban a setError y el mensaje no se pintaba en
+                  ningún sitio, así que pulsar "Aplicar" sin la extensión no
+                  hacía nada visible. */}
+              {error && (
+                <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: '#F9EDEA', color: '#8A4A3C' }}>
+                  <TriangleAlert size={13} className="shrink-0 mt-0.5" /><span>{error}</span>
+                </p>
+              )}
+              {guardado && (
+                <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-chip-green)', color: 'var(--s-accent-dark)' }}>
+                  <FileDown size={13} className="shrink-0 mt-0.5" />
+                  <span>
+                    {guardado}{' · '}
+                    <button
+                      onClick={async () => { await olvidarCarpeta(); setGuardado(null) }}
+                      className="underline"
+                    >
+                      cambiar carpeta
+                    </button>
+                  </span>
+                </p>
+              )}
+              {/* El botón Aplicar se pinta con extensión o sin ella y solo falla
+                  al pulsarlo. Decirlo antes cuesta cuatro líneas. */}
+              {!hayExtension() && (
+                <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: '#F9F1E4', color: '#8A6D2E' }}>
+                  <TriangleAlert size={13} className="shrink-0 mt-0.5" /><span>{INSTALAR}</span>
+                </p>
+              )}
               {meta && (
                 <Card title="RESULTADO">
                   <p className="text-xs flex gap-1.5" style={{ color: 'var(--s-muted)' }}>
