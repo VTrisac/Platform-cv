@@ -54,8 +54,79 @@ export async function pdfBlob({ html, styles, css, filename }, retryKey) {
   return res.blob()
 }
 
+// --- el nombre del fichero ---------------------------------------------------
+// Antes era `nombre || cv.name` dentro del editor, y `nombre` estaba vacío
+// siempre que no hubieras pulsado "Guardar variante" —o sea, casi siempre—, así
+// que TODOS los PDF salían llamándose como tú y se pisaban en la carpeta.
+const slug = (s, max = 45) => String(s ?? '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-zA-Z0-9]+/g, '-').slice(0, max).replace(/^-+|-+$/g, '')
+
+export const nombrePdf = (empresa, puesto, lang) =>
+  ['CV', slug(empresa) || 'Oferta', slug(puesto), String(lang).toUpperCase()]
+    .filter(Boolean).join('_') + '.pdf'
+
+// --- la carpeta de destino ---------------------------------------------------
+// Una web NO puede escribir en una ruta absoluta: no hay forma de decirle
+// "guarda en ~/Desktop/Oferta" por código. Lo que sí hay es la File System
+// Access API, nativa: eliges la carpeta una vez, el navegador se queda con el
+// permiso, y a partir de ahí cada PDF cae ahí solo y sin diálogo.
+//
+// El handle no cabe en localStorage —no es JSON—, así que va a IndexedDB, que
+// sí serializa objetos estructurados. Son quince líneas de IndexedDB a pelo:
+// una dependencia para esto sería peso muerto.
+const idb = (modo, fn) => new Promise((listo, fallo) => {
+  const req = indexedDB.open('cvStudio', 1)
+  req.onupgradeneeded = () => req.result.createObjectStore('fs')
+  req.onerror = () => fallo(req.error)
+  req.onsuccess = () => {
+    const r = fn(req.result.transaction('fs', modo).objectStore('fs'))
+    r.onsuccess = () => listo(r.result)
+    r.onerror = () => fallo(r.error)
+  }
+})
+
+const permitida = async (dir) => {
+  const opciones = { mode: 'readwrite' }
+  return (await dir.queryPermission(opciones)) === 'granted'
+    || (await dir.requestPermission(opciones)) === 'granted'
+}
+
+// null = este navegador no la soporta, o has cancelado el selector: quien llama
+// se cae a la descarga de toda la vida.
+// ponytail: el selector exige un gesto de usuario reciente (5 s en Chrome). Por
+// eso se pide ANTES de generar el PDF, que tarda; al revés caducaría. Si algún
+// día el permiso se pierde a mitad, el catch te devuelve la descarga normal.
+async function carpeta() {
+  if (!window.showDirectoryPicker) return null
+  try {
+    const guardada = await idb('readonly', (s) => s.get('carpeta'))
+    if (guardada) return (await permitida(guardada)) ? guardada : null
+    const dir = await window.showDirectoryPicker({ id: 'cv-ofertas', mode: 'readwrite', startIn: 'desktop' })
+    await idb('readwrite', (s) => s.put(dir, 'carpeta'))
+    return dir
+  } catch {
+    return null
+  }
+}
+
+// Olvida la carpeta elegida, para poder cambiarla desde la pantalla de perfil.
+export const olvidarCarpeta = () => idb('readwrite', (s) => s.delete('carpeta'))
+
+// Devuelve el nombre de la carpeta donde ha caído, o null si ha ido a Descargas.
 export async function descargarPdf(args) {
-  const url = URL.createObjectURL(await pdfBlob(args))
+  const dir = await carpeta() // primero: necesita el gesto del clic todavía vivo
+  const blob = await pdfBlob(args)
+
+  if (dir) {
+    const fichero = await dir.getFileHandle(args.filename, { create: true })
+    const escritor = await fichero.createWritable()
+    await escritor.write(blob)
+    await escritor.close()
+    return dir.name
+  }
+
+  const url = URL.createObjectURL(blob)
   const a = Object.assign(document.createElement('a'), { href: url, download: args.filename })
   // Colgado del documento y revocado después: un <a> suelto no dispara la
   // descarga fuera de Chrome, y revocar en la misma vuelta la aborta.
@@ -63,6 +134,7 @@ export async function descargarPdf(args) {
   a.click()
   a.remove()
   setTimeout(() => URL.revokeObjectURL(url), 1000)
+  return null
 }
 
 export const base64 = (blob) => new Promise((listo, fallo) => {

@@ -9,6 +9,7 @@
 // paso de compilación para compartir un fichero entre el content script y node.
 import { readFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
+import { nombrePdf } from '../src/studio/api.js'
 
 const src = readFileSync(new URL('../extension/campos.js', import.meta.url), 'utf8')
 const { campoPara, opcionPara, valorPara, normalizar } =
@@ -120,4 +121,18 @@ assert.equal(valorPara('carta', { perfil, carta: 'Estimados…' }), 'Estimados�
 assert.equal(valorPara('cv', { perfil }), undefined, 'el CV se adjunta, no se escribe')
 assert.equal(valorPara('password', { perfil, password: 'x' }), 'x')
 
-console.log(`apply-test: ${CASOS.length} etiquetas y 15 comprobaciones más, todo OK`)
+// --- el nombre del PDF que se adjunta --------------------------------------
+// Salía siempre igual (tu nombre) porque dependía de un campo que solo se
+// rellenaba al pulsar "Guardar variante". Ahora sale de la auditoría.
+assert.equal(nombrePdf('Novartis', 'Senior AI Engineer', 'en'), 'CV_Novartis_Senior-AI-Engineer_EN.pdf')
+assert.equal(nombrePdf('Factorial', 'Staff AI Engineer', 'es'), 'CV_Factorial_Staff-AI-Engineer_ES.pdf')
+assert.equal(nombrePdf('Grifols España', 'Científico de Datos', 'es'),
+  'CV_Grifols-Espana_Cientifico-de-Datos_ES.pdf', 'sin acentos ni eñes: van a un nombre de fichero')
+assert.equal(nombrePdf('Amazon', 'Business Intelligence Engineer, Data and Analytics Platform', 'en'),
+  'CV_Amazon_Business-Intelligence-Engineer-Data-and-Analy_EN.pdf', 'el puesto se corta, no se lleva la línea entera')
+assert.equal(nombrePdf(undefined, undefined, 'en'), 'CV_Oferta_EN.pdf', 'sin auditoría todavía, un nombre válido')
+assert.equal(nombrePdf('LHH · Brezo Arnedo', null, 'es'), 'CV_LHH-Brezo-Arnedo_ES.pdf')
+assert.ok(!/[^\w.-]/.test(nombrePdf('A/B · Testing', 'C:D*E', 'en')),
+  'nada que un sistema de ficheros rechace')
+
+console.log(`apply-test: ${CASOS.length} etiquetas, el nombre del PDF y 15 comprobaciones más, todo OK`)
