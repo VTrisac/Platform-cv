@@ -101,7 +101,7 @@ export const dataES = {
     {
       degree: "Master Full-Stack Developer",
       center: "ConquerX - Conquer Blocks",
-      dates: "Abr. 2024 - Sept. 2024",
+      dates: "Abr. 2024 - Sept. 2025",
       note: "Nota Media: 8.5/10",
       details: "Especialización en React, Node.js y arquitecturas escalables."
     },
@@ -223,7 +223,7 @@ export const dataEN = {
     {
       degree: "Master Full-Stack Developer",
       center: "ConquerX - Conquer Blocks",
-      dates: "Apr. 2024 - Sept. 2024",
+      dates: "Apr. 2024 - Sept. 2025",
       note: "GPA: 8.5/10",
       details: "Specialization in React, Node.js and scalable architectures."
     },
