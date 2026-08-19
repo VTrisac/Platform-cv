@@ -73,6 +73,7 @@ export function useStudio() {
     // criterios sin nada de donde partir y el botón de "volver a los criterios
     // por defecto" era un callejón sin salida.
     base: state.base ?? null,
+    setBase: (base) => setState((s) => ({ ...s, base })),
     // Si alguna fuente falló por algo pasajero (LinkedIn limitando el ritmo,
     // un 5xx) el resultado se enseña pero NO se sella con la fecha: si no, un
     // límite de ritmo de un minuto te dejaría el feed vacío hasta mañana.

@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { Info, Plus, Trash2 } from 'lucide-react'
+import { criteriosPorDefecto } from './api'
 
 // Pantalla de criterios: qué buscar, qué excluir y en qué ventana de tiempo.
 //
@@ -57,7 +59,14 @@ const Pills = ({ opciones, valor, onChange, multi }) => (
   </div>
 )
 
-const Criterios = ({ preset, setPreset, base, lenguajesCV }) => {
+const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
+  // Sin `base` no hay de dónde partir ni con qué comparar tu lista de empresas,
+  // y solo llegaba al refrescar el feed —que se cachea un día entero—. Se pide
+  // aparte: no sale a buscar ofertas, así que es inmediato.
+  useEffect(() => {
+    if (!base) criteriosPorDefecto().then(setBase).catch(() => {})
+  }, [base, setBase])
+
   // Sin preset propio se edita a partir del que el servidor dice usar de fábrica.
   const c = preset ?? base?.preset
 

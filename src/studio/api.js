@@ -31,6 +31,11 @@ export const auditar = (entrada, lang) =>
 // Sin preset, el servidor usa los valores de siempre.
 export const buscarFeed = (preset) => apiPost('/api/feed', preset ?? {})
 
+// Solo los criterios de fábrica y la lista de empresas: no sale a buscar, así
+// que es inmediato. Lo usa la pantalla de criterios para poder ofrecerte las
+// empresas que tu preset guardado no tiene.
+export const criteriosPorDefecto = () => apiPost('/api/feed', { soloPreset: true })
+
 // Manda el HTML del CV ya renderizado a que Chromium lo imprima limpio y
 // devuelve el PDF. No usa apiPost porque la respuesta es binaria, no JSON, pero
 // repite el mismo baile del 401.

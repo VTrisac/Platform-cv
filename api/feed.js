@@ -501,6 +501,27 @@ export function deduplicar(jobs) {
   })
 }
 
+// Los criterios que se aplican de verdad: los tuyos donde los hayas puesto, y
+// los de siempre en el resto.
+export const presetEfectivo = (preset = {}) => ({
+  empresas: preset.empresas ?? COMPANIES,
+  ventana: preset.ventana ?? 'todo',
+  ubicacion: preset.ubicacion ?? UBICACION,
+  minNota: preset.minNota ?? MIN_NOTA,
+  veto: preset.veto ?? [],
+  salarioMin: preset.salarioMin ?? 0,
+  descartarSinSalario: preset.descartarSinSalario ?? false,
+  modalidades: preset.modalidades ?? [],
+  lenguajes: preset.lenguajes ?? [],
+  ia: preset.ia ?? 'indiferente',
+  excluirInglesImprescindible: preset.excluirInglesImprescindible ?? false,
+})
+
+// Lo que la pantalla de criterios necesita saber, sin salir a buscar nada.
+export const porDefecto = () => ({
+  preset: presetEfectivo(), keywords, empresasPorDefecto: COMPANIES,
+})
+
 export async function buscar(preset = {}) {
   const { empresas = COMPANIES, ventana = 'todo' } = preset
   const boards = await Promise.all(empresas.map((c) => board(c, { ventana })))
@@ -532,18 +553,7 @@ export async function buscar(preset = {}) {
     keywords,
     // Los criterios efectivos, para que la pantalla pueda partir de ellos sin
     // importar este módulo (arrastraría el SDK de OpenAI al bundle).
-    preset: {
-      empresas, ventana,
-      ubicacion: preset.ubicacion ?? UBICACION,
-      minNota: preset.minNota ?? MIN_NOTA,
-      veto: preset.veto ?? [],
-      salarioMin: preset.salarioMin ?? 0,
-      descartarSinSalario: preset.descartarSinSalario ?? false,
-      modalidades: preset.modalidades ?? [],
-      lenguajes: preset.lenguajes ?? [],
-      ia: preset.ia ?? 'indiferente',
-      excluirInglesImprescindible: preset.excluirInglesImprescindible ?? false,
-    },
+    preset: presetEfectivo(preset),
   }
 }
 
@@ -554,6 +564,11 @@ export default async function handler(req, res) {
   if (blocked) return blocked
 
   try {
+    // La pantalla de criterios solo necesita saber qué hay de fábrica, y una
+    // búsqueda entera tarda minutos. Sin este atajo, el botón de "añadir las
+    // empresas que faltan" no aparecía hasta refrescar el feed — justo cuando
+    // no sabes que tienes que hacerlo, porque el tablero se ve igual que ayer.
+    if (req.body?.soloPreset) return res.status(200).json(porDefecto())
     res.status(200).json(await buscar(req.body ?? {}))
   } catch (e) {
     res.status(500).json({ error: e.message })

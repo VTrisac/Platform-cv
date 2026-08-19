@@ -37,7 +37,7 @@ const LENGUAJES = ['Python', 'Java', 'JavaScript', 'TypeScript', 'SQL', 'HTML5',
 // Shell de CV Studio. ponytail: sin react-router — cuatro vistas y un estado.
 // Una dependencia de routing para esto sería peso muerto.
 const Studio = () => {
-  const { ofertas, feed, setFeed, base, preset, setPreset, perfil, setPerfil, addOferta, updateOferta, removeOferta } = useStudio()
+  const { ofertas, feed, setFeed, base, setBase, preset, setPreset, perfil, setPerfil, addOferta, updateOferta, removeOferta } = useStudio()
   const [view, setView] = useState('bento')
   const [actual, setActual] = useState(null)
   const [urlInicial, setUrlInicial] = useState(null)
@@ -89,6 +89,7 @@ const Studio = () => {
           preset={preset}
           setPreset={setPreset}
           base={base}
+          setBase={setBase}
           lenguajesCV={(base?.keywords ?? []).filter((k) => LENGUAJES.includes(k))}
         />
       )}
