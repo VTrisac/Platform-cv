@@ -174,6 +174,30 @@ function selftest() {
   a.ok(ATS.amazon.url('ai engineer|Spain').includes('loc_query=Spain'))
   a.ok(ATS.amazon.url('ai engineer|Spain').includes('country=ESP'))
 
+  // --- RemoteOK: puntúa por lo que dice, no por sus etiquetas de relleno ---
+  // Colgaba 49 tags de SEO en cada oferta; un técnico de mantenimiento de
+  // aviones venía con react, python, docker y typescript, y sacaba un 8/10.
+  const rok = ATS.remoteok.jobs([
+    { legal: 'el primer elemento es el aviso legal, no una oferta' },
+    {
+      position: 'Aviation Maintenance Technician', company: 'FedEx',
+      url: 'https://remoteok.com/remote-jobs/x', location: 'Seoul',
+      description: 'Routine and non-routine maintenance to FedEx aircraft.',
+      tags: ['react', 'python', 'docker', 'typescript', 'golang'],
+      date: '2026-08-14T06:16:08+00:00',
+    },
+    {
+      position: 'Backend Engineer', company: 'Acme', url: 'https://remoteok.com/remote-jobs/y',
+      location: '', description: 'You will build APIs in Python with FastAPI, Docker and PostgreSQL.',
+      tags: ['sales', 'marketing'], date: '2026-08-14T06:16:08+00:00',
+    },
+  ])
+  a.equal(rok.length, 2, 'el aviso legal se cae solo al exigir `position`')
+  a.equal(notaDe(rok[0].text).nota, 0, 'sus tags no pueden puntuar: la oferta no habla de eso')
+  a.ok(!/react|typescript|golang/i.test(rok[0].text), 'las etiquetas de relleno no entran en el texto')
+  a.equal(notaDe(rok[1].text).nota, 10, 'lo que la oferta SÍ dice sigue puntuando')
+  a.ok(rok[0].location.startsWith('Remote'), 'todo lo suyo es remoto, aunque su location venga rara')
+
   console.log(`ok — ${keywords.length} keywords del CV; nota, filtros, fechas y las fuentes nuevas verificados`)
 }
 

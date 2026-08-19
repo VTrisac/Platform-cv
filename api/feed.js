@@ -194,7 +194,15 @@ export const ATS = {
       // Todo lo de RemoteOK es remoto; su `location` es la restricción
       // geográfica. Sin el prefijo no pasaría un filtro que busca "remote".
       location: ['Remote', (j.location ?? '').trim().replace(/,$/, '')].filter(Boolean).join(' · '),
-      fecha: iso(j.date), text: JSON.stringify(j),
+      fecha: iso(j.date),
+      // La única fuente que NO se serializa entera, y con motivo: `tags` no
+      // describe la oferta, es relleno para posicionar. Un "Aviation Maintenance
+      // Technician" de FedEx venía con 49 etiquetas, entre ellas react, python,
+      // docker y typescript — y con eso puntuaba 8/10 y se colaba por delante de
+      // ofertas de verdad. Se puntúa por lo que la oferta dice, no por lo que su
+      // SEO quiere vender. Medido: los demás tableros no hacen esto, así que
+      // siguen serializándose enteros.
+      text: [j.position, j.company, j.description, j.location].filter(Boolean).join('\n'),
     })),
   },
   // El token es el término de búsqueda ("ai engineer"), no un slug de empresa.
