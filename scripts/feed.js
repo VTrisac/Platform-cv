@@ -10,7 +10,7 @@
 //   node scripts/feed.js --selftest      -> comprueba la lógica de filtrado
 import { strict as a } from 'node:assert'
 import { readFileSync, readdirSync } from 'node:fs'
-import { COMPANIES, UBICACION, board, buscar, deduplicar, filtrar, iso, keywords, match, notaDe, salarioDe } from '../api/feed.js'
+import { ATS, COMPANIES, UBICACION, board, buscar, deduplicar, desdeHace, filtrar, iso, keywords, match, notaDe, salarioDe } from '../api/feed.js'
 
 // Anthropic lista varias sedes separadas por "|": rompería la tabla markdown.
 const cell = (s) => (s ?? '').replace(/\|/g, '/').trim()
@@ -133,7 +133,48 @@ function selftest() {
   ], {}).pasan
   a.equal(ordenadas[0].title, 'B', 'cubrir todo lo que piden gana a coincidir mucho en una oferta larga')
 
-  console.log(`ok — ${keywords.length} keywords del CV; nota, filtros y fechas verificados`)
+  // --- salario: los dos criterios son independientes ----------------------
+  // Vivía dentro de un `if (salarioMin > 0)`, así que con el mínimo por defecto
+  // —que es 0— marcar la casilla no hacía nada.
+  a.equal(solo([oferta({})], { descartarSinSalario: true }).descartes['sin salario publicado'], 1,
+    'sin mínimo, "descartar las que no publican salario" tiene que seguir descartando')
+  a.equal(solo([conSueldo], { descartarSinSalario: true }).pasan.length, 1,
+    'y la que sí publica cifra pasa aunque no haya mínimo')
+
+  // --- Workday: no da fecha, da "hace cuánto" ------------------------------
+  // Sin traducirlo, filtrarCabecera tira TODAS sus ofertas por "fuera de la
+  // ventana" y la fuente parece muerta cuando lo que falta es la fecha.
+  const ayer = new Date('2026-08-19T12:00:00Z')
+  a.equal(desdeHace('Posted Today', ayer), '2026-08-19')
+  a.equal(desdeHace('Posted Yesterday', ayer), '2026-08-18')
+  a.equal(desdeHace('Posted 5 Days Ago', ayer), '2026-08-14')
+  a.equal(desdeHace('Posted 30+ Days Ago', ayer), '2026-07-20')
+  a.equal(desdeHace('la semana pasada', ayer), null, 'lo que no reconoce no se inventa')
+  a.equal(desdeHace(null, ayer), null)
+
+  // --- Workday: la URL de la oferta se compone con el inquilino del token ---
+  const wd = ATS.workday.jobs(
+    { jobPostings: [{ title: 'AI Engineer', externalPath: '/job/Barcelona/AI-Engineer_REQ-1', locationsText: 'Barcelona', postedOn: 'Posted Today' }] },
+    'novartis|wd3|Novartis_Careers|Barcelona'
+  )
+  a.equal(wd[0].url, 'https://novartis.wd3.myworkdayjobs.com/Novartis_Careers/job/Barcelona/AI-Engineer_REQ-1')
+  a.equal(wd[0].location, 'Barcelona')
+  a.ok(wd[0].pendiente, 'la tarjeta no trae descripción: la baja detalle()')
+  a.ok(ATS.workday.url('novartis|wd3|Novartis_Careers|x').endsWith('/wday/cxs/novartis/Novartis_Careers/jobs'))
+  a.equal(JSON.parse(ATS.workday.init('a|b|c|Barcelona', {}, 2).body).offset, 40, 'paginación de 20 en 20')
+  a.equal(JSON.parse(ATS.workday.init('a|b|c|Barcelona', {}, 0).body).searchText, 'Barcelona')
+
+  // --- Amazon: la descripción viene ya en el listado ------------------------
+  const amz = ATS.amazon.jobs({ jobs: [{ title: 'ML Engineer', job_path: '/en/jobs/1/ml', normalized_location: 'Barcelona, Catalonia, ESP', posted_date: 'July 27, 2026' }] })
+  a.equal(amz[0].url, 'https://www.amazon.jobs/en/jobs/1/ml')
+  a.equal(amz[0].fecha, '2026-07-27', 'su fecha viene en inglés y con nombre de mes')
+  a.equal(amz[0].company, 'Amazon')
+  a.ok(!amz[0].pendiente, 'no hace falta bajar el detalle')
+  // country=ESP a secas NO filtra; es la pareja loc_query+country la que sirve.
+  a.ok(ATS.amazon.url('ai engineer|Spain').includes('loc_query=Spain'))
+  a.ok(ATS.amazon.url('ai engineer|Spain').includes('country=ESP'))
+
+  console.log(`ok — ${keywords.length} keywords del CV; nota, filtros, fechas y las fuentes nuevas verificados`)
 }
 
 // --- main ------------------------------------------------------------------

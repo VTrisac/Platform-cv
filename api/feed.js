@@ -22,8 +22,9 @@ export const maxDuration = 300
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36'
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms))
 
-// Tokens de empresa verificados con --check el 27-07-2026; Amenitiz cayó
-// (HTTP 404) el 11-08-2026 y se queda para que --check lo siga señalando.
+// Tokens de empresa verificados con --check el 27-07-2026, y los de Workday y
+// Amazon el 19-08-2026. Amenitiz salió de la lista: llevaba en 404 desde el
+// 11-08-2026 y solo servía para ensuciar el aviso de "sin resultados".
 // ponytail: el token suele ser el slug de la empresa. Míralo en la URL de su
 // página de empleo (boards.greenhouse.io/<token>, jobs.lever.co/<token>,
 // <token>.workable.com). Si una empresa cambia de ATS desaparece EN SILENCIO:
@@ -38,7 +39,6 @@ export const COMPANIES = [
   // Barcelona / España
   { name: 'Typeform', ats: 'greenhouse', token: 'typeform' },
   { name: 'Cabify', ats: 'greenhouse', token: 'cabify' },
-  { name: 'Amenitiz', ats: 'greenhouse', token: 'amenitiz' },
   { name: 'New Relic', ats: 'greenhouse', token: 'newrelic' },
   { name: 'Jobandtalent', ats: 'lever', token: 'jobandtalent' },
   { name: 'Exoticca', ats: 'workable', token: 'exoticca' },
@@ -49,6 +49,20 @@ export const COMPANIES = [
   { name: 'Hugging Face', ats: 'workable', token: 'huggingface' },
   { name: 'Qonto', ats: 'lever', token: 'qonto' },
   { name: 'RemoteOK', ats: 'remoteok', token: '' },
+  // Farma y big tech por Workday. Tokens verificados el 19-08-2026 con --check.
+  // El cuarto segmento es la BÚSQUEDA, no un filtro de ubicación: estos tableros
+  // son globales y traen miles de puestos, así que sin acotar aquí bajarías 60
+  // vacantes de Hyderabad y las tiraría todas el filtro de ubicación.
+  { name: 'Novartis', ats: 'workday', token: 'novartis|wd3|Novartis_Careers|Barcelona' },
+  { name: 'AstraZeneca', ats: 'workday', token: 'astrazeneca|wd3|Careers|Barcelona' },
+  { name: 'Roche', ats: 'workday', token: 'roche|wd3|roche-ext|Spain' },
+  { name: 'GSK', ats: 'workday', token: 'gsk|wd5|GSKCareers|Spain' },
+  { name: 'Sanofi', ats: 'workday', token: 'sanofi|wd3|SanofiCareers|Barcelona' },
+  { name: 'Pfizer', ats: 'workday', token: 'pfizer|wd1|PfizerCareers|Spain' },
+  { name: 'NVIDIA', ats: 'workday', token: 'nvidia|wd5|NVIDIAExternalCareerSite|Spain' },
+  { name: 'Salesforce', ats: 'workday', token: 'salesforce|wd12|External_Career_Site|Spain' },
+  { name: 'Adobe', ats: 'workday', token: 'adobe|wd5|external_experienced|Spain' },
+  { name: 'Amazon', ats: 'amazon', token: 'engineer|Spain' },
 ]
 
 export const UBICACION = 'barcelona|madrid|valencia|spain|españa|remote|emea|europe'
@@ -116,10 +130,26 @@ export function notaDe(texto) {
 
 // Fechas: cada fuente la da en su formato (ISO, epoch en milisegundos, o solo
 // el día). Todas acaban en YYYY-MM-DD, que es con lo que se compara.
+// El día LOCAL, no el UTC. Amazon publica "July 27, 2026", que se parsea como
+// medianoche local: en Madrid eso son las 22:00 del 26 en UTC, y un
+// .toISOString() pelado devolvía el día anterior. Con una ventana de 24 horas
+// eso descarta ofertas publicadas hoy.
 export const iso = (v) => {
   if (v == null || v === '') return null
   const d = new Date(typeof v === 'number' ? v : String(v))
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+  if (Number.isNaN(d.getTime())) return null
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
+
+// Workday no publica la fecha, publica "Posted Today" / "Posted 5 Days Ago" /
+// "Posted 30+ Days Ago". Sin traducirlo a un día, filtrarCabecera() tira TODAS
+// sus ofertas por "fuera de la ventana" en cuanto eliges 24h o semana, y la
+// fuente parece rota cuando lo que falta es la fecha.
+export const desdeHace = (texto, hoy = new Date()) => {
+  const t = String(texto ?? '').toLowerCase()
+  if (!t.includes('posted')) return null
+  const dias = /today/.test(t) ? 0 : /yesterday/.test(t) ? 1 : Number(/(\d+)/.exec(t)?.[1])
+  return Number.isFinite(dias) ? new Date(hoy.getTime() - dias * 864e5).toISOString().slice(0, 10) : null
 }
 
 // --- fuentes ---------------------------------------------------------------
@@ -181,6 +211,61 @@ export const ATS = {
       location: j.location?.display_name ?? '', fecha: iso(j.created), text: JSON.stringify(j),
     })),
   },
+  // Workday: donde viven las farmacéuticas y buena parte de las grandes.
+  // El token son cuatro cosas separadas por "|": inquilino, centro de datos,
+  // nombre del sitio y BÚSQUEDA. Los tres primeros salen de la URL de su página
+  // de empleo — https://<inquilino>.<dc>.myworkdayjobs.com/<sitio> —, la cuarta
+  // la eliges tú ("Barcelona", "Spain", "machine learning").
+  //
+  // Es la única fuente que va por POST, de ahí init(). Y limit tiene techo 20:
+  // con 100 devuelve HTTP 400, así que se pagina como LinkedIn.
+  //
+  // La tarjeta no trae descripción; la baja detalle() con fetchOffer, que lee su
+  // <script ld+json> sin necesidad de un parseo propio de Workday.
+  workday: {
+    paginas: 3,
+    url: (token) => {
+      const [inquilino, dc, sitio] = String(token).split('|')
+      return `https://${inquilino}.${dc}.myworkdayjobs.com/wday/cxs/${inquilino}/${sitio}/jobs`
+    },
+    init: (token, _ctx, pagina = 0) => ({
+      method: 'POST',
+      headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({
+        appliedFacets: {}, limit: 20, offset: pagina * 20,
+        searchText: String(token).split('|')[3] ?? '',
+      }),
+    }),
+    jobs: (d, token) => {
+      const [inquilino, dc, sitio] = String(token).split('|')
+      return (d.jobPostings ?? []).map((j) => ({
+        title: j.title,
+        url: `https://${inquilino}.${dc}.myworkdayjobs.com/${sitio}${j.externalPath}`,
+        location: j.locationsText ?? '',
+        fecha: desdeHace(j.postedOn),
+        text: JSON.stringify(j),
+        pendiente: true, // la descripción todavía no está: la baja detalle()
+      }))
+    },
+  },
+  // Amazon tiene su propio portal con una API pública que además devuelve la
+  // descripción ENTERA en el listado: no hace falta paso de detalle.
+  // ponytail: country=ESP fijo. `country[]=ESP` a secas NO filtra (devuelve
+  // vacantes de US/AU/GB); es la pareja loc_query + country la que funciona.
+  // Si algún día buscas fuera de España, el país pasa a ser un tercer segmento.
+  amazon: {
+    url: (token) => {
+      const [puesto = '', donde = 'Spain'] = String(token).split('|')
+      return 'https://www.amazon.jobs/en/search.json'
+        + `?base_query=${encodeURIComponent(puesto.trim())}&loc_query=${encodeURIComponent(donde.trim())}`
+        + '&country=ESP&result_limit=100&sort=recent'
+    },
+    jobs: (d) => (d.jobs ?? []).map((j) => ({
+      title: j.title, url: `https://www.amazon.jobs${j.job_path}`, company: 'Amazon',
+      location: j.normalized_location || j.location || '',
+      fecha: iso(j.posted_date), text: JSON.stringify(j),
+    })),
+  },
   // Búsqueda pública de LinkedIn: no pide login, pagina de 10 en 10 y filtra por
   // antigüedad en el servidor (f_TPR). Por eso NO hace falta Playwright ni tu
   // sesión — y por tanto tampoco se arriesga tu cuenta.
@@ -212,11 +297,15 @@ export const ATS = {
 // seguidas mientras ajustas los criterios basta para provocarlo. Se espera y se
 // reintenta una vez; si vuelve, se dice con esas palabras en vez de un "HTTP
 // 429" que no le dice nada a nadie.
-async function pedir(url, intento = 0) {
-  const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(15000) })
+async function pedir(url, init = {}, intento = 0) {
+  const res = await fetch(url, {
+    ...init,
+    headers: { 'User-Agent': UA, ...init.headers },
+    signal: AbortSignal.timeout(15000),
+  })
   if (res.status === 429 && intento === 0) {
     await pausa(3000)
-    return pedir(url, 1)
+    return pedir(url, init, 1)
   }
   return res
 }
@@ -227,7 +316,7 @@ export async function board(c, ctx = {}) {
   try {
     const jobs = []
     for (let p = 0; p < (fuente.paginas ?? 1); p++) {
-      const res = await pedir(fuente.url(c.token, ctx, p))
+      const res = await pedir(fuente.url(c.token, ctx, p), fuente.init?.(c.token, ctx, p))
       // Un fallo en la primera página es la fuente caída; en las siguientes es
       // simplemente que no hay más resultados.
       if (!res.ok) {
@@ -244,7 +333,9 @@ export async function board(c, ctx = {}) {
         }
         break
       }
-      const lote = fuente.jobs(fuente.html ? await res.text() : await res.json())
+      // El token viaja a jobs() porque Workday necesita el inquilino para
+      // componer la URL de cada oferta. Las demás fuentes lo ignoran.
+      const lote = fuente.jobs(fuente.html ? await res.text() : await res.json(), c.token)
       jobs.push(...lote)
       if (lote.length === 0) break
       if (p + 1 < (fuente.paginas ?? 1)) await pausa(1500) // ritmo, no ráfaga
@@ -347,10 +438,11 @@ export function filtrarTexto(jobs, {
   const { pasan, descartes } = cribar(jobs, (j) => {
     const texto = j.text ?? ''
     j.salario = salarioDe(texto)
-    if (salarioMin > 0) {
-      if (j.salario == null) { if (descartarSinSalario) return 'sin salario publicado' }
-      else if (j.salario < salarioMin) return 'salario bajo'
-    }
+    // Fuera del `if (salarioMin > 0)` en el que vivía: con el mínimo en 0, que
+    // es el valor por defecto, marcar "descartar las que no publican salario" no
+    // hacía absolutamente nada. Son dos criterios independientes.
+    if (j.salario == null) { if (descartarSinSalario) return 'sin salario publicado' }
+    else if (salarioMin > 0 && j.salario < salarioMin) return 'salario bajo'
     if (modalidades.length && !modalidades.some((m) => MODALIDAD[m]?.test(texto))) return 'modalidad'
     if (lenguajes.length && !lenguajes.every((l) => match(texto, [l]).length)) return 'falta lenguaje'
     if (ia === 'con' && !IA.test(texto)) return 'sin IA'
@@ -420,6 +512,12 @@ export async function buscar(preset = {}) {
     // ofertas: se devuelve para poder avisar en vez de fallar en silencio.
     dead: boards.filter((b) => b.error || b.jobs.length === 0)
       .map((b) => ({ name: b.name, error: b.error ?? 'sin ofertas', reintentable: b.reintentable ?? false })),
+    // La lista de empresas de fábrica, aparte del preset. Sin esto no hay forma
+    // de que una empresa nueva llegue a quien ya tiene un preset guardado: ese
+    // preset trae SU propia lista de empresas y gana siempre (ver `empresas`
+    // arriba), así que COMPANIES deja de existir para él el día que toca un
+    // criterio. La pantalla de criterios la usa para ofrecer las que le faltan.
+    empresasPorDefecto: COMPANIES,
     // Las keywords viajan por el mismo motivo: la pantalla de criterios ofrece
     // los lenguajes de tu CV para marcarlos como obligatorios, y derivarlas otra
     // vez en el cliente sería duplicar las reglas de parseo en dos sitios.
