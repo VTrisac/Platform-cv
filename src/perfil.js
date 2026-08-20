@@ -46,3 +46,11 @@ export const PERFIL = {
 
 // El perfil efectivo: los valores por defecto con encima lo que hayas editado.
 export const conPerfil = (guardado) => ({ ...PERFIL, ...(guardado ?? {}) })
+
+// El campo de pretensiones del formulario. Lo que hayas puesto tú en Perfil manda;
+// si está vacío, la cifra que calculó la auditoría PARA ESA OFERTA — que es lo
+// suyo: no se pide lo mismo en una startup que en una farmacéutica.
+export const conSalario = (perfil, salario) =>
+  perfil.salarioObjetivo || !salario?.pedir
+    ? perfil
+    : { ...perfil, salarioObjetivo: `${salario.pedir.toLocaleString('es-ES')} € brutos/año` }

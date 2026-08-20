@@ -11,7 +11,10 @@ const NAV = [
   { id: 'perfil', label: 'Perfil' },
 ]
 
-const Topbar = ({ view, onNav, onNueva }) => (
+// La Cola solo existe mientras hay un lote en marcha o recién terminado, así que
+// su pestaña aparece y desaparece: una pestaña permanente que casi siempre está
+// vacía es ruido.
+const Topbar = ({ view, onNav, onNueva, cola = 0 }) => (
   <header
     className="h-16 px-8 flex items-center justify-between border-b shrink-0"
     style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)' }}
@@ -29,7 +32,7 @@ const Topbar = ({ view, onNav, onNueva }) => (
     </div>
 
     <nav className="flex items-center gap-7">
-      {NAV.map((n) => (
+      {[...NAV.slice(0, 2), ...(cola ? [{ id: 'cola', label: `Cola (${cola})` }] : []), ...NAV.slice(2)].map((n) => (
         <button
           key={n.id}
           onClick={() => onNav(n.id)}

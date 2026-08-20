@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ExternalLink, Loader2, RefreshCw, Search, SlidersHorizontal, TriangleAlert } from 'lucide-react'
 import { buscarFeed } from './api'
+import Proceso from './Proceso'
 
 // Pantalla "Feed": las ofertas que hay AHORA en LinkedIn y en los tableros
 // públicos que sigues, ya filtradas por tus criterios.
@@ -9,6 +10,16 @@ import { buscarFeed } from './api'
 // como mucho una vez al día (la marca vive en el store); un cron necesitaría
 // dónde escribir mientras tienes el navegador cerrado, y estas ofertas son dato
 // derivado que no merece almacenamiento.
+// Los tres pasos del motor de api/feed.js, que es lo que está pasando de verdad
+// mientras esperas: consultar cada tablero, bajar la descripción de lo que pasa
+// la criba barata, y filtrar por el texto. Tarda minutos y antes solo se veía
+// una línea fija.
+const BUSQUEDA = [
+  ['tableros', 'Consultando tableros'],
+  ['detalle', 'Bajando descripciones'],
+  ['filtrar', 'Filtrando por tus criterios'],
+]
+
 const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -16,7 +27,16 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
   // fecha un resultado con fuentes caídas por algo pasajero, así que devolvería
   // null y el efecto de abajo volvería a pedirlo en bucle. Lo que se ve es esto.
   const [datos, setDatos] = useState(null)
+  const [segundos, setSegundos] = useState(0)
   const vista = datos ?? feed
+
+  // Un segundero mientras busca, y solo mientras busca: es lo que hace avanzar
+  // los pasos del raíl.
+  useEffect(() => {
+    if (!loading) return setSegundos(0)
+    const t = setInterval(() => setSegundos((s) => s + 1), 1000)
+    return () => clearInterval(t)
+  }, [loading])
 
   const cargar = async () => {
     setLoading(true); setError(null)
@@ -46,18 +66,30 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
   return (
     <div className="p-8 flex flex-col gap-5">
       <div className="flex items-end justify-between">
-        <div className="flex flex-col gap-1.5">
+        <div className="flex flex-col gap-1.5 min-w-0">
           <h1 className="text-[32px] font-semibold leading-tight" style={{ fontFamily: 'var(--s-display)' }}>
             Feed
           </h1>
-          <p className="text-sm" style={{ color: 'var(--s-muted)' }}>
-            {loading
-              ? 'Consultando LinkedIn y los tableros…'
-              : vista
+          {loading ? (
+            <div className="max-w-[440px]">
+              {/* ponytail: el paso activo NO viene del servidor —la respuesta llega
+                  entera al final— sino de cuánto lleva esperando. Es honesto: los
+                  tiempos están medidos y el orden es el real. Sacar el progreso de
+                  verdad pediría streaming, que es otra arquitectura por un adorno. */}
+              <Proceso
+                pasos={BUSQUEDA}
+                activo={BUSQUEDA[Math.min(Math.floor(segundos / 20), 2)][0]}
+                nota="LinkedIn y los tableros públicos. Suele tardar entre uno y tres minutos."
+              />
+            </div>
+          ) : (
+            <p className="text-sm" style={{ color: 'var(--s-muted)' }}>
+              {vista
                 ? `${jobs.length} de ${vista.total} ofertas`
                   + (ventana === '24h' ? ' · últimas 24 horas' : ventana === 'semana' ? ' · última semana' : '')
                 : 'Sin resultados todavía.'}
-          </p>
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-2.5">
           <button

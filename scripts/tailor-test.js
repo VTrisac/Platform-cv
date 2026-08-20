@@ -5,9 +5,11 @@
 //   node scripts/tailor-test.js
 import { strict as a } from 'node:assert'
 import handler, { applyPatch, findInventions, strip, verifyPassword, jobPosting } from '../api/tailor.js'
-import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles, normalizar } from '../api/audit.js'
+import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles, normalizar, pedirSalario } from '../api/audit.js'
 import feed from '../api/feed.js'
 import { findFigures } from '../api/cover.js'
+import { partir, enLote } from '../src/studio/lote.js'
+import { agrupar, esSemilla, contar } from '../src/studio/store.js'
 import { hashPassword } from './set-password.js'
 import { dataEN } from '../src/data.js'
 
@@ -176,6 +178,36 @@ a.equal(recomendar({ imprescindibles: 40, bloqueantes: [] }), 'descartar')
 a.equal(recomendar({ imprescindibles: 70, bloqueantes: [] }), 'aplicar_con_reservas')
 a.equal(recomendar({ imprescindibles: null, bloqueantes: [] }), 'aplicar', 'sin imprescindibles no bloquea')
 
+// --- la banda salarial -------------------------------------------------------
+// La banda la estima el modelo y se equivoca de formas concretas: la devuelve
+// invertida, o en euros MENSUALES. Las dos se descartan aquí, no en la pantalla.
+const lleno = { imprescindibles: 100, bloqueantes: [] }
+const flojo = { imprescindibles: 60, bloqueantes: [] }
+const roto = { imprescindibles: 90, bloqueantes: ['Rails'] }
+const banda = { bandaMin: 50000, bandaMax: 70000, baseSalarial: 'Mercado Barcelona, producto' }
+
+a.equal(pedirSalario({ bandaMin: 70000, bandaMax: 50000 }, lleno), null, 'banda invertida: no se pinta')
+a.equal(pedirSalario({ bandaMin: 3500, bandaMax: 4500 }, lleno), null, 'banda mensual: fuera de rango, no se pinta')
+a.equal(pedirSalario({ bandaMin: 50000, bandaMax: 900000 }, lleno), null, 'techo absurdo: no se pinta')
+a.equal(pedirSalario({}, lleno), null, 'sin banda y sin cifra publicada, no hay nada que decir')
+
+a.equal(pedirSalario(banda, lleno).pedir, 66000, 'cumpliéndolo todo se pide el tercio alto')
+a.ok(pedirSalario(banda, flojo).pedir < pedirSalario(banda, lleno).pedir,
+  'con menos encaje se pide menos')
+a.ok(pedirSalario(banda, roto).pedir <= 60000, 'con un bloqueante, nunca por encima del punto medio')
+a.equal(pedirSalario(banda, lleno).base, 'Mercado Barcelona, producto')
+
+// Lo que la oferta publica es un TECHO, no la respuesta: si se devuelve tal cual
+// se salta el ajuste por encaje y acaba diciendo "pide el máximo" en una oferta
+// que cumples a medias. Medido con una oferta real de 55.000-70.000 al 83% con un
+// bloqueante: decía 70.000.
+a.equal(pedirSalario(banda, lleno, 80000).pedir, 66000,
+  'un techo por encima de la banda no cambia nada: manda el punto')
+a.equal(pedirSalario(banda, lleno, 60000).pedir, 60000, 'un techo por debajo del punto sí tapa')
+a.equal(pedirSalario(banda, roto, 70000).pedir, 60000, 'con bloqueante no se pide el techo publicado')
+a.equal(pedirSalario({ bandaMin: 3500, bandaMax: 4500 }, lleno, 60000).pedir, 60000,
+  'con la banda descartada, la cifra publicada es lo único que hay')
+
 
 // El veredicto degenerado que se vio en producción: cientos de "si" seguidos.
 const bucle = 'si no parcial no ' + 'si '.repeat(200)
@@ -227,5 +259,85 @@ a.equal((await call(handler, PW, { 'x-tailor-key': 's3cr3t' })).code, 500, 'clar
 a.equal((await call(feed, { VERCEL: '1' })).code, 500, 'feed en prod sin secreto: cerrado')
 a.equal((await call(feed, HPW)).code, 401, 'feed en prod sin contraseña: 401')
 a.equal((await call(feed, HPW, { 'x-tailor-key': 'mala' })).code, 401, 'feed con contraseña incorrecta: 401')
+
+// --- el lote -----------------------------------------------------------------
+// Partir lo pegado: o son enlaces (uno por línea) o son ofertas en texto
+// separadas por una línea en blanco. Con una sola entrada el flujo de siempre
+// no cambia, así que este es el caso que no puede romperse.
+a.deepEqual(partir('https://a.com/1\nhttps://b.com/2'), ['https://a.com/1', 'https://b.com/2'])
+a.deepEqual(partir('  https://a.com/1  \n\n https://a.com/1 '), ['https://a.com/1'], 'la misma URL dos veces es una')
+a.deepEqual(partir('https://a.com/1'), ['https://a.com/1'], 'una sola: el camino de siempre')
+a.deepEqual(partir(''), [], 'vacío no lanza nada')
+a.deepEqual(partir('   \n  \n'), [], 'solo espacios tampoco')
+a.deepEqual(partir('Oferta A\nPython\n---\nOferta B\nJava'), ['Oferta A\nPython', 'Oferta B\nJava'],
+  'texto pegado: se parte por una línea de guiones, que es explícita')
+// El caso que rompía la versión anterior, que partía por líneas en blanco: el
+// texto de una oferta trae párrafos, y cada párrafo se volvía "otra oferta".
+a.equal(partir('Senior AI Engineer\n\nQué harás:\n- RAG\n\nRequisitos:\n- Python').length, 1,
+  'una oferta con párrafos es UNA oferta, no cuatro')
+a.deepEqual(partir('Buscamos alguien\nque sepa https://ejemplo.com/docs'),
+  ['Buscamos alguien\nque sepa https://ejemplo.com/docs'],
+  'una oferta en texto que MENCIONA una URL no son dos ofertas')
+
+// El pool: todo se procesa una vez, nunca más de `aLaVez` a la vez, y una
+// oferta que revienta no se lleva por delante a las demás.
+{
+  const hechas = []
+  let vivos = 0
+  let pico = 0
+  const tarea = async (entrada, lang, onFase) => {
+    vivos++; pico = Math.max(pico, vivos)
+    await new Promise((r) => setTimeout(r, 5))
+    vivos--
+    if (entrada === 'mala') throw new Error('502 del portal')
+    onFase('listo', { ok: true })
+    hechas.push(entrada)
+  }
+  const fases = []
+  await enLote(['a', 'mala', 'c', 'd'], 'es', (i, fase) => fases.push([i, fase]), 2, tarea)
+  a.deepEqual(hechas.sort(), ['a', 'c', 'd'], 'las tres buenas se procesan')
+  a.ok(pico <= 2, `nunca más de 2 a la vez (pico ${pico})`)
+  a.deepEqual(fases.find(([i]) => i === 1), [1, 'error'], 'la que falla se marca en su fila')
+  a.equal(fases.filter(([, f]) => f === 'listo').length, 3)
+}
+
+// --- los grupos del Resumen ---------------------------------------------------
+// El tablero real tenía 44 ofertas y 11 eran la semilla de demo, con 4 de ellas
+// contando como "enviadas". El caso que importa es que `estado` NO distingue una
+// oferta solo auditada de una con el CV adaptado: las dos son "guardada".
+{
+  const cv = { profile: 'x' }
+  const alta = { encaje: { imprescindibles: 90, bloqueantes: [] } }
+  const baja = { encaje: { imprescindibles: 40, bloqueantes: ['Rails'] } }
+  const tablero = [
+    { id: 'seed-0', empresa: 'Demo', estado: 'enviada' },
+    { id: 'seed-1', empresa: 'Demo', estado: 'guardada' },
+    { id: 'a', estado: 'guardada', auditoria: alta },
+    { id: 'b', estado: 'guardada', auditoria: baja },
+    { id: 'c', estado: 'guardada', auditoria: alta, cv },
+    { id: 'd', estado: 'guardada', auditoria: alta, cv, url: 'https://x/1' },
+    { id: 'e', estado: 'enviada', auditoria: alta, cv, url: 'https://x/2' },
+    { id: 'f', estado: 'entrevista', auditoria: alta, cv },
+    { id: 'g', estado: 'descartada', auditoria: baja },
+  ]
+  const g = agrupar(tablero)
+  const ids = (xs) => xs.map((o) => o.id).sort()
+
+  a.deepEqual(ids(g.vivas), ['e', 'f', 'seed-0'], 'vivas = enviadas + entrevistas')
+  a.deepEqual(ids(g.soloAuditadas), ['a', 'b'], 'auditada y sin CV: lo que "guardada" no sabe decir')
+  a.deepEqual(ids(g.conCV), ['c', 'd'], 'con CV adaptado, todavía sin enviar')
+  a.deepEqual(ids(g.listas), ['d'], 'lista = enlace Y CV, lo mismo que exige el botón Aplicar')
+  a.deepEqual(ids(g.prometedoras), ['a'], 'encaje alto y sin adaptar; la de encaje bajo no entra')
+  a.deepEqual(ids(g.sinAuditar), ['seed-1'], 'pegada y nada más')
+  a.deepEqual(ids(g.descartadas), ['g'])
+  a.deepEqual(ids(g.semilla), ['seed-0', 'seed-1'], 'la demo se reconoce por su id')
+
+  // Una oferta ya enviada no "necesita acción" aunque tenga enlace y CV.
+  a.ok(!ids(g.listas).includes('e'), 'lo ya enviado no vuelve a la cola de aplicar')
+  a.equal(esSemilla({ id: 'seed-9' }), true)
+  a.equal(esSemilla({ id: crypto.randomUUID() }), false, 'una oferta real nunca es semilla')
+  a.deepEqual(agrupar([]).vivas, [], 'un tablero vacío no revienta')
+  a.equal(contar(tablero).guardada, 5, 'contar() sigue contando estados, sin cambios')
+}
 
 console.log(`ok — ${dropped.length} inventos bloqueados (${dropped.join(', ')}); puerta cerrada en prod`)

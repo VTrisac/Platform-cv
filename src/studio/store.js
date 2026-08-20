@@ -102,9 +102,47 @@ export function useStudio() {
     updateOferta: (id, patch) =>
       setState((s) => ({ ...s, ofertas: s.ofertas.map((o) => (o.id === id ? { ...o, ...patch } : o)) })),
     removeOferta: (id) => setState((s) => ({ ...s, ofertas: s.ofertas.filter((o) => o.id !== id) })),
+    // Varias de golpe. Borrar 22 descartadas de una en una, confirmando cada una,
+    // no lo hace nadie: se quedan ahí y el tablero deja de significar algo.
+    removeOfertas: (ids) => {
+      const fuera = new Set(ids)
+      setState((s) => ({ ...s, ofertas: s.ofertas.filter((o) => !fuera.has(o.id)) }))
+    },
     reset: () => setState(load()),
   }
 }
 
 export const contar = (ofertas) =>
   Object.keys(ESTADOS).reduce((acc, k) => ({ ...acc, [k]: ofertas.filter((o) => o.estado === k).length }), {})
+
+// Las de la semilla de demo, que nunca has tocado tú. Se reconocen por el id que
+// les pone load(); ninguna oferta real lo lleva.
+export const esSemilla = (o) => String(o.id).startsWith('seed-')
+
+// Lo que el Resumen necesita, contado sobre lo que YA está guardado.
+//
+// ponytail: no hay etapa derivada ni estado nuevo. `estado` sigue siendo tuyo y
+// manda. Esto solo mira qué campos existen, porque `estado` no puede distinguir
+// una oferta que solo has auditado de una con el CV ya adaptado — las dos son
+// "guardada", y esa es justo la pregunta que no se podía responder mirando la
+// portada.
+export function agrupar(ofertas) {
+  const abiertas = ofertas.filter((o) => o.estado === 'guardada')
+  return {
+    // Lo que has mandado y lo que está en marcha: la lista, no un número.
+    vivas: ofertas.filter((o) => o.estado === 'enviada' || o.estado === 'entrevista'),
+    abiertas,
+    soloAuditadas: abiertas.filter((o) => o.auditoria && !o.cv),
+    conCV: abiertas.filter((o) => o.cv),
+    // Enlace + CV es exactamente lo que Ofertas.jsx exige para enseñar "Aplicar".
+    listas: abiertas.filter((o) => o.url && o.cv),
+    // A un paso: encaje alto y sin adaptar todavía. Adaptar cuesta una llamada al
+    // modelo, así que la lista corta de las que la merecen vale más que el total.
+    prometedoras: abiertas.filter(
+      (o) => !o.cv && (o.auditoria?.encaje?.imprescindibles ?? 0) >= 75
+    ),
+    sinAuditar: abiertas.filter((o) => !o.auditoria),
+    descartadas: ofertas.filter((o) => o.estado === 'descartada'),
+    semilla: ofertas.filter(esSemilla),
+  }
+}

@@ -1,23 +1,34 @@
 import { useState } from 'react'
-import { X, Search, Loader2, TriangleAlert } from 'lucide-react'
+import { X, Search, Layers, TriangleAlert } from 'lucide-react'
 import { auditar } from './api'
+import Proceso from './Proceso'
+import { FASES, partir } from './lote'
 
 // Modal de "Nueva oferta": pegas la oferta y ya está. Empresa, puesto,
 // ubicación y modalidad salen de la auditoría, no los escribes tú — si el
 // scraper ya los tiene, pedírtelos era pasarte trabajo a ti.
 // Al terminar se guarda la oferta CON su auditoría, así reabrirla no vuelve a
 // gastar una llamada al modelo.
-const NuevaOferta = ({ onListo, onCerrar }) => {
+//
+// Acepta varias de golpe: un enlace por línea, o varias ofertas en texto
+// separadas por una línea con "---". Con UNA sola el camino es exactamente el de
+// siempre —se audita aquí y se entra al editor—; con varias se lanza el lote y
+// manda la pantalla de Cola. El caso de todos los días no cambia.
+const NuevaOferta = ({ onListo, onLote, onCerrar }) => {
   const [texto, setTexto] = useState('')
   const [lang, setLang] = useState('es')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
+  const entradas = partir(texto)
+
   const lanzar = async () => {
-    if (!texto.trim()) return setError('Pega la URL de la oferta o su texto.')
+    if (!entradas.length) return setError('Pega la URL de la oferta o su texto.')
+    if (entradas.length > 1) return onLote(entradas, lang)
+
     setLoading(true); setError(null)
     try {
-      onListo(await auditar(texto, lang), lang)
+      onListo(await auditar(entradas[0], lang), lang)
     } catch (e) {
       setError(e.message)
       setLoading(false)
@@ -56,7 +67,7 @@ const NuevaOferta = ({ onListo, onCerrar }) => {
           onChange={(e) => setTexto(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && (e.metaKey || e.ctrlKey) && lanzar()}
           rows={8}
-          placeholder="https://www.linkedin.com/jobs/view/…&#10;&#10;…o pega aquí el texto completo de la oferta."
+          placeholder="https://www.linkedin.com/jobs/view/…&#10;https://boards.greenhouse.io/…&#10;&#10;Un enlace por línea para varias de golpe, o el texto completo de una (varias, separadas por una línea con ---)."
           disabled={loading}
           style={{
             background: 'var(--s-bg)', border: '1px solid var(--s-border)', borderRadius: 10,
@@ -83,19 +94,33 @@ const NuevaOferta = ({ onListo, onCerrar }) => {
 
           <button
             onClick={lanzar}
-            disabled={loading || !texto.trim()}
+            disabled={loading || !entradas.length}
             className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
             style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
           >
-            {loading ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
-            {loading ? 'Auditando…' : 'Auditar y guardar'}
+            {entradas.length > 1 ? <Layers size={15} /> : <Search size={15} />}
+            {loading ? 'Auditando…'
+              : entradas.length > 1 ? `Preparar las ${entradas.length}`
+              : 'Auditar y guardar'}
           </button>
         </div>
 
-        {loading && (
-          <p className="text-xs" style={{ color: 'var(--s-muted)' }}>
-            Scrapeando y comparando con tu CV requisito por requisito. Tarda entre 30 y 60 segundos.
+        {/* Que veas cuántas ha detectado ANTES de pulsar: una oferta en texto que
+            mencione un enlace no son dos ofertas, y conviene poder comprobarlo. */}
+        {entradas.length > 1 && !loading && (
+          <p className="text-xs flex gap-1.5" style={{ color: 'var(--s-muted)' }}>
+            <Layers size={13} className="shrink-0 mt-0.5" />
+            {entradas.length} ofertas detectadas. Se auditan de dos en dos y se adaptan solas
+            las que tengan encaje; lo verás en la Cola.
           </p>
+        )}
+
+        {loading && (
+          <Proceso
+            pasos={FASES}
+            activo="auditar"
+            nota="Scrapeando y comparando con tu CV requisito por requisito. Tarda entre 30 y 60 segundos."
+          />
         )}
         {error && (
           <p className="text-xs flex gap-1.5" style={{ color: '#8A4A3C' }}>

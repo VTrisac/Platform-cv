@@ -1,4 +1,4 @@
-import { Check, Minus, X, TriangleAlert, Sparkles, Trash2 } from 'lucide-react'
+import { Check, Minus, X, TriangleAlert, Sparkles, Trash2, Info } from 'lucide-react'
 
 // Paso 2 del flujo: el listado de encaje. Es la pantalla que decide si merece
 // la pena aplicar, así que lo primero que se ve es el veredicto y los
@@ -23,6 +23,60 @@ const Barra = ({ label, pct }) => (
     </div>
   </div>
 )
+
+const euros = (n) => `${Number(n).toLocaleString('es-ES')} €`
+
+// Lo que puedes pedir. La banda es de mercado y la estima el modelo; el punto
+// dentro de ella lo calcula pedirSalario() en api/audit.js a partir de tu % de
+// imprescindibles, que es el mismo número de la barra de arriba.
+//
+// Se dice que es una estimación y se dice sobre qué. Un número sin eso al lado se
+// convierte en un dato en tu cabeza a los dos días.
+const Salario = ({ s }) => {
+  const banda = s.min != null && s.max != null
+  return (
+    <div className="flex flex-col gap-2.5 p-4 rounded-xl" style={{ background: 'var(--s-bg)' }}>
+      <div className="flex items-baseline justify-between gap-4">
+        <span className="text-xs font-semibold" style={{ color: 'var(--s-muted)', letterSpacing: '0.3px' }}>
+          LO QUE PUEDES PEDIR
+        </span>
+        <span className="text-[26px] font-semibold leading-none" style={{ fontFamily: 'var(--s-display)', color: 'var(--s-accent-dark)' }}>
+          {euros(s.pedir)}
+        </span>
+      </div>
+
+      {banda && (
+        <>
+          {/* La marca dice dónde caes dentro de la banda, que es la mitad de la
+              información: el mismo 60.000 significa cosas distintas en una banda
+              de 55-65 que en una de 45-90. */}
+          <div className="relative h-2 rounded-full" style={{ background: 'var(--s-chip)' }}>
+            <div
+              className="absolute top-1/2 w-3 h-3 rounded-full -translate-y-1/2 -translate-x-1/2"
+              style={{ left: `${Math.round(s.punto * 100)}%`, background: 'var(--s-accent)', border: '2px solid var(--s-surface)' }}
+            />
+          </div>
+          <div className="flex justify-between text-xs" style={{ color: 'var(--s-muted)' }}>
+            <span>{euros(s.min)}</span>
+            <span>banda de mercado</span>
+            <span>{euros(s.max)}</span>
+          </div>
+        </>
+      )}
+
+      <p className="text-xs flex gap-1.5" style={{ color: 'var(--s-muted)' }}>
+        <Info size={13} className="shrink-0 mt-0.5" />
+        <span>
+          {s.publicado
+            ? <><b>La oferta publica {euros(s.publicado)}</b>: eso no es una estimación, es lo que dice. </>
+            : <>Estimación, no un dato. </>}
+          {s.base}
+          {banda && !s.publicado && ' El punto sale de tu % de imprescindibles, no del modelo.'}
+        </span>
+      </p>
+    </div>
+  )
+}
 
 const Auditoria = ({ a, onAdaptar, onDescartar }) => {
   const rec = {
@@ -92,6 +146,10 @@ const Auditoria = ({ a, onAdaptar, onDescartar }) => {
           <Barra label="Imprescindibles" pct={a.encaje.imprescindibles} />
           <Barra label="Valorables" pct={a.encaje.valorables} />
         </div>
+
+        {/* null cuando la banda que devolvió el modelo no era de fiar: mejor no
+            pintar nada que pintar una cifra que te llevas a la negociación. */}
+        {a.salario && <Salario s={a.salario} />}
 
         <p className="text-sm leading-relaxed" style={{ color: 'var(--s-muted)' }}>{a.veredicto}</p>
 

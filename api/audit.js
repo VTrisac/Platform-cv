@@ -9,6 +9,9 @@
 // cual, así no se baja dos veces ni se arriesga a que el portal cambie entre
 // una llamada y la otra.
 import { fetchOffer, gate, pedirJSON } from './tailor.js'
+// La misma regex que ya usa el feed para la columna "salario": si la oferta
+// publica cifra, no hay nada que estimar.
+import { salarioDe } from './feed.js'
 import { dataES, dataEN } from '../src/data.js'
 
 export const maxDuration = 300
@@ -51,11 +54,26 @@ const schema = {
       type: 'string',
       description: 'Dos o tres FRASES completas explicando el encaje. No una palabra suelta.',
     },
+    // Planos, no un objeto anidado: con json_object el modelo acierta mucho más
+    // con tres claves sueltas que con una estructura dentro de otra.
+    bandaMin: {
+      type: 'number',
+      description: 'Suelo de mercado en € BRUTOS ANUALES para ese rol, seniority y ubicación. Un número, sin puntos ni símbolos.',
+    },
+    bandaMax: {
+      type: 'number',
+      description: 'Techo de mercado, mismo criterio y mismas unidades.',
+    },
+    baseSalarial: {
+      type: 'string',
+      description: 'Una frase: sobre qué mercado y qué señales de la oferta estimas esa banda.',
+    },
   },
   // "recomendacion" NO la pide el modelo: la calcula recomendar() a partir de
   // los encajes. Medido: devolvía "descartar" con el 100% de imprescindibles
   // cumplidos. El enum le obligaba a un valor válido, no a uno coherente.
-  required: ['rol', 'empresa', 'ubicacion', 'modalidad', 'seniority', 'requisitos', 'veredicto'],
+  required: ['rol', 'empresa', 'ubicacion', 'modalidad', 'seniority', 'requisitos', 'veredicto',
+    'bandaMin', 'bandaMax', 'baseSalarial'],
   additionalProperties: false,
 }
 
@@ -84,6 +102,13 @@ DECIDIR EL ENCAJE — calibra así, es la parte que más se falla:
 EVIDENCIA
 - Cita la empresa, el puesto o la tecnología concreta del CV. Si el encaje es
   "no", di exactamente qué falta. No adornes ni rellenes.
+
+LA BANDA SALARIAL
+- Es la banda de MERCADO para ese rol, ese seniority y esa ubicación, en euros
+  brutos anuales. No la del candidato ni la que te gustaría que le pagaran.
+- Barcelona y Madrid no pagan lo mismo que un remoto para EE. UU.; una startup
+  de 20 personas no paga como una farmacéutica. Usa lo que diga la oferta.
+- Si la propia oferta publica un rango, ese es el mercado: repítelo.
 
 Un informe optimista le hace perder semanas en procesos que no va a pasar. Es
 más útil un "no" temprano que un "sí" amable.`
@@ -133,6 +158,47 @@ export function recomendar({ imprescindibles, bloqueantes }) {
   return 'aplicar'
 }
 
+// Cuánto pedir. La BANDA la estima el modelo —es conocimiento de mercado, no una
+// decisión—, pero el PUNTO dentro de ella lo calcula esto, por el mismo motivo por
+// el que recomendar() no se le pregunta: los números ya contienen la respuesta y
+// el modelo se contradice a sí mismo cuando se le deja decidir.
+//
+// Devuelve null cuando no hay nada honesto que decir. Una cifra inventada aquí no
+// se queda en la pantalla: te la llevas a la negociación.
+export function pedirSalario(a, encaje, publicado = null) {
+  const min = Number(a?.bandaMin)
+  const max = Number(a?.bandaMax)
+  // Cordura sobre la banda. Sin esto, un modelo que devuelve la banda en euros
+  // MENSUALES (pasa) te pinta "pide 3.500 €/año".
+  const banda = Number.isFinite(min) && Number.isFinite(max)
+    && min < max && min >= 15000 && max <= 300000
+  if (!banda && publicado == null) return null
+
+  // 100% de imprescindibles -> tercio alto. Por debajo del 75% -> tercio bajo:
+  // pedir el techo con medio requisito sin cubrir es como te descartan en la
+  // primera llamada. Con un bloqueante, nunca por encima del punto medio.
+  const { imprescindibles: imp, bloqueantes } = encaje
+  let punto = imp === null ? 0.5 : imp >= 100 ? 0.8 : imp >= 75 ? 0.55 : 0.3
+  if (bloqueantes.length) punto = Math.min(punto, 0.5)
+
+  const redondear = (n) => Math.round(n / 1000) * 1000
+  // La cifra publicada es un TECHO, no la respuesta. Devolverla tal cual —que es
+  // lo primero que se hizo— se saltaba el ajuste por encaje: en una oferta que
+  // publica 55.000-70.000 y que tienes al 83% con un bloqueante, te decía "pide
+  // 70.000". Ahora el punto sigue mandando y lo publicado solo lo tapa: pedir por
+  // encima de lo que la oferta dice pagar no te sube el sueldo, te descarta.
+  // (salarioDe() devuelve el techo del rango, no el suelo: por eso es un tope.)
+  const dentro = banda ? redondear(min + (max - min) * punto) : null
+  return {
+    min: banda ? redondear(min) : null,
+    max: banda ? redondear(max) : null,
+    punto,
+    pedir: dentro == null ? publicado : Math.min(dentro, publicado ?? Infinity),
+    publicado,
+    base: String(a?.baseSalarial ?? '').trim() || null,
+  }
+}
+
 export default async function handler(req, res) {
   const blocked = gate(req, res)
   if (blocked) return blocked
@@ -176,10 +242,14 @@ export default async function handler(req, res) {
 
     a.requisitos = normalizar(a.requisitos)
     const encaje = puntuar(a.requisitos)
+    // Fuera de la respuesta: los tres campos crudos se resumen en `salario` y
+    // esto se guarda entero con la oferta en localStorage.
+    const { bandaMin, bandaMax, baseSalarial, ...resto } = a
 
     res.status(200).json({
-      ...a,
+      ...resto,
       encaje,
+      salario: pedirSalario(a, encaje, salarioDe(oferta)),
       veredicto: limpiarVeredicto(a.veredicto, encaje),
       recomendacion: recomendar(encaje),
       // El texto del requisito, no un booleano: si te descarta una oferta,

@@ -1,5 +1,76 @@
-import { Info } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, Copy, Info, TriangleAlert } from 'lucide-react'
 import { conPerfil } from '../perfil'
+import { hayExtension } from './api'
+
+// La ruta que hay que elegir en "Cargar descomprimida". Va a pelo porque es la
+// de ESTE repo en ESTA máquina; una web no puede averiguar dónde está su propio
+// código fuente.
+const RUTA = '/Users/victortrisacperez/Documents/PROYECTOS/CV/extension'
+
+// Si la extensión está o no. La app lo sabe desde siempre (bridge.js deja un
+// atributo en el <html>), pero solo lo miraba al pulsar "Aplicar", así que la
+// única forma de enterarte de que no estaba era que fallase.
+//
+// El estado se recalcula al montar y no en el render: bridge.js se inyecta en
+// document_start, pero si acabas de cargar la extensión con la pestaña abierta
+// hace falta recargar, y eso hay que poder decirlo.
+const Extension = () => {
+  const [instalada, setInstalada] = useState(false)
+  const [copiada, setCopiada] = useState(false)
+  useEffect(() => setInstalada(hayExtension()), [])
+
+  return (
+    <Card
+      title="EXTENSIÓN DE CHROME"
+      hint="Es quien rellena el formulario del portal. Una web no puede tocar el formulario de otro dominio; la extensión sí, en tu propia sesión."
+    >
+      {instalada ? (
+        <p className="text-[13px] flex gap-2 items-center p-2.5 rounded-lg" style={{ background: 'var(--s-chip-green)', color: 'var(--s-accent-dark)' }}>
+          <Check size={15} className="shrink-0" />
+          <span><b>Instalada.</b> El botón «Aplicar» de una oferta con enlace y CV ya funciona.</span>
+        </p>
+      ) : (
+        <>
+          <p className="text-[13px] flex gap-2 p-2.5 rounded-lg" style={{ background: '#F9F1E4', color: '#8A6D2E' }}>
+            <TriangleAlert size={15} className="shrink-0 mt-0.5" />
+            <span>
+              <b>No está instalada</b>, así que «Aplicar» no va a hacer nada. Se carga una vez y se queda.
+            </span>
+          </p>
+          <ol className="text-[13px] flex flex-col gap-1.5 pl-4 list-decimal" style={{ color: 'var(--s-muted)' }}>
+            <li>Abre <b>chrome://extensions</b> (el modo desarrollador ya lo tienes puesto).</li>
+            <li>Pulsa <b>Cargar descomprimida</b>.</li>
+            <li>Elige esta carpeta:</li>
+          </ol>
+          <div className="flex items-center gap-2">
+            <code
+              className="text-xs px-2.5 py-2 rounded-lg flex-1 truncate"
+              style={{ background: 'var(--s-bg)', border: '1px solid var(--s-border)' }}
+              title={RUTA}
+            >
+              {RUTA}
+            </code>
+            <button
+              onClick={() => { navigator.clipboard.writeText(RUTA); setCopiada(true) }}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border shrink-0"
+              style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)' }}
+            >
+              {copiada ? <Check size={13} /> : <Copy size={13} />} {copiada ? 'Copiada' : 'Copiar'}
+            </button>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="text-xs underline w-fit"
+            style={{ color: 'var(--s-muted)' }}
+          >
+            Ya la he cargado — recargar y comprobar
+          </button>
+        </>
+      )}
+    </Card>
+  )
+}
 
 // Los datos de candidatura: lo que un formulario pregunta y un CV no dice.
 // Se rellenan una vez y la extensión los usa en todos los portales.
@@ -74,6 +145,8 @@ const Perfil = ({ perfil, setPerfil }) => {
           y adjunta el CV adaptado. <b>Nunca pulsa enviar</b>: confirmar es tuyo.
         </span>
       </p>
+
+      <Extension />
 
       <Card title="QUIÉN ERES" hint="Los formularios piden nombre y apellidos por separado, y el país en un desplegable en inglés.">
         <div className="grid grid-cols-2 gap-3.5">

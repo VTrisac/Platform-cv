@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Info, Plus, Trash2 } from 'lucide-react'
+import { Info, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { criteriosPorDefecto } from './api'
 
 // Pantalla de criterios: qué buscar, qué excluir y en qué ventana de tiempo.
@@ -90,11 +90,13 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
   const guardar = (nuevasBusquedas, nuevosTableros) =>
     editar({ empresas: [...nuevasBusquedas, ...nuevosTableros] })
 
-  // Las de fábrica que tu preset no tiene. Se comparan por ats+token, no por
-  // nombre: renombrar "New Relic" a "NewRelic" no debe duplicarla.
+  // Las de fábrica que tu preset no tiene, y al revés. Se comparan por ats+token,
+  // no por nombre: renombrar "New Relic" a "NewRelic" no debe duplicarla.
+  const deFabrica = (base?.empresasPorDefecto ?? []).filter((f) => f.ats !== 'linkedin')
   const tiene = new Set(fuentes.map((f) => `${f.ats}|${f.token}`))
-  const faltan = (base?.empresasPorDefecto ?? [])
-    .filter((f) => f.ats !== 'linkedin' && !tiene.has(`${f.ats}|${f.token}`))
+  const esDeFabrica = new Set(deFabrica.map((f) => `${f.ats}|${f.token}`))
+  const faltan = deFabrica.filter((f) => !tiene.has(`${f.ats}|${f.token}`))
+  const sobran = tableros.filter((t) => !esDeFabrica.has(`${t.ats}|${t.token}`))
 
   return (
     <div className="p-8 flex flex-col gap-6 max-w-[1100px]">
@@ -259,6 +261,26 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
               title={faltan.map((f) => f.name).join(', ')}
             >
               <Plus size={14} /> Añadir las {faltan.length} que faltan ({faltan.slice(0, 3).map((f) => f.name).join(', ')}{faltan.length > 3 ? '…' : ''})
+            </button>
+          )}
+          {/* El simétrico del botón de arriba, y el único que QUITA: tu preset
+              guarda su propia lista y se congeló el día que tocaste un criterio,
+              así que arrastra empresas que en el servidor ya no existen (los
+              tokens muertos no dan error, dan cero ofertas). Deja tu lista
+              exactamente igual que la de fábrica.
+              Las búsquedas de LinkedIn NO se tocan: su token son tus palabras
+              clave y tu ubicación, no un slug que ponga nadie más. */}
+          {(faltan.length > 0 || sobran.length > 0) && (
+            <button
+              onClick={() => guardar(busquedas, deFabrica)}
+              className="flex items-center gap-1.5 text-xs font-semibold"
+              style={{ color: 'var(--s-muted)' }}
+              title={sobran.length
+                ? `Quita: ${sobran.map((f) => f.name || f.token || '(sin nombre)').join(', ')}`
+                : 'Tu lista ya tiene todas las de fábrica'}
+            >
+              <RotateCcw size={14} /> Dejar solo las {deFabrica.length} de fábrica
+              {sobran.length > 0 && ` (quita ${sobran.length})`}
             </button>
           )}
         </div>

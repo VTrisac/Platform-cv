@@ -1,6 +1,6 @@
-import { useState } from 'react'
-import { Search, ExternalLink, Sparkles, FileText, Send, Trash2 } from 'lucide-react'
-import { ESTADOS } from './store'
+import { useEffect, useState } from 'react'
+import { Search, ExternalLink, Sparkles, FileText, Send, Trash2, X } from 'lucide-react'
+import { ESTADOS, esSemilla } from './store'
 
 // Pantalla "Ofertas — Tracker" del diseño: cabecera con recuento, buscador,
 // filtros por estado y tabla. Las columnas replican los anchos del mockup
@@ -14,15 +14,44 @@ const Chip = ({ estado }) => {
   )
 }
 
-const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar }) => {
+const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVarias, filtroInicial = null }) => {
   const [q, setQ] = useState('')
-  const [filtro, setFiltro] = useState(null)
+  const [filtro, setFiltro] = useState(filtroInicial)
+  // Un Set, no un array: marcar y desmarcar 44 filas es lo que más se toca aquí.
+  const [seleccion, setSeleccion] = useState(() => new Set())
+
+  // El Resumen entra con un filtro puesto ("enséñame las descartadas"). Sin esto
+  // el filtro solo se aplicaba la primera vez que se monta la pantalla.
+  useEffect(() => setFiltro(filtroInicial), [filtroInicial])
 
   const visibles = ofertas.filter(
     (o) =>
       (!filtro || o.estado === filtro) &&
       `${o.empresa} ${o.puesto}`.toLowerCase().includes(q.toLowerCase())
   )
+
+  // Seleccionar todas son LAS VISIBLES, no las 44: si has filtrado por
+  // "Descartada", eso es lo que esperas que se marque. Cualquier otra lectura
+  // acaba en un borrado que no querías.
+  const todasMarcadas = visibles.length > 0 && visibles.every((o) => seleccion.has(o.id))
+  const alternar = (id) => setSeleccion((s) => {
+    const n = new Set(s)
+    n.has(id) ? n.delete(id) : n.add(id)
+    return n
+  })
+  const marcarVisibles = () =>
+    setSeleccion(todasMarcadas ? new Set() : new Set(visibles.map((o) => o.id)))
+
+  // El confirm dice el número: es lo único que frena un borrado de 22 de golpe.
+  const borrar = (ids, que) => {
+    if (!ids.length) return
+    if (!window.confirm(`¿Eliminar ${ids.length} ${que}? No se puede deshacer.`)) return
+    onBorrarVarias(ids)
+    setSeleccion(new Set())
+  }
+
+  const descartadas = ofertas.filter((o) => o.estado === 'descartada')
+  const semilla = ofertas.filter(esSemilla)
 
   const resumen = Object.entries(ESTADOS)
     .map(([k, v]) => `${ofertas.filter((o) => o.estado === k).length} ${v.label.toLowerCase()}s`)
@@ -70,6 +99,65 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar }) => {
         </div>
       </div>
 
+      {/* Solo aparece con algo seleccionado, y los atajos solo si hay qué
+          borrar: una barra de acciones siempre visible es ruido las 40 veces que
+          entras a mirar y no a limpiar. */}
+      {(seleccion.size > 0 || descartadas.length > 0 || semilla.length > 0) && (
+        <div
+          className="flex items-center gap-3 flex-wrap px-4 py-2.5 rounded-[14px] border"
+          style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)' }}
+        >
+          {seleccion.size > 0 ? (
+            <>
+              <span className="text-[13px] font-semibold">{seleccion.size} seleccionada{seleccion.size > 1 ? 's' : ''}</span>
+              <button
+                onClick={() => borrar([...seleccion], 'ofertas seleccionadas')}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
+                style={{ background: '#F3E4E1', color: '#8A4A3C' }}
+              >
+                <Trash2 size={13} /> Borrar
+              </button>
+              <button
+                onClick={() => setSeleccion(new Set())}
+                className="flex items-center gap-1.5 text-xs font-semibold"
+                style={{ color: 'var(--s-muted)' }}
+              >
+                <X size={13} /> Quitar la selección
+              </button>
+            </>
+          ) : (
+            <span className="text-xs" style={{ color: 'var(--s-muted)' }}>
+              Marca filas para borrarlas en bloque, o usa un atajo:
+            </span>
+          )}
+
+          <span className="flex-1" />
+
+          {descartadas.length > 0 && (
+            <button
+              onClick={() => borrar(descartadas.map((o) => o.id), 'ofertas descartadas')}
+              className="text-xs font-semibold underline"
+              style={{ color: 'var(--s-muted)' }}
+              title={descartadas.slice(0, 5).map((o) => o.empresa).join(', ')}
+            >
+              Borrar las {descartadas.length} descartadas
+            </button>
+          )}
+          {/* La semilla de `load()`: nunca la creaste tú y cuatro de ellas cuentan
+              como candidaturas enviadas en la portada. */}
+          {semilla.length > 0 && (
+            <button
+              onClick={() => borrar(semilla.map((o) => o.id), 'ofertas de la demo inicial')}
+              className="text-xs font-semibold underline"
+              style={{ color: 'var(--s-muted)' }}
+              title={semilla.map((o) => o.empresa).join(', ')}
+            >
+              Quitar las {semilla.length} de demo
+            </button>
+          )}
+        </div>
+      )}
+
       <div
         className="rounded-[20px] border overflow-hidden"
         style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)' }}
@@ -78,7 +166,18 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar }) => {
           className="flex items-center gap-4 px-5 py-2.5 text-xs font-semibold"
           style={{ background: '#F5F1E6', color: 'var(--s-muted)', letterSpacing: '0.3px' }}
         >
-          <span className="w-[210px]">EMPRESA</span>
+          <span className="w-[22px] flex items-center">
+            <input
+              type="checkbox"
+              checked={todasMarcadas}
+              onChange={marcarVisibles}
+              disabled={visibles.length === 0}
+              title={todasMarcadas ? 'Desmarcar' : `Seleccionar las ${visibles.length} visibles`}
+              aria-label="Seleccionar todas las visibles"
+              className="cursor-pointer"
+            />
+          </span>
+          <span className="w-[188px]">EMPRESA</span>
           <span className="flex-1">PUESTO</span>
           <span className="w-[90px]">ENCAJE</span>
           <span className="w-[130px]">ESTADO</span>
@@ -97,9 +196,21 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar }) => {
           <div
             key={o.id}
             className="flex items-center gap-4 px-5 py-3.5 border-t"
-            style={{ borderColor: 'var(--s-border)' }}
+            style={{
+              borderColor: 'var(--s-border)',
+              background: seleccion.has(o.id) ? 'var(--s-chip-green)' : 'transparent',
+            }}
           >
-            <span className="w-[210px] text-sm font-semibold truncate">{o.empresa}</span>
+            <span className="w-[22px] flex items-center">
+              <input
+                type="checkbox"
+                checked={seleccion.has(o.id)}
+                onChange={() => alternar(o.id)}
+                aria-label={`Seleccionar ${o.empresa}`}
+                className="cursor-pointer"
+              />
+            </span>
+            <span className="w-[188px] text-sm font-semibold truncate">{o.empresa}</span>
             <span className="flex-1 text-sm truncate" style={{ color: 'var(--s-muted)' }}>
               {o.puesto}
             </span>

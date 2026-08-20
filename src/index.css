@@ -48,6 +48,73 @@
     box-shadow 200ms ease;
 }
 
+/* --- procesos largos ---------------------------------------------------------
+   Una auditoría son ~50 s y una adaptación ~35 s. Un icono girando no dice en
+   qué va; estas tres animaciones sí, y son CSS puro: una librería de animación
+   para esto sería más peso que el resto de la app.
+   Los @keyframes son globales por definición, así que van prefijados; las
+   clases que los usan viven bajo .studio. */
+@keyframes s-rail {
+  0% { transform: translateX(-100%) }
+  100% { transform: translateX(400%) }
+}
+
+@keyframes s-barrido {
+  0% { background-position: -200% 0 }
+  100% { background-position: 200% 0 }
+}
+
+@keyframes s-pulso {
+  0%, 100% { opacity: 0.25; transform: scale(0.85) }
+  50% { opacity: 1; transform: scale(1) }
+}
+
+.studio .s-rail {
+  position: relative;
+  overflow: hidden;
+  background: var(--s-chip);
+}
+
+.studio .s-rail::after {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 25%;
+  border-radius: inherit;
+  background: var(--s-accent);
+  animation: s-rail 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Para el scrapeo: el texto de lo que se está bajando, recorrido por un brillo. */
+.studio .s-barrido {
+  background: linear-gradient(90deg, var(--s-muted) 25%, var(--s-accent) 50%, var(--s-muted) 75%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: s-barrido 2s linear infinite;
+}
+
+.studio .s-punto {
+  animation: s-pulso 1.2s ease-in-out infinite;
+}
+
+/* Tres puntos desfasados, no tres puntos a la vez. */
+.studio .s-punto:nth-child(2) { animation-delay: 0.2s }
+.studio .s-punto:nth-child(3) { animation-delay: 0.4s }
+
+/* Sin esto la pantalla es un problema de accesibilidad, no una animación. */
+@media (prefers-reduced-motion: reduce) {
+  .studio .s-rail::after,
+  .studio .s-barrido,
+  .studio .s-punto {
+    animation: none;
+  }
+
+  .studio .s-rail::after { width: 100%; opacity: 0.4 }
+  .studio .s-barrido { color: var(--s-accent); background: none; -webkit-text-fill-color: currentColor }
+}
+
 @media print {
   .no-print {
     display: none !important;

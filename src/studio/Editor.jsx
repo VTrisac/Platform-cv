@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState, Suspense, lazy } from 'react'
 import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, Send, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react'
 import { dataES, dataEN } from '../data'
-import { conPerfil } from '../perfil'
+import { conPerfil, conSalario } from '../perfil'
 import Auditoria from './Auditoria'
+import Proceso from './Proceso'
+import { FASES } from './lote'
 import { apiPost, auditar as auditarOferta, aplicar as mandarAExtension, base64, descargarPdf, hayExtension, INSTALAR, nombrePdf, olvidarCarpeta, pdfBlob } from './api'
 
 const DESIGNS = [
@@ -36,6 +38,13 @@ const PASOS = [
   ['oferta', 'Auditar oferta'],
   ['auditoria', 'Ver encaje'],
   ['cv', 'Adaptar CV'],
+]
+
+// Lo que pasa al pulsar "Aplicar". El relleno del formulario ya no se ve aquí:
+// lo cuenta el panel de la extensión, en la pestaña del portal.
+const APLICAR = [
+  ['aplicar', 'Generando el PDF'],
+  ['portal', 'Abriendo el portal'],
 ]
 
 // Flujo en tres pasos: auditar la oferta -> decidir si hay encaje -> adaptar.
@@ -134,7 +143,9 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
         origin: window.location.origin,
         key: localStorage.getItem('tailorKey') ?? '',
         lang,
-        perfil: conPerfil(perfil),
+        // Las pretensiones salen de la auditoría de ESTA oferta si no las has
+        // fijado tú en Perfil: es el campo que siempre acababa en naranja.
+        perfil: conSalario(conPerfil(perfil), audit?.salario ?? oferta?.auditoria?.salario),
         carta,
         oferta: { empresa: audit?.empresa, puesto: audit?.rol, texto: audit?.texto },
         cv: { nombre: filename, tipo: 'application/pdf', base64: await base64(blob) },
@@ -322,11 +333,8 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                   className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold w-fit disabled:opacity-50"
                   style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
                 >
-                  {loading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
-                  {loading === 'auditar' ? 'Auditando…'
-                    : loading === 'adaptar' ? 'Adaptando el CV…'
-                    : loading === 'carta' ? 'Escribiendo la carta…'
-                    : 'Preparar todo'}
+                  <Sparkles size={15} />
+                  {loading ? 'Preparando…' : 'Preparar todo'}
                 </button>
                 <button
                   onClick={auditar}
@@ -337,6 +345,9 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                   <Search size={15} /> Solo auditar
                 </button>
               </div>
+              {/* Los tres pasos con nombre, no un icono girando dos minutos:
+                  auditar son ~50 s y adaptar ~35 s más. */}
+              {loading && loading !== 'pdf' && <Proceso pasos={FASES} activo={loading} />}
               {error && (
                 <p className="text-xs flex gap-1.5" style={{ color: '#8A4A3C' }}>
                   <TriangleAlert size={13} className="shrink-0 mt-0.5" />{error}
@@ -354,9 +365,9 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
               onDescartar={() => { onDescartar?.(audit); onBack() }}
             />
             {loading === 'adaptar' && (
-              <p className="mt-4 text-sm flex gap-2" style={{ color: 'var(--s-muted)' }}>
-                <Loader2 size={15} className="animate-spin" /> Adaptando el CV…
-              </p>
+              <div className="mt-4 max-w-[420px]">
+                <Proceso pasos={FASES} activo="adaptar" nota="Tarda unos 35 segundos." />
+              </div>
             )}
             {error && (
               <p className="mt-4 text-xs flex gap-1.5" style={{ color: '#8A4A3C' }}>
@@ -377,6 +388,9 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                 <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: '#F9EDEA', color: '#8A4A3C' }}>
                   <TriangleAlert size={13} className="shrink-0 mt-0.5" /><span>{error}</span>
                 </p>
+              )}
+              {loading === 'aplicar' && (
+                <Proceso pasos={APLICAR} activo="aplicar" nota="El formulario lo rellena la extensión en la pestaña que abra." />
               )}
               {guardado && (
                 <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-chip-green)', color: 'var(--s-accent-dark)' }}>
