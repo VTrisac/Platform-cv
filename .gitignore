@@ -9,3 +9,19 @@ __pycache__/
 .vercel
 .env*
 node-compile-cache/
+
+# Skills de terceros, instaladas con `npx skills add` y `npx impeccable install`
+# (26 carpetas, 7,4 MB). Se reinstalan con un comando, así que no tienen por qué
+# vivir en el historial de CV Studio ni ensuciar sus diffs.
+#
+# El patrón excluye el CONTENIDO de skills/ y luego rescata tailor-cv, que es la
+# tuya —la que adapta el CV a una oferta— y sí está versionada.
+.agents/skills/*
+!.agents/skills/tailor-cv/
+.claude/skills/*
+!.claude/skills/tailor-cv/
+.codex/
+
+# skills-lock.json SÍ se versiona a propósito: son 4 KB con el origen y el hash
+# de cada skill instalada, y es lo que permite recuperar exactamente este juego
+# sin guardar los 7,4 MB.
