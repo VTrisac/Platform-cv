@@ -12,8 +12,8 @@ import assert from 'node:assert/strict'
 import { nombrePdf } from '../src/studio/api.js'
 
 const src = readFileSync(new URL('../extension/campos.js', import.meta.url), 'utf8')
-const { campoPara, opcionPara, valorPara, normalizar } =
-  new Function(`${src}; return { campoPara, opcionPara, valorPara, normalizar }`)()
+const { campoPara, opcionPara, valorPara, normalizar, botonPara, portalCubierto } =
+  new Function(`${src}; return { campoPara, opcionPara, valorPara, normalizar, botonPara, portalCubierto }`)()
 
 const CASOS = [
   // Greenhouse
@@ -135,4 +135,93 @@ assert.equal(nombrePdf('LHH · Brezo Arnedo', null, 'es'), 'CV_LHH-Brezo-Arnedo_
 assert.ok(!/[^\w.-]/.test(nombrePdf('A/B · Testing', 'C:D*E', 'en')),
   'nada que un sistema de ficheros rechace')
 
-console.log(`apply-test: ${CASOS.length} etiquetas, el nombre del PDF y 15 comprobaciones más, todo OK`)
+// --- los botones ---------------------------------------------------------------
+// Lo más peligroso de todo el autorrelleno: una etiqueta mal clasificada aquí
+// manda una candidatura a medio rellenar. La regla no es "casi nunca", es NUNCA:
+// cualquier cosa que diga enviar se clasifica como enviar aunque también diga
+// continuar, y lo que no se reconoce no se pulsa.
+const BOTONES = [
+  // Los que NUNCA se pulsan
+  ['Submit Application', 'enviar'],
+  ['Submit', 'enviar'],
+  ['Send Application', 'enviar'],
+  ['Enviar candidatura', 'enviar'],
+  ['Enviar solicitud', 'enviar'],
+  ['Finish', 'enviar'],
+  ['Continue and submit', 'enviar', 'lleva "continue" pero envía: gana enviar'],
+  // Los que abren el formulario, y solo antes de escribir nada
+  ['Apply for this job', 'abrir'],
+  ['Easy Apply', 'abrir'],
+  ['Apply now', 'abrir'],
+  ['Apply', 'abrir'],
+  ["I'm interested", 'abrir'],
+  // Crear la cuenta es su propia clase: se pulsa tanto para abrir el registro
+  // como para enviarlo, porque darse de alta no es mandar una candidatura.
+  ['Create Account', 'alta'],
+  ['Crear cuenta', 'alta'],
+  ['Sign up', 'alta'],
+  ['Solicitar empleo', 'abrir'],
+  // Los que pasan de paso, y solo con el paso resuelto
+  ['Next', 'siguiente'],
+  ['Continue', 'siguiente'],
+  ['Continue to Next Step', 'siguiente'],
+  ['Save and Continue', 'siguiente'],
+  ['Siguiente', 'siguiente'],
+  ['Review', 'siguiente'],
+  // Lo que no se reconoce no se toca
+  ['Cancel', null],
+  ['Back', null],
+  ['Guardar borrador', null],
+  ['Dismiss', null],
+  ['', null],
+]
+for (const [texto, esperado, msg] of BOTONES) {
+  assert.equal(botonPara(texto), esperado, msg ?? `botón "${texto}"`)
+}
+// Ni una sola etiqueta de campo puede colarse como botón que se pulsa.
+for (const [etiqueta] of CASOS) {
+  assert.notEqual(botonPara(etiqueta), 'siguiente', `"${etiqueta}" es un campo, no un botón`)
+}
+
+// --- portales cubiertos --------------------------------------------------------
+// Los patrones salen del manifest de verdad, no de una copia: si alguien añade un
+// portal allí y esto no lo ve, el fallo es mudo (pestaña abierta, nada relleno).
+const { content_scripts } = JSON.parse(
+  readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8')
+)
+const MATCHES = content_scripts.flatMap((c) => c.matches)
+
+// Un patrón mal formado no degrada nada: Chrome rechaza la extensión ENTERA con
+// "Invalid host wildcard" y no carga. Estuvo así desde el primer día
+// ("https://cv-victor-trisac-*.vercel.app/*", con el comodín en medio del host) y
+// por eso la extensión nunca funcionó en ningún navegador — el fallo no se veía
+// hasta que Chrome intentaba cargarla. Diez líneas para que no vuelva a pasar.
+for (const m of [...MATCHES, ...JSON.parse(
+  readFileSync(new URL('../extension/manifest.json', import.meta.url), 'utf8')
+).host_permissions]) {
+  const [, esquema, host] = /^([a-z*]+):\/\/([^/]*)(\/.*)$/.exec(m) ?? []
+  assert.ok(esquema, `patrón sin esquema o sin ruta: ${m}`)
+  // La única forma legal de comodín en el host es "*." al principio.
+  assert.ok(
+    host === '*' || !host.slice(2).includes('*') && (host.startsWith('*.') || !host.includes('*')),
+    `comodín ilegal en el host de "${m}": Chrome solo admite *.dominio, nunca en medio del nombre`
+  )
+}
+
+for (const [url, esperado, msg] of [
+  ['https://boards.greenhouse.io/typeform/jobs/123', true],
+  ['https://job-boards.greenhouse.io/x/jobs/9', true, 'subdominio nuevo de greenhouse'],
+  ['https://greenhouse.io/algo', true, '*.dominio cubre también el dominio pelado'],
+  ['https://jobs.lever.co/qonto/abc', true],
+  ['https://www.linkedin.com/jobs/view/123456789', true],
+  ['https://novartis.wd3.myworkdayjobs.com/x/job/y', true],
+  ['https://careers.empresa-random.com/apply/7', false, 'portal propio: NO cubierto'],
+  ['https://notgreenhouse.io/jobs/1', false, 'no vale con acabar parecido'],
+  ['https://remoteok.com/remote-jobs/1', false, 'está en host_permissions pero NO en content_scripts'],
+  ['no soy una url', false, 'basura no revienta'],
+  ['', false],
+]) {
+  assert.equal(portalCubierto(url, MATCHES), esperado, msg ?? `portal ${url}`)
+}
+
+console.log(`apply-test: ${CASOS.length} etiquetas, ${BOTONES.length} botones, el nombre del PDF y 15 comprobaciones más, todo OK`)

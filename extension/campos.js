@@ -78,7 +78,10 @@ var CAMPOS = [
   [/resume|curriculum|curriculo|^cv$|\bcv\b|hoja de vida/, 'cv'],
 
   [/how did you hear|how you heard|where did you (hear|find)|source|como nos has conocido|como nos conociste/, 'fuente'],
-  [/password|contrasena|passphrase/, 'password'],
+  // "Verify New Password" de Workday ya casa por "password"; lo que no casaba son
+  // las que no llevan la palabra. Las dos casillas reciben la MISMA contraseña, y
+  // por eso tiene que ser la misma en toda la pestaña (la genera sw.js, no esto).
+  [/password|contrasena|passphrase|re-?type|repetir|repite/, 'password'],
 
   // Preguntas obligatorias por ley en EE. UU. Declinar es respuesta válida.
   [/gender|genero|\brace\b|ethnic|etnia|hispanic|latino|veteran|disability|discapacidad|pronoun/, 'eeo'],
@@ -126,4 +129,78 @@ function valorPara(clave, ctx) {
     case 'cv': return undefined // lo adjunta rellenar.js, no es texto
     default: return perfil[clave] || undefined
   }
+}
+
+// --- los botones ---------------------------------------------------------------
+// Tres categorías, y las reglas de CUÁNDO se pulsa cada una viven en rellenar.js:
+//
+//   'enviar'    NUNCA se pulsa. Se comprueba la primera y gana sobre las demás,
+//               así que un "Continue and submit" cuenta como enviar.
+//   'abrir'     abre el formulario (Greenhouse esconde el suyo detrás de "Apply
+//               for this job"; en LinkedIn el Easy Apply es un modal que no
+//               existe hasta pulsarlo). Solo se pulsa ANTES de escribir nada: si
+//               fuese el envío de un formulario vacío, no hay nada que enviar.
+//   'siguiente' pasa de paso en un alta o en un formulario largo. Solo se pulsa
+//               con el paso ya relleno y CERO campos obligatorios pendientes.
+//   'alta'      crea la cuenta. Vale en los DOS momentos: abre el formulario de
+//               registro si no hay ninguno, y lo envía cuando ya está relleno.
+//               Es su propia categoría porque crear una cuenta no es mandar una
+//               candidatura: sin poder pulsarlo, el alta se quedaba a medias en
+//               Workday y había que terminarla a mano.
+//
+// ponytail: dos listas de texto, no detección de formularios. El texto del botón
+// es lo único que significa lo mismo en Greenhouse, Workday y LinkedIn.
+var ENVIAR = [
+  /\bsubmit\b/, /send (application|my application)/, /^send$/,
+  /^enviar/, /enviar (candidatura|solicitud|aplicacion)/,
+  /^finish$/, /finalizar/, /^postular$/,
+]
+
+var ABRIR = [
+  /^(easy )?apply( now| here)?$/, /apply (for|to) this (job|role|position)/,
+  /^i'?m interested$/, /^solicitar/, /^inscribirse/, /^apuntarme/,
+]
+
+var ALTA = [
+  /create (an )?account/, /^crear (una )?cuenta/, /^sign ?up$/, /^registrarse$/,
+  /^register$/, /^create$/,
+]
+
+var SIGUIENTE = [
+  /^next\b/, /continue to next/, /^continue$/, /save and continue/, /^save & continue$/,
+  /^siguiente$/, /^continuar$/, /guardar y continuar/,
+  /^review$/, /review your application/, /^revisar/,
+]
+
+function botonPara(texto) {
+  const t = normalizar(texto)
+  if (!t || t.length > 40) return null
+  // El orden importa: enviar se comprueba primero y no hay forma de que un botón
+  // de envío acabe clasificado como otra cosa.
+  if (ENVIAR.some((re) => re.test(t))) return 'enviar'
+  if (ALTA.some((re) => re.test(t))) return 'alta'
+  if (ABRIR.some((re) => re.test(t))) return 'abrir'
+  if (SIGUIENTE.some((re) => re.test(t))) return 'siguiente'
+  return null
+}
+
+// --- ¿está este portal cubierto? -----------------------------------------------
+// El content script solo se inyecta en los dominios del manifest. Si aplicas en
+// la web de empleo propia de una empresa, "Aplicar" abría la pestaña y no pasaba
+// NADA: sin panel, sin error, sin saber por qué. Esto lo detecta antes de abrirla.
+//
+// `matches` son los patrones del propio manifest, no una copia: duplicar la lista
+// sería garantizar que un día divergen.
+function portalCubierto(url, matches) {
+  let host
+  try { host = new URL(url).hostname } catch { return false }
+  return (matches || []).some((m) => {
+    const dominio = String(m).replace(/^(\*|https?):\/\//, '').replace(/\/.*$/, '')
+    // "*.greenhouse.io" cubre greenhouse.io y cualquier subdominio suyo. Un
+    // comodín en medio ("cv-victor-trisac-*.vercel.app") no es un portal: se
+    // compara exacto y no casa, que es lo que queremos.
+    return dominio.startsWith('*.')
+      ? host === dominio.slice(2) || host.endsWith(dominio.slice(1))
+      : host === dominio
+  })
 }

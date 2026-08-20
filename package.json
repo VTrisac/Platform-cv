@@ -11,6 +11,7 @@
     "oferta": ".venv/bin/python scripts/oferta.py",
     "pdf": ".venv/bin/python scripts/pdf.py",
     "ats": "node scripts/ats.js",
+    "portal-test": "node scripts/portal-test.js",
     "set-password": "node scripts/set-password.js",
     "test": "node scripts/tailor-test.js && node scripts/ats.js --selftest && node scripts/feed.js --selftest && node scripts/set-password.js --selftest && node scripts/apply-test.js"
   },

@@ -1,12 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "CV Studio · Aplicar",
+  "name": "CV Studio \u00b7 Aplicar",
   "version": "1.0.0",
   "description": "Rellena el formulario de candidatura con el CV adaptado en CV Studio y adjunta el PDF. Nunca pulsa enviar.",
-  "permissions": ["storage", "tabs"],
+  "permissions": [
+    "storage",
+    "tabs"
+  ],
+  "_dominios": "NUNCA https://cv-victor-trisac-*.vercel.app/* : Chrome solo admite el comodin como subdominio inicial (*.dominio.com), no en medio del nombre. Con ese patron el manifest entero es INVALIDO y Chrome se niega a cargar la extension ('Invalid host wildcard'). Estuvo ahi desde el principio: por eso no cargaba. Los despliegues de preview se quedan sin puente; se usa produccion.",
   "host_permissions": [
     "https://cv-victor-trisac.vercel.app/*",
-    "https://cv-victor-trisac-*.vercel.app/*",
     "http://localhost/*",
     "http://127.0.0.1/*",
     "https://*.greenhouse.io/*",
@@ -22,17 +25,22 @@
     "https://*.factorialhr.com/*",
     "https://remoteok.com/*"
   ],
-  "optional_host_permissions": ["*://*/*"],
-  "background": { "service_worker": "sw.js" },
+  "optional_host_permissions": [
+    "*://*/*"
+  ],
+  "background": {
+    "service_worker": "sw.js"
+  },
   "content_scripts": [
     {
       "matches": [
         "https://cv-victor-trisac.vercel.app/*",
-        "https://cv-victor-trisac-*.vercel.app/*",
         "http://localhost/*",
         "http://127.0.0.1/*"
       ],
-      "js": ["bridge.js"],
+      "js": [
+        "bridge.js"
+      ],
       "run_at": "document_start"
     },
     {
@@ -49,10 +57,16 @@
         "https://*.personio.de/*",
         "https://*.factorialhr.com/*"
       ],
-      "js": ["campos.js", "rellenar.js"],
+      "js": [
+        "campos.js",
+        "rellenar.js"
+      ],
       "run_at": "document_idle",
       "all_frames": true
     }
   ],
-  "action": { "default_popup": "popup.html", "default_title": "CV Studio" }
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "CV Studio"
+  }
 }

@@ -4,6 +4,14 @@
 //
 // NO PULSA ENVIAR. Nunca. Deja el formulario listo y un panel con lo que ha
 // hecho; confirmar es tuyo.
+//
+// Sí recorre formularios de varios pasos y altas de cuenta, que es lo que hace
+// falta en Workday, SmartRecruiters y el Easy Apply de LinkedIn. Las reglas de
+// cuándo se pulsa un botón son tres y no tienen excepciones:
+//   - un botón de ENVIAR no se pulsa jamás (la lista está en campos.js);
+//   - uno de ABRIR solo antes de haber escrito nada;
+//   - uno de SIGUIENTE solo con el paso relleno y CERO campos obligatorios
+//     pendientes. Si queda uno naranja, se para y te espera.
 
 const PANEL_ID = 'cv-studio-panel'
 const pausa = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -275,12 +283,36 @@ async function rellenar(paquete, respuestas = {}, hechas = []) {
     else anotar(etiqueta, { tipo: 'no se ha podido rellenar' })
   }
 
-  return { puestos, pendientes }
+  // El hueco del CV suele estar OCULTO detrás de un botón con estilo, así que
+  // controles() —que exige que se vea— no lo encuentra nunca. Un input de fichero
+  // escondido sí se puede rellenar: lo que no se puede es abrir el diálogo del
+  // sistema, y para esto no hace falta.
+  let cvAdjunto = puestos.some((e) => campoPara(e) === 'cv')
+  if (!cvAdjunto && cv) {
+    const libres = [...document.querySelectorAll('input[type="file"]')]
+      .filter((el) => !el.disabled && el.files.length === 0)
+    // El que se llama como un CV; si solo hay uno, es ese. Con varios sin nombre
+    // reconocible no se adivina: colar el PDF en el hueco de la carta es peor que
+    // dejarlo vacío y decirlo.
+    const hueco = libres.find((el) => campoPara(`${el.name ?? ''} ${el.id ?? ''}`) === 'cv')
+      ?? (libres.length === 1 ? libres[0] : null)
+    if (hueco && adjuntar(hueco, cv)) {
+      cvAdjunto = true
+      puestos.push('CV (hueco oculto)')
+    }
+  }
+
+  return { puestos, pendientes, cvAdjunto }
 }
 
 // --- el panel ------------------------------------------------------------------
+// Lo que se pinta viene del portal —el texto de sus botones, sus etiquetas— y
+// entra por innerHTML. Es su página y ya puede meter en ella lo que quiera, pero
+// no a través de nosotros.
+const esc = (s) => String(s).replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]))
+
 // En un shadow root para que el CSS del portal no lo deforme.
-function panel(html) {
+function panel(html, trabajando = false) {
   const host = document.getElementById(PANEL_ID) ?? document.body.appendChild(
     Object.assign(document.createElement('div'), { id: PANEL_ID })
   )
@@ -295,69 +327,213 @@ function panel(html) {
     li { margin: 2px 0 } .m { color: #6C6F5C; font-size: 12px; margin-top: 8px }
     .w { color: #8A4A3C } button { position: absolute; top: 10px; right: 12px; border: 0;
          background: none; font-size: 15px; cursor: pointer; color: #8A8C7E }
-  </style><div class="p"><button title="Cerrar">×</button>${html}</div>`
+    /* Rellenar un formulario largo son varios segundos y una llamada al modelo:
+       sin esto el panel parecía colgado. Mismo raíl que la app. */
+    .r { height: 3px; border-radius: 3px; background: #E9E3D2; overflow: hidden;
+         margin-top: 10px; position: relative }
+    .r::after { content: ''; position: absolute; inset: 0 auto 0 0; width: 30%;
+         border-radius: 3px; background: #5F7A56;
+         animation: cvs 1.4s cubic-bezier(.4,0,.2,1) infinite }
+    @keyframes cvs { 0% { transform: translateX(-100%) } 100% { transform: translateX(400%) } }
+    @media (prefers-reduced-motion: reduce) {
+      .r::after { animation: none; width: 100% }
+    }
+  </style><div class="p"><button title="Cerrar">×</button>${html}${trabajando ? '<div class="r"></div>' : ''}</div>`
   root.querySelector('button').onclick = () => host.remove()
 }
 
+// --- los botones ---------------------------------------------------------------
+// El texto visible de un botón, que es lo único que significa lo mismo en
+// Greenhouse, en Workday y en LinkedIn. La clasificación está en campos.js.
+const textoBoton = (el) =>
+  (el.tagName === 'INPUT' ? el.value : texto(el)) || el.getAttribute('aria-label') || ''
+
+const botones = () =>
+  [...document.querySelectorAll('button,input[type="submit"],input[type="button"],[role="button"],a')]
+    .filter((el) => !el.disabled && el.offsetParent !== null)
+
+// Pulsa el primer botón de alguna de las clases pedidas y devuelve su texto, o
+// null si no hay ninguno. 'enviar' no se acepta aquí a propósito: esa lista
+// existe para reconocer ese botón y NO tocarlo.
+function pulsar(clases) {
+  if (clases.includes('enviar')) throw new Error('el botón de enviar no se pulsa')
+  for (const el of botones()) {
+    const t = textoBoton(el)
+    if (clases.includes(botonPara(t))) { el.click(); return t.trim() }
+  }
+  return null
+}
+
 // --- arranque -------------------------------------------------------------------
-// La página es una SPA: el formulario puede no existir todavía. Se espera a que
-// aparezca un campo reconocible, con techo — mejor decir "no he visto formulario"
-// que quedarse observando para siempre.
-function esperarFormulario(ms = 12000) {
+// La página es una SPA: ni el formulario ni el paso siguiente existen todavía
+// cuando esto corre. Una sola primitiva de espera con techo — mejor decir "no lo
+// he visto" que quedarse observando para siempre.
+function esperarA(prueba, ms) {
   return new Promise((listo) => {
-    const hay = () => controles().some((el) => campoPara(etiquetaDe(el)) !== undefined)
-    if (hay()) return listo(true)
-    const obs = new MutationObserver(() => { if (hay()) { obs.disconnect(); clearTimeout(t); listo(true) } })
+    if (prueba()) return listo(true)
+    const obs = new MutationObserver(() => { if (prueba()) { obs.disconnect(); clearTimeout(t); listo(true) } })
     obs.observe(document.documentElement, { childList: true, subtree: true })
     const t = setTimeout(() => { obs.disconnect(); listo(false) }, ms)
   })
 }
 
-async function main() {
-  const paquete = await chrome.runtime.sendMessage({ tipo: 'paquete', url: location.href })
-  if (!paquete) return // esta pestaña no viene de un "Aplicar"
+const hayFormulario = () => controles().some((el) => campoPara(etiquetaDe(el)) !== undefined)
 
-  if (!(await esperarFormulario())) {
-    return panel('<b>CV Studio</b><div class="m">No he encontrado el formulario en esta página. '
-      + 'Si hay que darle a «Apply» antes, hazlo y recarga.</div>')
-  }
+// Un formulario servido ya montado y luego HIDRATADO por React —Greenhouse hace
+// justo eso— se reescribe entero unos segundos después de cargar. Si rellenas
+// antes, React descarta tus valores al hidratar y el panel acaba diciendo "9
+// campos rellenados" sobre un formulario en blanco.
+//
+// Medido contra una oferta real de Greenhouse: 9 puestos, 0 con valor al mirar
+// después, y la consola del portal escupiendo "React recovered from an error
+// during hydration". No se puede detectar la hidratación desde fuera, pero sí que
+// el DOM deje de moverse, que es la misma señal y no depende del framework.
+function esperarQuietud(quieto = 1200, techo = 8000) {
+  return new Promise((listo) => {
+    let reloj
+    let limite
+    const fin = () => { obs.disconnect(); clearTimeout(reloj); clearTimeout(limite); listo() }
+    const obs = new MutationObserver(() => { clearTimeout(reloj); reloj = setTimeout(fin, quieto) })
+    obs.observe(document.documentElement, { childList: true, subtree: true, attributes: true })
+    reloj = setTimeout(fin, quieto)
+    limite = setTimeout(fin, techo) // un portal que nunca para (un carrusel) no bloquea
+  })
+}
 
-  // Contraseña para las altas de cuenta: se genera aunque no haya campo, y solo
-  // se guarda si de verdad se ha usado.
-  const password = `Cv-${crypto.randomUUID().slice(0, 12)}!7`
-  let { puestos, pendientes } = await rellenar({ ...paquete, password })
+// Después de pulsar "siguiente": un campo NUEVO, sin rellenar y reconocible. Si no
+// aparece ninguno, o esto era el final o es una pantalla que no entendemos; en los
+// dos casos lo que toca es parar, no seguir pulsando.
+const hayPasoNuevo = () => controles().some((el) =>
+  el.dataset.cvStudio !== 'ok' && vacio(el) && campoPara(etiquetaDe(el)) !== undefined)
 
-  const usoPassword = puestos.some((e) => campoPara(e) === 'password')
-  if (usoPassword) {
-    const email = paquete.perfil.email
-    chrome.runtime.sendMessage({ tipo: 'credencial', host: location.host, email, password })
-  }
+const MAX_PASOS = 6
 
-  // Segunda vuelta: lo que la tabla no supo y el formulario exige se lo
-  // preguntamos al modelo, que sí ha leído la oferta y el CV.
+// Una vuelta completa sobre el paso que hay EN PANTALLA: la tabla primero, y lo
+// que la tabla no supo y el formulario exige, al modelo — que sí ha leído la
+// oferta y el CV.
+async function vuelta(paquete) {
+  let { puestos, pendientes, cvAdjunto } = await rellenar(paquete)
   let gaps = []
+
   if (pendientes.length) {
     panel(`<b>CV Studio</b><div class="m">${puestos.length} campos rellenados. `
-      + `Preguntando al modelo por ${pendientes.length}…</div>`)
+      + `Preguntando al modelo por ${pendientes.length}…</div>`, true)
     const r = await chrome.runtime.sendMessage({ tipo: 'answers', preguntas: pendientes })
     if (r?.respuestas) {
-      const segunda = await rellenar({ ...paquete, password }, r.respuestas, puestos)
+      const segunda = await rellenar(paquete, r.respuestas, puestos)
       puestos = [...puestos, ...segunda.puestos]
       pendientes = segunda.pendientes
+      cvAdjunto = cvAdjunto || segunda.cvAdjunto
       for (const el of controles()) if (!vacio(el)) el.style.outline = ''
     }
     gaps = r?.gaps ?? []
     if (r?.error) gaps = [`no he podido preguntar al modelo: ${r.error}`]
   }
 
+  return { puestos, pendientes, gaps, cvAdjunto }
+}
+
+async function main() {
+  const paquete = await chrome.runtime.sendMessage({ tipo: 'paquete', url: location.href })
+  if (!paquete) return // esta pestaña no viene de un "Aplicar"
+
+  // El formulario puede estar detrás de un botón: Greenhouse esconde el suyo tras
+  // "Apply for this job" y en LinkedIn el Easy Apply es un modal que no existe
+  // hasta pulsarlo. Se pulsa AQUÍ y solo aquí, con la página todavía sin tocar:
+  // si eso resultara ser el envío de un formulario vacío, no hay nada que enviar.
+  let hay = await esperarA(hayFormulario, 6000)
+  if (!hay) {
+    const abierto = pulsar(['abrir', 'alta'])
+    if (abierto) {
+      panel(`<b>CV Studio</b><div class="m">He pulsado «${esc(abierto)}». Esperando el formulario…</div>`, true)
+      hay = await esperarA(hayFormulario, 12000)
+    }
+  }
+  if (!hay) {
+    return panel('<b>CV Studio</b><div class="m">No he encontrado el formulario en esta página. '
+      + 'Si hay que darle a «Apply» antes, hazlo y recarga.</div>')
+  }
+
+  // El formulario existe, pero puede que todavía no sea el definitivo.
+  panel('<b>CV Studio</b><div class="m">Esperando a que el formulario acabe de cargar…</div>', true)
+  await esperarQuietud()
+
+  let puestos = []
+  let pendientes = []
+  let gaps = []
+  let usoPassword = false
+  let cvAdjunto = false
+  let ultimo = null // el botón de "siguiente" que se pulsó, para poder contarlo
+
+  // Un formulario largo o un alta son varias pantallas. El techo y el contador
+  // viven en la sesión de la pestaña (sw.js) porque un alta de verdad NAVEGA: esta
+  // página muere y el content script arranca de cero en la siguiente.
+  while (true) {
+    const r = await vuelta(paquete)
+    puestos = [...puestos, ...r.puestos]
+    pendientes = r.pendientes
+    gaps = r.gaps
+    cvAdjunto = cvAdjunto || r.cvAdjunto
+
+    // La contraseña es la del paquete, la misma en toda la pestaña: es lo que
+    // permite que "Password" y "Verify Password" —en la misma pantalla o en dos
+    // distintas— reciban lo mismo y el alta llegue a completarse.
+    if (r.puestos.some((e) => campoPara(e) === 'password')) {
+      usoPassword = true
+      chrome.runtime.sendMessage({
+        tipo: 'credencial', host: location.host, email: paquete.perfil.email, password: paquete.password,
+      })
+    }
+
+    // Queda algo obligatorio sin resolver: se para. Avanzar dejaría un campo en
+    // naranja detrás y no lo verías hasta el final.
+    if (pendientes.length) break
+    // Un paso que no ha rellenado nada es una pantalla que no entendemos, o una de
+    // revisión. No se pulsa a ciegas.
+    if (!r.puestos.length) break
+
+    const { paso } = await chrome.runtime.sendMessage({ tipo: 'paso' })
+    if (paso >= MAX_PASOS) break
+
+    panel(`<b>CV Studio · paso ${paso}</b><div class="m">${puestos.length} campos rellenados. `
+      + 'Pasando al siguiente…</div>', true)
+    // Sin pisar el anterior si esta vuelta no encuentra botón: el panel dice por
+    // dónde ha pasado, y un null al final borraba el único paso que sí se dio.
+    const siguiente = pulsar(['siguiente', 'alta'])
+    if (!siguiente) break // no hay siguiente: o es el final, o el botón es de enviar
+    ultimo = siguiente
+    // Si el paso navega, esto no vuelve: el content script arranca solo en la
+    // página nueva y sigue por donde iba. Si es una SPA, seguimos aquí.
+    if (!(await esperarA(hayPasoNuevo, 4000))) break
+  }
+
+  // Sin hueco donde soltar el PDF, al menos se señala dónde está el botón de
+  // subir: es lo único que queda por hacer a mano.
+  if (!cvAdjunto && paquete.cv) {
+    const zona = document.querySelector('[class*="file-upload"],[class*="upload"],[class*="attach"],input[type="file"]')
+    if (zona) {
+      zona.style.outline = '2px solid #C08A2E'
+      zona.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+    }
+  }
+
   panel(
     `<b>CV Studio · ${puestos.length} campos rellenados</b>`
-    + (paquete.cv ? '<div class="m">CV adaptado adjunto.</div>' : '<div class="m w">Sin PDF: adjúntalo tú.</div>')
+    // Decía "CV adaptado adjunto" siempre que el paquete traía un PDF, se hubiera
+    // adjuntado o no. Medido contra una oferta real de Greenhouse: el panel lo
+    // afirmaba con CERO campos de fichero en la página. Es la mentira más cara de
+    // todas — la que te hace enviar una candidatura sin CV.
+    + (cvAdjunto
+      ? '<div class="m">CV adaptado adjunto.</div>'
+      : `<div class="m w">${paquete.cv
+        ? 'El CV NO se ha podido adjuntar: este portal abre el selector de ficheros al pulsar (marcado en naranja). Adjúntalo tú.'
+        : 'Sin PDF: adjúntalo tú.'}</div>`)
+    + (ultimo ? `<div class="m">He pasado por «${esc(ultimo)}».</div>` : '')
     + (pendientes.length
       ? `<div class="m">Faltan ${pendientes.length}, marcados en naranja:</div>`
-        + `<ul>${pendientes.slice(0, 6).map((p) => `<li>${p.etiqueta}</li>`).join('')}</ul>`
+        + `<ul>${pendientes.slice(0, 6).map((p) => `<li>${esc(p.etiqueta)}</li>`).join('')}</ul>`
       : '')
-    + (gaps.length ? `<div class="m w">Sin respaldo en tu CV: ${gaps.join(' · ')}.</div>` : '')
+    + (gaps.length ? `<div class="m w">Sin respaldo en tu CV: ${esc(gaps.join(' · '))}.</div>` : '')
     + (usoPassword ? '<div class="m">Cuenta creada con contraseña nueva (está en el popup). '
       + '<b>El correo de verificación lo abres tú.</b></div>' : '')
     + '<div class="m">Revísalo y <b>envía tú</b>: yo no toco ese botón.</div>'
