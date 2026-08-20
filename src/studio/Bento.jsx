@@ -1,15 +1,18 @@
 import { AlertTriangle, ExternalLink, FileDown, FileText, Info, Send, Sparkles, TrendingUp } from 'lucide-react'
-import { ESTADOS, agrupar, contar } from './store'
+import { ESTADOS, agrupar, contar, desdeCuando, diasDesde } from './store'
 
-// Pantalla "Resumen". Antes era el bento del diseño: cinco contadores por
-// `estado` y una rejilla bonita. El problema es que no respondía a las dos
-// preguntas que se le hacen todos los días —en cuáles he postulado, y cuáles solo
-// he auditado—, porque `estado` lo pones a mano y no dice qué se ha preparado:
-// una oferta recién auditada y una con el CV ya adaptado son las dos "guardada".
+// Pantalla "Resumen": los números de la búsqueda de un vistazo y qué hacer a
+// continuación.
 //
-// ponytail: sigue sin haber una etapa derivada guardada en ninguna parte.
-// `agrupar()` cuenta campos que ya existen (auditoria, cv, url) y devuelve las
-// listas; aquí solo se pintan.
+// Los contadores de arriba son los que se miran todos los días —enviadas y
+// descartadas— y todos llevan a Ofertas con ese filtro puesto: un número que no
+// te lleva a lo que cuenta es un adorno.
+//
+// La lista de seguimiento va ordenada por lo que lleva callada, no por fecha de
+// creación: lo que quieres ver primero es lo que toca reclamar.
+//
+// ponytail: aquí no se calcula nada. `agrupar()` en store.js devuelve las listas
+// ya hechas y esto solo las pinta; así se puede probar sin React.
 const Tile = ({ children, w, h, alt, className = '' }) => (
   <div
     className={`rounded-[20px] p-6 flex flex-col ${className}`}
@@ -70,6 +73,37 @@ const Grupo = ({ n, titulo, hint, onClick, destacado }) => (
   </button>
 )
 
+// Los números que se miran de un vistazo. Clicables: un contador que no te lleva
+// a lo que cuenta es un adorno.
+const Contador = ({ n, titulo, hint, estado, onVerOfertas, destacado }) => (
+  <button
+    onClick={() => onVerOfertas(estado)}
+    disabled={!n}
+    className="rounded-[20px] p-5 flex flex-col gap-1 items-start text-left disabled:opacity-45 flex-1"
+    style={{
+      background: destacado ? 'var(--s-chip-green)' : 'var(--s-surface)',
+      border: `1px solid ${destacado ? 'var(--s-accent)' : 'var(--s-border)'}`,
+      boxShadow: 'var(--s-shadow)',
+    }}
+  >
+    <Label>{titulo}</Label>
+    <Big>{n}</Big>
+    <span className="text-xs leading-snug" style={{ color: 'var(--s-muted)' }}>{hint}</span>
+  </button>
+)
+
+// Cuántos días lleva en el estado en el que está. null en las ofertas de antes de
+// que se guardara la historia, y entonces no se pinta nada.
+const Espera = ({ o }) => {
+  const d = diasDesde(desdeCuando(o, o.estado))
+  if (d === null) return null
+  return (
+    <span className="text-[11px] font-semibold" style={{ color: d >= 21 ? '#8A6D2E' : 'var(--s-muted)' }}>
+      {d === 0 ? 'hoy' : `${d} d`}
+    </span>
+  )
+}
+
 const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
   const c = contar(ofertas)
   const g = agrupar(ofertas)
@@ -82,15 +116,45 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
           Hola, Víctor
         </h1>
         <p className="text-sm" style={{ color: 'var(--s-muted)' }}>
-          {g.vivas.length} candidaturas en marcha · {g.abiertas.length} por revisar · {conVariante} variantes de CV
+          {g.vivas.length} candidaturas en marcha · {g.porRevisar.length} por revisar · {conVariante} variantes de CV
         </p>
+      </div>
+
+      {/* Los cuatro números de un vistazo. */}
+      <div className="flex gap-4">
+        <Contador
+          n={g.preparadas.length} titulo="PREPARADAS" estado="preparada" onVerOfertas={onVerOfertas}
+          hint="CV hecho, sin mandar todavía."
+        />
+        <Contador
+          n={g.enviadas.length} titulo="ENVIADAS" estado="enviada" onVerOfertas={onVerOfertas}
+          hint="Mandadas y esperando respuesta."
+        />
+        <Contador
+          n={g.entrevistas.length} titulo="ENTREVISTAS" estado="entrevista" onVerOfertas={onVerOfertas}
+          hint="Procesos abiertos ahora mismo."
+        />
+        <Contador
+          n={g.descartadas.length} titulo="DESCARTADAS" estado="descartada" onVerOfertas={onVerOfertas}
+          hint={g.rechazadas.length
+            ? `Que ni llegaste a mandar. Y ${g.rechazadas.length} rechazada${g.rechazadas.length > 1 ? 's' : ''} tras aplicar.`
+            : 'Que ni llegaste a mandar.'}
+        />
+        {/* Solo si hay: una tarjeta de contratados a cero todos los días es
+            desmoralizante y no informa de nada. */}
+        {g.contratado.length > 0 && (
+          <Contador
+            n={g.contratado.length} titulo="CONTRATADO" estado="contratado" onVerOfertas={onVerOfertas}
+            hint="Se acabó la búsqueda." destacado
+          />
+        )}
       </div>
 
       {/* --- (a) en cuáles he postulado ------------------------------------- */}
       <div className="flex gap-4">
         <Tile h={300} className="gap-3">
           <div className="flex items-baseline justify-between">
-            <Label>CANDIDATURAS EN MARCHA</Label>
+            <Label>SEGUIMIENTO — LA QUE MÁS TIEMPO LLEVA CALLADA, PRIMERO</Label>
             <span className="text-xs" style={{ color: 'var(--s-muted)' }}>
               {c.enviada} enviadas · {c.entrevista} en entrevista
             </span>
@@ -101,7 +165,7 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
                 Ninguna todavía. Prepara una oferta y pulsa «Aplicar».
               </p>
             )}
-            {g.vivas.map((o) => (
+            {[...g.sinRespuesta, ...g.entrevistas].map((o) => (
               <Fila
                 key={o.id}
                 o={o}
@@ -115,7 +179,7 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
                         <FileText size={10} /> CV{o.carta ? ' + carta' : ''}
                       </span>
                     )}
-                    <span className="text-xs" style={{ color: 'var(--s-muted)' }}>{o.fecha}</span>
+                    <Espera o={o} />
                     <span
                       className="px-2.5 py-1 rounded-full text-xs font-semibold"
                       style={{ background: ESTADOS[o.estado].bg, color: ESTADOS[o.estado].fg }}
@@ -143,7 +207,7 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
             Tienen enlace y CV adaptado: solo falta pulsar «Aplicar».
           </span>
           <button
-            onClick={() => onVerOfertas('guardada')}
+            onClick={() => onVerOfertas('preparada')}
             disabled={!g.listas.length}
             className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold mt-3 w-fit disabled:opacity-45"
             style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
@@ -156,10 +220,10 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
       {/* --- (b) cuáles solo he auditado ------------------------------------ */}
       <Tile className="gap-3">
         <div className="flex items-baseline justify-between">
-          <Label>POR REVISAR — {g.abiertas.length} GUARDADAS</Label>
+          <Label>POR REVISAR — {g.porRevisar.length} SIN MANDAR</Label>
           <span className="text-xs flex items-center gap-1.5" style={{ color: 'var(--s-muted)' }}>
             <Info size={12} />
-            Todas son «Guardada»: lo que las separa es lo que ya se ha preparado, no el estado.
+            De pegarla a poder aplicar. Cada paso lleva a Ofertas con ese filtro.
           </span>
         </div>
         <div className="flex gap-3">
@@ -176,17 +240,17 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
             onClick={() => onVerOfertas('guardada')}
           />
           <Grupo
-            n={g.conCV.length}
-            titulo="Con CV adaptado"
-            hint="Preparadas, sin aplicar todavía."
-            onClick={() => onVerOfertas('guardada')}
+            n={g.preparadas.length}
+            titulo="Preparadas"
+            hint="CV adaptado, sin mandar."
+            onClick={() => onVerOfertas('preparada')}
           />
           <Grupo
             n={g.listas.length}
             titulo="Listas para aplicar"
             hint="Enlace + CV. A un clic."
             destacado
-            onClick={() => onVerOfertas('guardada')}
+            onClick={() => onVerOfertas('preparada')}
           />
         </div>
       </Tile>

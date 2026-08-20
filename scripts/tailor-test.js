@@ -9,7 +9,8 @@ import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles, normalizar, pedir
 import feed from '../api/feed.js'
 import { findFigures } from '../api/cover.js'
 import { partir, enLote } from '../src/studio/lote.js'
-import { agrupar, esSemilla, contar } from '../src/studio/store.js'
+import { agrupar, esSemilla, contar, conCV, SIGUIENTE, ESTADOS, aplicarPatch,
+  desdeCuando, diasDesde, migrar, hoy } from '../src/studio/store.js'
 import { hashPassword } from './set-password.js'
 import { dataEN } from '../src/data.js'
 
@@ -301,43 +302,122 @@ a.deepEqual(partir('Buscamos alguien\nque sepa https://ejemplo.com/docs'),
   a.equal(fases.filter(([, f]) => f === 'listo').length, 3)
 }
 
-// --- los grupos del Resumen ---------------------------------------------------
-// El tablero real tenía 44 ofertas y 11 eran la semilla de demo, con 4 de ellas
-// contando como "enviadas". El caso que importa es que `estado` NO distingue una
-// oferta solo auditada de una con el CV adaptado: las dos son "guardada".
+// --- el recorrido de una candidatura -------------------------------------------
+// Los siete estados, en orden: el orden ES lo que pinta el pipeline y los chips.
+a.deepEqual(Object.keys(ESTADOS),
+  ['guardada', 'preparada', 'enviada', 'entrevista', 'contratado', 'rechazada', 'descartada'])
+
+// El paso hacia delante llega hasta el final bueno, y los tres finales no tienen.
+a.equal(SIGUIENTE.guardada, 'preparada')
+a.equal(SIGUIENTE.preparada, 'enviada')
+a.equal(SIGUIENTE.enviada, 'entrevista')
+a.equal(SIGUIENTE.entrevista, 'contratado')
+for (const fin of ['contratado', 'rechazada', 'descartada']) {
+  a.equal(SIGUIENTE[fin], undefined, `${fin} es un final, no tiene siguiente`)
+}
+for (const [de, hacia] of Object.entries(SIGUIENTE)) {
+  a.ok(ESTADOS[de] && ESTADOS[hacia], `SIGUIENTE apunta a estados que existen: ${de} -> ${hacia}`)
+}
+
+// Generar el CV adelanta, pero solo desde el principio. La segunda es LA
+// regresión que importa: sin ella, regenerar el PDF de una oferta ya enviada la
+// devolvía a "preparada" y desaparecía del seguimiento.
+a.equal(conCV('guardada'), 'preparada')
+a.equal(conCV('enviada'), 'enviada', 'una enviada no retrocede por regenerar el CV')
+a.equal(conCV('entrevista'), 'entrevista')
+a.equal(conCV('descartada'), 'descartada', 'ni resucita una descartada')
+
+// --- la fecha de cada cambio ----------------------------------------------------
+{
+  const base = { id: 'x', estado: 'guardada' }
+  const enviada = aplicarPatch(base, { estado: 'enviada' }, '2026-08-10')
+  a.deepEqual(enviada.historia, [{ estado: 'enviada', dia: '2026-08-10' }])
+
+  // Guardar la variante NO es un hito: si lo fuera, "hace N días" mediría la
+  // última vez que tocaste la fila, no desde cuándo espera respuesta.
+  const conVariante = aplicarPatch(enviada, { variante: 'X · ES' }, '2026-08-20')
+  a.deepEqual(conVariante.historia, enviada.historia, 'la variante no sella fecha')
+  a.equal(conVariante.variante, 'X · ES')
+
+  // Repetir el mismo estado tampoco.
+  a.deepEqual(aplicarPatch(enviada, { estado: 'enviada' }, '2026-08-20').historia, enviada.historia)
+
+  // Y encadenar sí acumula.
+  const entrevista = aplicarPatch(enviada, { estado: 'entrevista' }, '2026-08-18')
+  a.equal(entrevista.historia.length, 2)
+  a.equal(desdeCuando(entrevista, 'enviada'), '2026-08-10')
+  a.equal(desdeCuando(entrevista, 'contratado'), null, 'un estado por el que no pasó')
+  a.equal(desdeCuando({ id: 'vieja' }, 'enviada'), null, 'una oferta sin historia no inventa fecha')
+
+  // Si vuelve a pasar por un estado, manda la última vez.
+  const revive = aplicarPatch(aplicarPatch(entrevista, { estado: 'enviada' }, '2026-08-25'), { estado: 'entrevista' }, '2026-08-26')
+  a.equal(desdeCuando(revive, 'enviada'), '2026-08-25', 'la última vez, no la primera')
+
+  a.equal(diasDesde(hoy()), 0)
+  a.equal(diasDesde(null), null)
+  a.equal(diasDesde('no es fecha'), null, 'basura no revienta la pantalla')
+  a.ok(diasDesde('2026-08-01') > 0)
+}
+
+// --- la migración ----------------------------------------------------------------
+// Las ofertas de antes de que existiera "preparada": con CV ya no son "guardada".
+a.deepEqual(migrar([
+  { id: 'a', estado: 'guardada', cv: {} },
+  { id: 'b', estado: 'guardada' },
+  { id: 'c', estado: 'enviada', cv: {} },
+  { id: 'd', estado: 'descartada', cv: {} },
+]).map((o) => o.estado), ['preparada', 'guardada', 'enviada', 'descartada'])
+
+// --- los grupos del Resumen -----------------------------------------------------
+// Con "preparada" en el modelo, los grupos ya no deducen nada de los campos: se
+// leen del estado. "preparada" ES tener CV.
 {
   const cv = { profile: 'x' }
   const alta = { encaje: { imprescindibles: 90, bloqueantes: [] } }
   const baja = { encaje: { imprescindibles: 40, bloqueantes: ['Rails'] } }
+  const h = (estado, dia) => [{ estado, dia }]
   const tablero = [
     { id: 'seed-0', empresa: 'Demo', estado: 'enviada' },
     { id: 'seed-1', empresa: 'Demo', estado: 'guardada' },
     { id: 'a', estado: 'guardada', auditoria: alta },
     { id: 'b', estado: 'guardada', auditoria: baja },
-    { id: 'c', estado: 'guardada', auditoria: alta, cv },
-    { id: 'd', estado: 'guardada', auditoria: alta, cv, url: 'https://x/1' },
-    { id: 'e', estado: 'enviada', auditoria: alta, cv, url: 'https://x/2' },
-    { id: 'f', estado: 'entrevista', auditoria: alta, cv },
-    { id: 'g', estado: 'descartada', auditoria: baja },
+    { id: 'c', estado: 'guardada' },
+    { id: 'd', estado: 'preparada', auditoria: alta, cv },
+    { id: 'e', estado: 'preparada', auditoria: alta, cv, url: 'https://x/1' },
+    { id: 'f', estado: 'enviada', auditoria: alta, cv, url: 'https://x/2', historia: h('enviada', '2026-08-01') },
+    { id: 'g', estado: 'entrevista', auditoria: alta, cv },
+    { id: 'h', estado: 'contratado', auditoria: alta, cv },
+    { id: 'i', estado: 'rechazada', auditoria: baja },
+    { id: 'j', estado: 'descartada', auditoria: baja },
   ]
   const g = agrupar(tablero)
   const ids = (xs) => xs.map((o) => o.id).sort()
 
-  a.deepEqual(ids(g.vivas), ['e', 'f', 'seed-0'], 'vivas = enviadas + entrevistas')
-  a.deepEqual(ids(g.soloAuditadas), ['a', 'b'], 'auditada y sin CV: lo que "guardada" no sabe decir')
-  a.deepEqual(ids(g.conCV), ['c', 'd'], 'con CV adaptado, todavía sin enviar')
-  a.deepEqual(ids(g.listas), ['d'], 'lista = enlace Y CV, lo mismo que exige el botón Aplicar')
+  a.deepEqual(ids(g.vivas), ['f', 'g', 'seed-0'], 'vivas = enviadas + entrevistas')
+  a.deepEqual(ids(g.porRevisar), ['a', 'b', 'c', 'd', 'e', 'seed-1'], 'lo que queda por hacer')
+  a.deepEqual(ids(g.sinAuditar), ['c', 'seed-1'], 'pegada y nada más')
+  a.deepEqual(ids(g.soloAuditadas), ['a', 'b'], 'auditada y sin CV')
+  a.deepEqual(ids(g.preparadas), ['d', 'e'], 'con CV, sin mandar')
+  a.deepEqual(ids(g.listas), ['e'], 'lista = preparada Y con enlace, lo que exige el botón Aplicar')
   a.deepEqual(ids(g.prometedoras), ['a'], 'encaje alto y sin adaptar; la de encaje bajo no entra')
-  a.deepEqual(ids(g.sinAuditar), ['seed-1'], 'pegada y nada más')
-  a.deepEqual(ids(g.descartadas), ['g'])
+  a.deepEqual(ids(g.contratado), ['h'])
+  a.deepEqual(ids(g.rechazadas), ['i'])
+  a.deepEqual(ids(g.descartadas), ['j'])
   a.deepEqual(ids(g.semilla), ['seed-0', 'seed-1'], 'la demo se reconoce por su id')
 
-  // Una oferta ya enviada no "necesita acción" aunque tenga enlace y CV.
-  a.ok(!ids(g.listas).includes('e'), 'lo ya enviado no vuelve a la cola de aplicar')
+  // Los dos números que se piden en el Resumen, contra la tabla.
+  a.equal(g.enviadas.length, contar(tablero).enviada)
+  a.equal(g.descartadas.length, contar(tablero).descartada)
+
+  // Una ya enviada no vuelve a la cola de "aplicar" aunque tenga enlace y CV.
+  a.ok(!ids(g.listas).includes('f'))
+  // La que lleva más tiempo callada, primero; la que no tiene historia, al final.
+  a.deepEqual(g.sinRespuesta.map((o) => o.id), ['f', 'seed-0'])
+
   a.equal(esSemilla({ id: 'seed-9' }), true)
   a.equal(esSemilla({ id: crypto.randomUUID() }), false, 'una oferta real nunca es semilla')
   a.deepEqual(agrupar([]).vivas, [], 'un tablero vacío no revienta')
-  a.equal(contar(tablero).guardada, 5, 'contar() sigue contando estados, sin cambios')
+  a.equal(contar(tablero).guardada, 4, 'contar() sigue contando estados, sin cambios')
 }
 
 console.log(`ok — ${dropped.length} inventos bloqueados (${dropped.join(', ')}); puerta cerrada en prod`)

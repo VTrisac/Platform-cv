@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Search, ExternalLink, Sparkles, FileText, Send, Trash2, X } from 'lucide-react'
-import { ESTADOS, esSemilla } from './store'
+import { Search, ExternalLink, Sparkles, FileText, Send, Trash2, X, ChevronRight } from 'lucide-react'
+import { ESTADOS, SIGUIENTE, desdeCuando, diasDesde, esSemilla } from './store'
 
 // Pantalla "Ofertas — Tracker" del diseño: cabecera con recuento, buscador,
 // filtros por estado y tabla. Las columnas replican los anchos del mockup
@@ -180,7 +180,7 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
           <span className="w-[188px]">EMPRESA</span>
           <span className="flex-1">PUESTO</span>
           <span className="w-[90px]">ENCAJE</span>
-          <span className="w-[130px]">ESTADO</span>
+          <span className="w-[210px]">ESTADO</span>
           <span className="w-[170px]">VARIANTE</span>
           <span className="w-[100px]">FECHA</span>
           <span className="w-[180px] text-right">ACCIONES</span>
@@ -234,22 +234,48 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
                 <span className="text-xs" style={{ color: 'var(--s-muted)' }}>—</span>
               )}
             </span>
-            <span className="w-[130px]">
-              {/* Chip del diseño, pero editable: cambiar de estado es la acción
-                  que más se repite y no merece abrir otra pantalla. */}
-              <select
-                value={o.estado}
-                onChange={(e) => onEstado(o.id, e.target.value)}
-                className="outline-none cursor-pointer appearance-none px-2.5 py-1 rounded-full text-xs font-semibold text-center"
-                style={{ background: ESTADOS[o.estado].bg, color: ESTADOS[o.estado].fg }}
-                aria-label={`Estado de ${o.empresa}`}
-              >
-                {Object.entries(ESTADOS).map(([k, v]) => (
-                  <option key={k} value={k} style={{ background: '#FDFBF4', color: '#24261C' }}>
-                    {v.label}
-                  </option>
-                ))}
-              </select>
+            <span className="w-[210px] flex flex-col gap-1">
+              <span className="flex items-center gap-1.5">
+                {/* Chip del diseño, pero editable: cambiar de estado es la acción
+                    que más se repite y no merece abrir otra pantalla. Sigue
+                    ofreciendo los siete, incluido volver atrás: equivocarse al
+                    marcar es lo más normal del mundo. */}
+                <select
+                  value={o.estado}
+                  onChange={(e) => onEstado(o.id, e.target.value)}
+                  className="outline-none cursor-pointer appearance-none px-2.5 py-1 rounded-full text-xs font-semibold text-center"
+                  style={{ background: ESTADOS[o.estado].bg, color: ESTADOS[o.estado].fg }}
+                  aria-label={`Estado de ${o.empresa}`}
+                >
+                  {Object.entries(ESTADOS).map(([k, v]) => (
+                    <option key={k} value={k} style={{ background: '#FDFBF4', color: '#24261C' }}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+                {/* El paso obvio, de un clic. Solo si hay siguiente: los tres
+                    finales no llevan a ningún sitio. */}
+                {SIGUIENTE[o.estado] && (
+                  <button
+                    onClick={() => onEstado(o.id, SIGUIENTE[o.estado])}
+                    title={`Pasar a ${ESTADOS[SIGUIENTE[o.estado]].label}`}
+                    className="flex items-center gap-0.5 px-1.5 py-1 rounded-full text-[11px] font-semibold border shrink-0"
+                    style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)', color: 'var(--s-muted)' }}
+                  >
+                    <ChevronRight size={11} /> {ESTADOS[SIGUIENTE[o.estado]].label}
+                  </button>
+                )}
+              </span>
+              {/* Desde cuándo lleva ahí. Solo si hay historia: las ofertas de
+                  antes no la tienen y una fecha inventada sería peor que nada. */}
+              {(() => {
+                const d = diasDesde(desdeCuando(o, o.estado))
+                return d === null ? null : (
+                  <span className="text-[11px]" style={{ color: 'var(--s-muted)' }}>
+                    {d === 0 ? 'hoy' : `hace ${d} día${d > 1 ? 's' : ''}`}
+                  </span>
+                )
+              })()}
             </span>
             <span className="w-[170px] flex flex-col gap-1">
               {o.variante ? (

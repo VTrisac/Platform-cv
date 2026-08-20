@@ -9,7 +9,7 @@ import NuevaOferta from './studio/NuevaOferta'
 import Perfil from './studio/Perfil'
 import Cola from './studio/Cola'
 import { enLote, esUrl } from './studio/lote'
-import { useStudio } from './studio/store'
+import { conCV, useStudio } from './studio/store'
 
 // La oferta se crea a partir de la auditoría: empresa, puesto y encaje salen
 // del scraper, no los escribes tú. Se guarda la auditoría entera para que
@@ -82,15 +82,22 @@ const Studio = () => {
     // de React no se puede leer desde dentro de este callback.
     const ids = []
     const nombres = []
+    const estados = []
     await enLote(entradas, lang, (i, fase, extra = {}) => {
       const parche = { ...extra }
       if (extra.a) {
         const nueva = addOferta(desdeAuditoria(extra.a, lang, excluirIngles, esUrl(entradas[i]) ? entradas[i].trim() : null))
         ids[i] = nueva.id
         nombres[i] = `${extra.a.empresa} · ${lang.toUpperCase()}`
+        estados[i] = nueva.estado
         parche.id = nueva.id
       }
-      if (ids[i] && extra.cv) updateOferta(ids[i], { variante: nombres[i], cv: extra.cv })
+      // Mismo automatismo que en el editor: el CV adelanta la candidatura. El
+      // estado de partida siempre es "guardada" aquí —la acaba de crear
+      // desdeAuditoria—, pero se pasa por conCV igual para no tener dos reglas.
+      if (ids[i] && extra.cv) {
+        updateOferta(ids[i], { variante: nombres[i], cv: extra.cv, estado: conCV(estados[i]) })
+      }
       if (ids[i] && extra.carta) updateOferta(ids[i], { carta: extra.carta })
       setCola((c) => c.map((t, n) => (n === i ? { ...t, fase, ...parche } : t)))
     })
@@ -183,7 +190,19 @@ const Studio = () => {
           // el CV existe. Antes el CV solo se guardaba si pulsabas "Guardar
           // variante", y sin él el tracker no tenía nada que mandar al portal:
           // por eso el botón "Aplicar" no aparecía nunca.
-          onCV={(nombre, cv) => actual && updateOferta(actual.id, { variante: nombre, cv })}
+          // Y el estado avanza solo: en cuanto existe el CV, la candidatura pasa
+          // a "Preparada". conCV() se encarga de que una ya enviada no retroceda.
+          //
+          // El estado se lee del store, NO de `actual`: `actual` es la foto de
+          // cuando abriste el editor, y si has pulsado Aplicar en esta misma
+          // sesión ahí sigue poniendo "guardada". Regenerar el CV después la
+          // habría devuelto a "preparada" — justo la regresión que conCV existe
+          // para evitar.
+          onCV={(nombre, cv) => actual && updateOferta(actual.id, {
+            variante: nombre,
+            cv,
+            estado: conCV(ofertas.find((o) => o.id === actual.id)?.estado ?? actual.estado),
+          })}
           // Pulsar "Aplicar" no es enviar —la extensión no toca ese botón—,
           // pero es lo que vas a hacer a continuación. El desplegable del
           // tracker lo corrige en un clic si te arrepientes.

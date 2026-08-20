@@ -8,13 +8,43 @@ import { useEffect, useState } from 'react'
 // cambiar esto por un endpoint. Hasta entonces, una dependencia menos.
 const KEY = 'cvStudio.v1'
 
+// El orden IMPORTA: es el que pinta las barras del pipeline y los chips de
+// filtro, y el que hace que el tablero se lea como un recorrido y no como una
+// lista de etiquetas sueltas.
+//
+// "descartada" y "rechazada" son cosas distintas y se quedan separadas:
+// descartada es que no llegaste a mandarla (tú o la auditoría), rechazada es que
+// te dijeron que no. Juntarlas taparía el dato que dice si el problema está en
+// tu criterio al elegir ofertas o en lo que mandas.
+//
+// "contratado" en masculino a propósito: las demás concuerdan con "la oferta",
+// esta habla de ti.
 export const ESTADOS = {
   guardada: { label: 'Guardada', bg: '#EFEADB', fg: '#6C6F5C' },
+  preparada: { label: 'Preparada', bg: '#F3EAD6', fg: '#8A6D2E' },
   enviada: { label: 'Enviada', bg: '#E7E9F0', fg: '#3B4A6B' },
   entrevista: { label: 'Entrevista', bg: '#E3EBDC', fg: '#48603F' },
+  contratado: { label: 'Contratado', bg: '#CFE0C6', fg: '#33502A' },
   rechazada: { label: 'Rechazada', bg: '#F3E4E1', fg: '#8A4A3C' },
   descartada: { label: 'Descartada', bg: '#EDEDE8', fg: '#8A8C7E' },
 }
+
+// El paso hacia delante, que es lo único que necesita el botón de avanzar.
+// Desde "entrevista" ofrece "contratado": que te rechacen se marca con el
+// desplegable, porque un botón que empuja hacia el mal final no lo quiere nadie.
+// Los tres finales no tienen siguiente y por eso no salen aquí.
+export const SIGUIENTE = {
+  guardada: 'preparada',
+  preparada: 'enviada',
+  enviada: 'entrevista',
+  entrevista: 'contratado',
+}
+
+// Generar el CV adelanta la candidatura, pero SOLO desde el principio. Sin esta
+// guarda, reabrir una oferta ya enviada y regenerar el PDF la haría retroceder a
+// "preparada" y te desaparecería del seguimiento — que es justo lo contrario de
+// lo que se pide al automatismo.
+export const conCV = (estado) => (estado === 'guardada' ? 'preparada' : estado)
 
 // Semilla: tus ofertas reales de ofertas/, que son las del diseño. La carpeta
 // no viaja al despliegue (.vercelignore), así que se copian aquí.
@@ -33,12 +63,49 @@ const SEED = [
   { empresa: 'TheFork', puesto: 'Backend Engineer', estado: 'guardada', variante: null, fecha: '15 jul' },
 ]
 
-const hoy = () => new Date().toISOString().slice(0, 10)
+export const hoy = () => new Date().toISOString().slice(0, 10)
+
+// El parche aplicado a una oferta, sellando la fecha cuando el estado CAMBIA de
+// verdad. Guardar la variante o la carta no es un hito, y volver a poner el mismo
+// estado tampoco: si se sellara todo, "hace N días" mediría la última vez que
+// tocaste la fila, no desde cuándo está esperando respuesta.
+//
+// Aparte de updateOferta para poder probarla sin React.
+export function aplicarPatch(o, patch, dia = hoy()) {
+  const cambia = patch.estado && patch.estado !== o.estado
+  return {
+    ...o,
+    ...patch,
+    ...(cambia ? { historia: [...(o.historia ?? []), { estado: patch.estado, dia }] } : {}),
+  }
+}
+
+// Cuándo pasó por ese estado la última vez, o null si esa oferta es de antes de
+// que se guardara la historia. null y no una fecha inventada: decir "hace 18
+// días" sobre un dato que no existe es peor que no decir nada.
+export const desdeCuando = (o, estado) =>
+  [...(o.historia ?? [])].reverse().find((h) => h.estado === estado)?.dia ?? null
+
+export function diasDesde(dia) {
+  if (!dia) return null
+  const d = new Date(`${dia}T00:00:00`)
+  if (Number.isNaN(d.getTime())) return null
+  return Math.max(0, Math.floor((new Date(`${hoy()}T00:00:00`) - d) / 864e5))
+}
+
+// Las ofertas de antes de que existiera "preparada": si tienen CV, ya no son
+// "guardada". Sin esto se quedan en un estado que no se corresponde con lo que
+// llevan dentro, y los contadores del Resumen no cuadran con la tabla.
+export const migrar = (ofertas) =>
+  ofertas.map((o) => (o.estado === 'guardada' && o.cv ? { ...o, estado: 'preparada' } : o))
 
 const load = () => {
   try {
     const raw = localStorage.getItem(KEY)
-    if (raw) return JSON.parse(raw)
+    if (raw) {
+      const s = JSON.parse(raw)
+      return { ...s, ofertas: migrar(s.ofertas ?? []) }
+    }
   } catch {
     // JSON corrupto: mejor volver a la semilla que dejar la app en blanco.
   }
@@ -96,11 +163,16 @@ export function useStudio() {
     // Devuelve la oferta creada: quien la añade necesita su id para abrirla.
     addOferta: (o) => {
       const nueva = { id: crypto.randomUUID(), estado: 'guardada', ...o }
+      // La historia empieza aquí: sin el primer sello, una oferta creada hoy y
+      // enviada mañana no tendría con qué comparar.
+      nueva.historia = [{ estado: nueva.estado, dia: hoy() }]
       setState((s) => ({ ...s, ofertas: [nueva, ...s.ofertas] }))
       return nueva
     },
+    // Todos los cambios de estado pasan por aquí, así que el sello de la fecha va
+    // aquí y no hay forma de saltárselo.
     updateOferta: (id, patch) =>
-      setState((s) => ({ ...s, ofertas: s.ofertas.map((o) => (o.id === id ? { ...o, ...patch } : o)) })),
+      setState((s) => ({ ...s, ofertas: s.ofertas.map((o) => (o.id === id ? aplicarPatch(o, patch) : o)) })),
     removeOferta: (id) => setState((s) => ({ ...s, ofertas: s.ofertas.filter((o) => o.id !== id) })),
     // Varias de golpe. Borrar 22 descartadas de una en una, confirmando cada una,
     // no lo hace nadie: se quedan ahí y el tablero deja de significar algo.
@@ -127,22 +199,46 @@ export const esSemilla = (o) => String(o.id).startsWith('seed-')
 // "guardada", y esa es justo la pregunta que no se podía responder mirando la
 // portada.
 export function agrupar(ofertas) {
-  const abiertas = ofertas.filter((o) => o.estado === 'guardada')
+  const de = (e) => ofertas.filter((o) => o.estado === e)
+  const guardadas = de('guardada')
+  const preparadas = de('preparada')
+  const enviadas = de('enviada')
+  const entrevistas = de('entrevista')
+
   return {
-    // Lo que has mandado y lo que está en marcha: la lista, no un número.
-    vivas: ofertas.filter((o) => o.estado === 'enviada' || o.estado === 'entrevista'),
-    abiertas,
-    soloAuditadas: abiertas.filter((o) => o.auditoria && !o.cv),
-    conCV: abiertas.filter((o) => o.cv),
-    // Enlace + CV es exactamente lo que Ofertas.jsx exige para enseñar "Aplicar".
-    listas: abiertas.filter((o) => o.url && o.cv),
-    // A un paso: encaje alto y sin adaptar todavía. Adaptar cuesta una llamada al
+    guardadas,
+    preparadas,
+    enviadas,
+    entrevistas,
+    contratado: de('contratado'),
+    rechazadas: de('rechazada'),
+    descartadas: de('descartada'),
+
+    // Lo que está en marcha de verdad: mandado y esperando, o ya hablando.
+    vivas: [...enviadas, ...entrevistas],
+    // Lo que te queda por hacer, que es "guardada" (nada aún) + "preparada"
+    // (CV hecho, sin mandar).
+    porRevisar: [...guardadas, ...preparadas],
+
+    // "preparada" ES tener CV, así que estos grupos ya no deducen nada de los
+    // campos: se leen del estado. Antes había que mirar `cv` porque las dos
+    // cosas vivían en "guardada".
+    sinAuditar: guardadas.filter((o) => !o.auditoria),
+    soloAuditadas: guardadas.filter((o) => o.auditoria),
+    listas: preparadas.filter((o) => o.url),
+    // A un paso: encaje alto y todavía sin adaptar. Adaptar cuesta una llamada al
     // modelo, así que la lista corta de las que la merecen vale más que el total.
-    prometedoras: abiertas.filter(
-      (o) => !o.cv && (o.auditoria?.encaje?.imprescindibles ?? 0) >= 75
+    prometedoras: guardadas.filter(
+      (o) => (o.auditoria?.encaje?.imprescindibles ?? 0) >= 75
     ),
-    sinAuditar: abiertas.filter((o) => !o.auditoria),
-    descartadas: ofertas.filter((o) => o.estado === 'descartada'),
+
+    // El seguimiento de verdad: las enviadas, la que lleva más tiempo callada
+    // primero. Las de antes de que se guardara la historia no tienen días y se
+    // van al final en vez de fingir un cero.
+    sinRespuesta: [...enviadas].sort(
+      (a, b) => (diasDesde(desdeCuando(b, 'enviada')) ?? -1) - (diasDesde(desdeCuando(a, 'enviada')) ?? -1)
+    ),
+
     semilla: ofertas.filter(esSemilla),
   }
 }
