@@ -59,7 +59,7 @@ const Proceso = ({ pasos, activo, error = null, compacto = false, nota = null })
       )}
 
       {error && (
-        <p className="text-xs flex gap-1.5" style={{ color: '#8A4A3C' }}>
+        <p className="text-xs flex gap-1.5" style={{ color: 'var(--s-perdida)' }}>
           <TriangleAlert size={13} className="shrink-0 mt-0.5" />{error}
         </p>
       )}

@@ -26,13 +26,13 @@ const Extension = () => {
       hint="Es quien rellena el formulario del portal. Una web no puede tocar el formulario de otro dominio; la extensión sí, en tu propia sesión."
     >
       {instalada ? (
-        <p className="text-[13px] flex gap-2 items-center p-2.5 rounded-lg" style={{ background: 'var(--s-chip-green)', color: 'var(--s-accent-dark)' }}>
+        <p className="text-[13px] flex gap-2 items-center p-2.5 rounded-lg" style={{ background: 'var(--s-chip-green)', color: 'var(--s-ganada)' }}>
           <Check size={15} className="shrink-0" />
           <span><b>Instalada.</b> El botón «Aplicar» de una oferta con enlace y CV ya funciona.</span>
         </p>
       ) : (
         <>
-          <p className="text-[13px] flex gap-2 p-2.5 rounded-lg" style={{ background: '#F9F1E4', color: '#8A6D2E' }}>
+          <p className="text-[13px] flex gap-2 p-2.5 rounded-lg" style={{ background: 'var(--s-atencion-f)', color: 'var(--s-atencion)' }}>
             <TriangleAlert size={15} className="shrink-0 mt-0.5" />
             <span>
               <b>No está instalada</b>, así que «Aplicar» no va a hacer nada. Se carga una vez y se queda.
@@ -105,7 +105,7 @@ const SiNo = ({ label, valor, onChange }) => (
           key={t}
           onClick={() => onChange(v)}
           className="px-3 py-1 rounded-lg text-xs font-semibold"
-          style={{ background: valor === v ? 'var(--s-accent)' : 'transparent', color: valor === v ? '#FDFBF4' : 'var(--s-muted)' }}
+          style={{ background: valor === v ? 'var(--s-accent)' : 'transparent', color: valor === v ? 'var(--s-sobre-acento)' : 'var(--s-muted)' }}
         >
           {t}
         </button>
@@ -138,7 +138,7 @@ const Perfil = ({ perfil, setPerfil }) => {
         </p>
       </div>
 
-      <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: '#F5F1E6', color: 'var(--s-muted)' }}>
+      <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-bg)', color: 'var(--s-muted)' }}>
         <Info size={13} className="shrink-0 mt-0.5" />
         <span>
           Al pulsar «Aplicar» en una oferta, la extensión rellena el formulario del portal con esto
@@ -197,7 +197,7 @@ const Perfil = ({ perfil, setPerfil }) => {
               className="px-3 py-1.5 rounded-full text-xs font-semibold border"
               style={{
                 background: p.eeo === v ? 'var(--s-accent)' : 'var(--s-surface)',
-                color: p.eeo === v ? '#FDFBF4' : 'var(--s-muted)',
+                color: p.eeo === v ? 'var(--s-sobre-acento)' : 'var(--s-muted)',
                 borderColor: p.eeo === v ? 'var(--s-accent)' : 'var(--s-border)',
               }}
             >

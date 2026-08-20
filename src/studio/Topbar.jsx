@@ -24,7 +24,7 @@ const Topbar = ({ view, onNav, onNueva, cola = 0 }) => (
         className="w-8 h-8 rounded-[10px] flex items-center justify-center"
         style={{ background: 'var(--s-accent)' }}
       >
-        <FileText size={16} color="#FDFBF4" />
+        <FileText size={16} color="var(--s-sobre-acento)" />
       </div>
       <span className="text-[17px] font-semibold" style={{ fontFamily: 'var(--s-display)' }}>
         CV Studio
@@ -38,7 +38,7 @@ const Topbar = ({ view, onNav, onNueva, cola = 0 }) => (
           onClick={() => onNav(n.id)}
           className="text-sm transition-colors"
           style={{
-            color: view === n.id ? 'var(--s-accent-dark)' : 'var(--s-muted)',
+            color: view === n.id ? 'var(--s-text)' : 'var(--s-muted)',
             fontWeight: view === n.id ? 600 : 500,
           }}
         >
@@ -51,7 +51,7 @@ const Topbar = ({ view, onNav, onNueva, cola = 0 }) => (
       <button
         onClick={onNueva}
         className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold"
-        style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+        style={{ background: 'var(--s-accent)', color: 'var(--s-sobre-acento)' }}
       >
         <Plus size={15} /> Nueva oferta
       </button>

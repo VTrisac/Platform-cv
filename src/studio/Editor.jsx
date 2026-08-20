@@ -251,8 +251,8 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                   <span
                     className="text-xs px-2 py-1 rounded-full font-semibold"
                     style={{
-                      background: activo ? 'var(--s-chip-green)' : 'transparent',
-                      color: activo ? 'var(--s-accent-dark)' : hecho ? 'var(--s-accent)' : 'var(--s-muted)',
+                      background: activo ? 'var(--s-atencion-f)' : 'transparent',
+                      color: activo ? 'var(--s-atencion)' : hecho ? 'var(--s-ganada)' : 'var(--s-muted)',
                     }}
                   >
                     {i + 1}. {label}
@@ -286,7 +286,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
               disabled={!!loading}
               title={fuenteUrl ? `Rellenar el formulario de ${fuenteUrl}` : 'Esta oferta no tiene enlace'}
               className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
-              style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+              style={{ background: 'var(--s-accent)', color: 'var(--s-sobre-acento)' }}
             >
               {loading === 'aplicar' ? <Loader2 size={15} className="animate-spin" /> : <Send size={15} />}
               {loading === 'aplicar' ? 'Preparando…' : 'Aplicar'}
@@ -307,7 +307,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                       key={l}
                       onClick={() => setLang(l)}
                       className="px-2.5 py-1 rounded-lg text-xs font-semibold"
-                      style={{ background: lang === l ? 'var(--s-accent)' : 'transparent', color: lang === l ? '#FDFBF4' : 'var(--s-muted)' }}
+                      style={{ background: lang === l ? 'var(--s-accent)' : 'transparent', color: lang === l ? 'var(--s-sobre-acento)' : 'var(--s-muted)' }}
                     >
                       {l.toUpperCase()}
                     </button>
@@ -331,7 +331,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                   onClick={prepararTodo}
                   disabled={!!loading}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold w-fit disabled:opacity-50"
-                  style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+                  style={{ background: 'var(--s-accent)', color: 'var(--s-sobre-acento)' }}
                 >
                   <Sparkles size={15} />
                   {loading ? 'Preparando…' : 'Preparar todo'}
@@ -349,7 +349,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                   auditar son ~50 s y adaptar ~35 s más. */}
               {loading && loading !== 'pdf' && <Proceso pasos={FASES} activo={loading} />}
               {error && (
-                <p className="text-xs flex gap-1.5" style={{ color: '#8A4A3C' }}>
+                <p className="text-xs flex gap-1.5" style={{ color: 'var(--s-perdida)' }}>
                   <TriangleAlert size={13} className="shrink-0 mt-0.5" />{error}
                 </p>
               )}
@@ -370,7 +370,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
               </div>
             )}
             {error && (
-              <p className="mt-4 text-xs flex gap-1.5" style={{ color: '#8A4A3C' }}>
+              <p className="mt-4 text-xs flex gap-1.5" style={{ color: 'var(--s-perdida)' }}>
                 <TriangleAlert size={13} className="shrink-0 mt-0.5" />{error}
               </p>
             )}
@@ -385,7 +385,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                   ningún sitio, así que pulsar "Aplicar" sin la extensión no
                   hacía nada visible. */}
               {error && (
-                <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: '#F9EDEA', color: '#8A4A3C' }}>
+                <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-perdida-f)', color: 'var(--s-perdida)' }}>
                   <TriangleAlert size={13} className="shrink-0 mt-0.5" /><span>{error}</span>
                 </p>
               )}
@@ -393,7 +393,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                 <Proceso pasos={APLICAR} activo="aplicar" nota="El formulario lo rellena la extensión en la pestaña que abra." />
               )}
               {guardado && (
-                <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-chip-green)', color: 'var(--s-accent-dark)' }}>
+                <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-chip-green)', color: 'var(--s-ganada)' }}>
                   <FileDown size={13} className="shrink-0 mt-0.5" />
                   <span>
                     {guardado}{' · '}
@@ -409,7 +409,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
               {/* El botón Aplicar se pinta con extensión o sin ella y solo falla
                   al pulsarlo. Decirlo antes cuesta cuatro líneas. */}
               {!hayExtension() && (
-                <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: '#F9F1E4', color: '#8A6D2E' }}>
+                <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-atencion-f)', color: 'var(--s-atencion)' }}>
                   <TriangleAlert size={13} className="shrink-0 mt-0.5" /><span>{INSTALAR}</span>
                 </p>
               )}
@@ -420,7 +420,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                     <span><b>Bloqueado:</b> {meta.dropped?.join(', ') || 'nada inventado'}</span>
                   </p>
                   {meta.inventions?.length > 0 && (
-                    <p className="text-xs flex gap-1.5 p-2 rounded-lg" style={{ background: '#F9EDEA', color: '#8A4A3C' }}>
+                    <p className="text-xs flex gap-1.5 p-2 rounded-lg" style={{ background: 'var(--s-perdida-f)', color: 'var(--s-perdida)' }}>
                       <TriangleAlert size={13} className="shrink-0 mt-0.5" />
                       <span><b>Revisa el perfil:</b> menciona {meta.inventions.join(', ')}, que no está en tu CV.</span>
                     </p>
@@ -466,7 +466,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                     {/* Misma señal que en el CV: la carta es texto libre y no se
                         puede filtrar, solo avisar de lo que se contradice. */}
                     {cartaInv.length > 0 && (
-                      <p className="text-xs flex gap-1.5 p-2 rounded-lg" style={{ background: '#F9EDEA', color: '#8A4A3C' }}>
+                      <p className="text-xs flex gap-1.5 p-2 rounded-lg" style={{ background: 'var(--s-perdida-f)', color: 'var(--s-perdida)' }}>
                         <TriangleAlert size={13} className="shrink-0 mt-0.5" />
                         <span><b>Revisa la carta:</b> menciona {cartaInv.join(', ')}, que no está en tu CV.</span>
                       </p>
@@ -499,7 +499,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                       className="px-3 py-1.5 rounded-full text-xs font-semibold border"
                       style={{
                         background: design === i ? 'var(--s-accent)' : 'var(--s-surface)',
-                        color: design === i ? '#FDFBF4' : 'var(--s-muted)',
+                        color: design === i ? 'var(--s-sobre-acento)' : 'var(--s-muted)',
                         borderColor: design === i ? 'var(--s-accent)' : 'var(--s-border)',
                       }}
                     >

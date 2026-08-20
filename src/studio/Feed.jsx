@@ -112,7 +112,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
       </div>
 
       {error && (
-        <p className="text-xs flex gap-1.5" style={{ color: '#8A4A3C' }}>
+        <p className="text-xs flex gap-1.5" style={{ color: 'var(--s-perdida)' }}>
           <TriangleAlert size={13} className="shrink-0 mt-0.5" />{error}
         </p>
       )}
@@ -128,7 +128,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
       {/* Un token caducado no da error, da cero ofertas: sin este aviso la
           fuente desaparece del feed y no te enteras. */}
       {vista?.dead?.length > 0 && (
-        <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: '#F9F1E4', color: '#8A6D2E' }}>
+        <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-atencion-f)', color: 'var(--s-atencion)' }}>
           <TriangleAlert size={13} className="shrink-0 mt-0.5" />
           <span>
             <b>Sin resultados:</b> {vista.dead.map((d) => `${d.name} (${d.error})`).join(', ')}.
@@ -145,7 +145,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
       >
         <div
           className="flex items-center gap-4 px-5 py-2.5 text-xs font-semibold"
-          style={{ background: '#F5F1E6', color: 'var(--s-muted)', letterSpacing: '0.3px' }}
+          style={{ background: 'var(--s-bg)', color: 'var(--s-muted)', letterSpacing: '0.3px' }}
         >
           <span className="w-[60px]">ENCAJE</span>
           <span className="w-[90px]">FECHA</span>
@@ -175,8 +175,8 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
                 <span
                   className="px-2 py-1 rounded-full text-xs font-bold"
                   style={{
-                    background: j.nota >= 8 ? '#E3EBDC' : j.nota >= 6 ? '#F3EAD6' : '#EFEADB',
-                    color: j.nota >= 8 ? '#48603F' : j.nota >= 6 ? '#8A6D2E' : '#6C6F5C',
+                    background: j.nota >= 8 ? 'var(--s-ganada-f)' : j.nota >= 6 ? 'var(--s-atencion-f)' : 'var(--s-hueco)',
+                    color: j.nota >= 8 ? 'var(--s-ganada)' : j.nota >= 6 ? 'var(--s-atencion)' : 'var(--s-muted)',
                   }}
                   title={`Cubres ${j.hits.length} de las ${j.stack.length} tecnologías que pide`}
                 >
@@ -198,7 +198,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
               <span className="w-[160px] text-[13px] truncate" style={{ color: 'var(--s-muted)' }} title={j.location}>
                 {j.location}
               </span>
-              <span className="w-[90px] text-[13px]" style={{ color: j.salario ? 'var(--s-accent-dark)' : 'var(--s-muted)' }}>
+              <span className="w-[90px] text-[13px]" style={{ color: j.salario ? 'var(--s-text)' : 'var(--s-muted)' }}>
                 {j.salario ? `${Math.round(j.salario / 1000)}k €` : 'sin salario'}
               </span>
               {/* Los dos números que hay detrás de la nota: qué cubres y de

@@ -89,7 +89,7 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
               className="px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors"
               style={{
                 background: filtro === k ? 'var(--s-accent)' : 'var(--s-surface)',
-                color: filtro === k ? '#FDFBF4' : 'var(--s-muted)',
+                color: filtro === k ? 'var(--s-sobre-acento)' : 'var(--s-muted)',
                 borderColor: filtro === k ? 'var(--s-accent)' : 'var(--s-border)',
               }}
             >
@@ -113,7 +113,7 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
               <button
                 onClick={() => borrar([...seleccion], 'ofertas seleccionadas')}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                style={{ background: '#F3E4E1', color: '#8A4A3C' }}
+                style={{ background: 'var(--s-perdida-f)', color: 'var(--s-perdida)' }}
               >
                 <Trash2 size={13} /> Borrar
               </button>
@@ -164,7 +164,7 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
       >
         <div
           className="flex items-center gap-4 px-5 py-2.5 text-xs font-semibold"
-          style={{ background: '#F5F1E6', color: 'var(--s-muted)', letterSpacing: '0.3px' }}
+          style={{ background: 'var(--s-bg)', color: 'var(--s-muted)', letterSpacing: '0.3px' }}
         >
           <span className="w-[22px] flex items-center">
             <input
@@ -198,7 +198,7 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
             className="flex items-center gap-4 px-5 py-3.5 border-t"
             style={{
               borderColor: 'var(--s-border)',
-              background: seleccion.has(o.id) ? 'var(--s-chip-green)' : 'transparent',
+              background: seleccion.has(o.id) ? 'var(--s-hueco)' : 'transparent',
             }}
           >
             <span className="w-[22px] flex items-center">
@@ -221,10 +221,10 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
                 <span
                   className="px-2 py-1 rounded-full text-xs font-bold"
                   style={{
-                    background: o.auditoria.encaje.imprescindibles >= 75 ? '#E3EBDC'
-                      : o.auditoria.encaje.imprescindibles >= 50 ? '#F3EAD6' : '#F3E4E1',
-                    color: o.auditoria.encaje.imprescindibles >= 75 ? '#48603F'
-                      : o.auditoria.encaje.imprescindibles >= 50 ? '#8A6D2E' : '#8A4A3C',
+                    background: o.auditoria.encaje.imprescindibles >= 75 ? 'var(--s-ganada-f)'
+                      : o.auditoria.encaje.imprescindibles >= 50 ? 'var(--s-atencion-f)' : 'var(--s-perdida-f)',
+                    color: o.auditoria.encaje.imprescindibles >= 75 ? 'var(--s-ganada)'
+                      : o.auditoria.encaje.imprescindibles >= 50 ? 'var(--s-atencion)' : 'var(--s-perdida)',
                   }}
                   title={`${o.auditoria.encaje.bloqueantes.length} bloqueantes`}
                 >
@@ -248,7 +248,7 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
                   aria-label={`Estado de ${o.empresa}`}
                 >
                   {Object.entries(ESTADOS).map(([k, v]) => (
-                    <option key={k} value={k} style={{ background: '#FDFBF4', color: '#24261C' }}>
+                    <option key={k} value={k} style={{ background: 'var(--s-surface)', color: 'var(--s-text)' }}>
                       {v.label}
                     </option>
                   ))}
@@ -281,7 +281,7 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
               {o.variante ? (
                 <span
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium w-fit"
-                  style={{ background: 'var(--s-chip-green)', color: 'var(--s-accent-dark)' }}
+                  style={{ background: 'var(--s-chip-green)', color: 'var(--s-ganada)' }}
                 >
                   <FileText size={12} /> {o.variante}
                 </span>
@@ -308,7 +308,7 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
                   onClick={() => onAplicar(o)}
                   title="Rellenar el formulario del portal con este CV. No lo envía: confirmas tú."
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold"
-                  style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+                  style={{ background: 'var(--s-accent)', color: 'var(--s-sobre-acento)' }}
                 >
                   <Send size={12} /> Aplicar
                 </button>

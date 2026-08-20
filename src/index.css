@@ -21,25 +21,97 @@
   --shadow: 0 8px 24px rgba(36, 38, 28, 0.07);
 }
 
-/* CV Studio — paleta "Salvia & arena" del diseño de Pencil.
-   Va en su propio scope para no pelearse con los temas del visor de CV, que
-   siguen mandando dentro de la previsualización A4. */
+/* CV Studio — paleta "Grafito y ámbar".
+   Grises fríos y un solo acento cálido. Vive en su propio scope para no
+   pelearse con los temas del visor de CV: los diseños del CV leen el :root de
+   arriba y ESE no se toca, porque es el color que acaba impreso en tu PDF.
+
+   Regla de la casa: aquí no hay hex sueltos en los componentes. Todo color de
+   la app sale de estos tokens, que es lo que permite cambiar la paleta entera
+   editando un bloque en vez de 92 líneas repartidas por once ficheros.
+
+   El acento va en DOS tonos y no es capricho: #B4761B con texto blanco encima
+   se queda en 3,9:1, por debajo del mínimo legible. El claro para franjas,
+   chips y subrayados —que no llevan texto—; el hondo bajo el texto de los
+   botones, que sube a 5,8:1. */
 .studio {
-  --s-bg: #F5F1E6;
-  --s-surface: #FDFBF4;
-  --s-border: #DFD8C4;
-  --s-accent: #5F7A56;
-  --s-accent-dark: #48603F;
-  --s-text: #24261C;
-  --s-muted: #6C6F5C;
-  --s-chip: #E9E3D2;
-  --s-chip-green: #E3EBDC;
-  --s-shadow: 0 8px 24px rgba(36, 38, 28, 0.07);
+  --s-bg: #EFF1F3;
+  --s-surface: #FFFFFF;
+  --s-hueco: #E4E8EC;
+  --s-border: #D8DCE1;
+  --s-border-fuerte: #C3C9D1;
+  --s-text: #1B2027;
+  /* Medido: #626B77 sobre el gris de los chips daba 4,45:1, justo por debajo
+     del mínimo. Un punto más oscuro y pasa a 5,05:1. */
+  --s-muted: #5A626D;
+
+  /* El acento es el TONO HONDO, no el claro, porque en esta app el acento se
+     usa casi siempre como FONDO con texto blanco encima: píldoras de filtro,
+     selectores de idioma, botones primarios. Con #B4761B eso daba 3,89:1 y no
+     pasa; con este, 5,56:1. El claro no hace falta: aquí no hay franjas
+     decorativas que lo necesiten. */
+  --s-accent: #8F5D14;
+  --s-accent-dark: #74490F;
+  --s-sobre-acento: #FFFFFF;
+
+  /* El estado NO es el acento: si "atención" y la marca comparten color, el
+     estado deja de significar nada. */
+  --s-espera: #3D5A8A;    --s-espera-f: #E4EAF4;
+  /* Ámbar de texto, no de fondo: sobre el relleno pálido, #B4761B se quedaba
+     en 3,23:1. Este llega a 4,94:1. */
+  --s-atencion: #8A5A12;  --s-atencion-f: #F6ECD9;
+  --s-perdida: #A24238;   --s-perdida-f: #F7E4E1;
+  --s-ganada: #2E7355;    --s-ganada-f: #DCEDE5;
+
+  /* Nombres viejos que siguen usados por los componentes. */
+  --s-chip: var(--s-hueco);
+  --s-chip-green: var(--s-ganada-f);
+
+  /* Tintada con la tinta fría, nunca negro puro. */
+  --s-shadow: 0 8px 24px rgba(27, 32, 39, .08);
+  --s-shadow-alta: 0 14px 34px rgba(27, 32, 39, .14);
+
   --s-display: 'Fraunces', Georgia, serif;
   --s-body: 'Inter', system-ui, sans-serif;
+  --s-curva: cubic-bezier(.22, .61, .36, 1);
+
   background: var(--s-bg);
   color: var(--s-text);
   font-family: var(--s-body);
+  /* Un panel entero de cifras que bailaban al cambiar de ancho. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Menos en el CV, que es texto corrido y no una tabla. */
+.studio .print-a4 { font-variant-numeric: normal; }
+
+/* --- lo que faltaba entero: los estados de interacción -----------------
+   Medido antes de escribir esto: 1 hover, 0 active y 0 focus en once
+   ficheros. Va aquí y por selector de elemento a propósito — los componentes
+   pintan con estilos en línea, que ganan a cualquier clase, pero NO tocan
+   outline ni transform, así que por ahí sí se puede entrar sin reescribir
+   once ficheros. */
+.studio :is(a, button, select, input, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--s-accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+.studio button:not(:disabled),
+.studio a,
+.studio select {
+  transition: transform .12s var(--s-curva), opacity .16s var(--s-curva),
+    box-shadow .18s var(--s-curva), border-color .18s var(--s-curva);
+}
+.studio button:not(:disabled):hover { opacity: .92; }
+.studio button:not(:disabled):active { transform: translateY(1px) scale(.99); }
+
+/* Los títulos y los textos de ayuda, sin palabras huérfanas colgando. */
+.studio h1, .studio h2, .studio h3 { text-wrap: balance; }
+.studio p { text-wrap: pretty; }
+
+@media (prefers-reduced-motion: reduce) {
+  .studio button:not(:disabled):active { transform: none; }
 }
 
 .theme-transition,

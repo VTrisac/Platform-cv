@@ -20,13 +20,18 @@ const KEY = 'cvStudio.v1'
 // "contratado" en masculino a propósito: las demás concuerdan con "la oferta",
 // esta habla de ti.
 export const ESTADOS = {
-  guardada: { label: 'Guardada', bg: '#EFEADB', fg: '#6C6F5C' },
-  preparada: { label: 'Preparada', bg: '#F3EAD6', fg: '#8A6D2E' },
-  enviada: { label: 'Enviada', bg: '#E7E9F0', fg: '#3B4A6B' },
-  entrevista: { label: 'Entrevista', bg: '#E3EBDC', fg: '#48603F' },
-  contratado: { label: 'Contratado', bg: '#CFE0C6', fg: '#33502A' },
-  rechazada: { label: 'Rechazada', bg: '#F3E4E1', fg: '#8A4A3C' },
-  descartada: { label: 'Descartada', bg: '#EDEDE8', fg: '#8A8C7E' },
+  // Siete estados y siete lecturas distintas. Dos que se parezcan es un chip
+  // que hay que leer para saber qué dice, y entonces el color no sirve de nada.
+  guardada: { label: 'Guardada', bg: 'var(--s-hueco)', fg: 'var(--s-muted)' },
+  preparada: { label: 'Preparada', bg: 'var(--s-atencion-f)', fg: 'var(--s-atencion)' },
+  enviada: { label: 'Enviada', bg: 'var(--s-espera-f)', fg: 'var(--s-espera)' },
+  entrevista: { label: 'Entrevista', bg: 'var(--s-ganada-f)', fg: 'var(--s-ganada)' },
+  // El único relleno macizo de los siete: es el final bueno y se ve desde lejos.
+  contratado: { label: 'Contratado', bg: 'var(--s-ganada)', fg: 'var(--s-sobre-acento)' },
+  rechazada: { label: 'Rechazada', bg: 'var(--s-perdida-f)', fg: 'var(--s-perdida)' },
+  // Gris más denso que "guardada": las dos son neutras y con el mismo tono no
+  // se distinguían (en la paleta anterior tampoco, era #EFEADB contra #EDEDE8).
+  descartada: { label: 'Descartada', bg: 'var(--s-border)', fg: 'var(--s-muted)' },
 }
 
 // El paso hacia delante, que es lo único que necesita el botón de avanzar.

@@ -48,7 +48,7 @@ const Pills = ({ opciones, valor, onChange, multi }) => (
           className="px-3 py-1.5 rounded-full text-xs font-semibold border"
           style={{
             background: activo ? 'var(--s-accent)' : 'var(--s-surface)',
-            color: activo ? '#FDFBF4' : 'var(--s-muted)',
+            color: activo ? 'var(--s-sobre-acento)' : 'var(--s-muted)',
             borderColor: activo ? 'var(--s-accent)' : 'var(--s-border)',
           }}
         >
@@ -158,7 +158,7 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
         {/* El número está medido, no estimado: 21 ofertas reales de LinkedIn de
             la última semana, tres con cifra. Va aquí para que la decisión se
             tome viendo lo que cuesta. */}
-        <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: '#F9F1E4', color: '#8A6D2E' }}>
+        <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-atencion-f)', color: 'var(--s-atencion)' }}>
           <Info size={13} className="shrink-0 mt-0.5" />
           <span>
             Solo el <b>14%</b> de las ofertas publica salario (medido sobre 21 reales de LinkedIn).

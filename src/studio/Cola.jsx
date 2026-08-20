@@ -9,9 +9,9 @@ import { FASES } from './lote'
 // (lo hace Studio en cada fase). Esto es solo la ventana a lo que está pasando —
 // si te vas a otra pantalla a mitad, no pierdes nada.
 const REC = {
-  aplicar: { txt: 'Aplica', bg: '#E3EBDC', fg: '#48603F' },
-  aplicar_con_reservas: { txt: 'Con reservas', bg: '#F3EAD6', fg: '#8A6D2E' },
-  descartar: { txt: 'Descártala', bg: '#F3E4E1', fg: '#8A4A3C' },
+  aplicar: { txt: 'Aplica', bg: 'var(--s-ganada-f)', fg: 'var(--s-ganada)' },
+  aplicar_con_reservas: { txt: 'Con reservas', bg: 'var(--s-atencion-f)', fg: 'var(--s-atencion)' },
+  descartar: { txt: 'Descártala', bg: 'var(--s-perdida-f)', fg: 'var(--s-perdida)' },
 }
 
 // El enlace entero no cabe y el texto pegado tampoco: la primera línea basta
@@ -52,7 +52,7 @@ const Cola = ({ cola, onAbrir, onNueva }) => {
           // La empresa puede venir vacía si pegaste el texto sin nombre: un
           // separador suelto delante del puesto queda a medio hacer.
           const cabecera = a && [a.empresa, a.rol].filter(Boolean).join(' · ')
-          const rec = a && (REC[a.recomendacion] ?? { txt: a.recomendacion, bg: '#EDEDE8', fg: '#6C6F5C' })
+          const rec = a && (REC[a.recomendacion] ?? { txt: a.recomendacion, bg: 'var(--s-hueco)', fg: 'var(--s-muted)' })
           return (
             <div
               key={i}
@@ -92,7 +92,7 @@ const Cola = ({ cola, onAbrir, onNueva }) => {
                       rel="noreferrer"
                       title="Abrir la oferta en el portal"
                       className="flex items-center gap-1.5 text-xs font-semibold"
-                      style={{ color: 'var(--s-accent-dark)' }}
+                      style={{ color: 'var(--s-text)' }}
                     >
                       <ExternalLink size={13} /> Portal
                     </a>
@@ -119,14 +119,14 @@ const Cola = ({ cola, onAbrir, onNueva }) => {
                   </span>
                   {a.salario?.pedir && (
                     <span>
-                      Puedes pedir <b style={{ color: 'var(--s-accent-dark)' }}>
+                      Puedes pedir <b style={{ color: 'var(--s-text)' }}>
                         {a.salario.pedir.toLocaleString('es-ES')} €
                       </b>
                       {a.salario.publicado ? ' (publicado)' : ''}
                     </span>
                   )}
                   {a.encaje.bloqueantes.length > 0 && (
-                    <span className="flex items-center gap-1.5" style={{ color: '#8A4A3C' }}>
+                    <span className="flex items-center gap-1.5" style={{ color: 'var(--s-perdida)' }}>
                       <TriangleAlert size={12} /> {a.encaje.bloqueantes.length} bloqueante
                       {a.encaje.bloqueantes.length > 1 ? 's' : ''}
                     </span>

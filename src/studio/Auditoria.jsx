@@ -4,9 +4,9 @@ import { Check, Minus, X, TriangleAlert, Sparkles, Trash2, Info } from 'lucide-r
 // la pena aplicar, así que lo primero que se ve es el veredicto y los
 // bloqueantes, no la lista completa.
 const ENCAJE = {
-  si: { icon: Check, color: '#48603F', bg: '#E3EBDC', label: 'Lo cumples' },
-  parcial: { icon: Minus, color: '#8A6D2E', bg: '#F3EAD6', label: 'Parcial' },
-  no: { icon: X, color: '#8A4A3C', bg: '#F3E4E1', label: 'No lo cumples' },
+  si: { icon: Check, color: 'var(--s-ganada)', bg: 'var(--s-ganada-f)', label: 'Lo cumples' },
+  parcial: { icon: Minus, color: 'var(--s-atencion)', bg: 'var(--s-atencion-f)', label: 'Parcial' },
+  no: { icon: X, color: 'var(--s-perdida)', bg: 'var(--s-perdida-f)', label: 'No lo cumples' },
 }
 
 const Barra = ({ label, pct }) => (
@@ -15,10 +15,10 @@ const Barra = ({ label, pct }) => (
       <span>{label}</span>
       <span className="font-semibold">{pct === null ? '—' : `${pct}%`}</span>
     </div>
-    <div className="h-2 rounded-full overflow-hidden" style={{ background: '#EFEADB' }}>
+    <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--s-hueco)' }}>
       <div
         className="h-full rounded-full"
-        style={{ width: `${pct ?? 0}%`, background: pct >= 70 ? '#5F7A56' : pct >= 40 ? '#C08A2E' : '#8A4A3C' }}
+        style={{ width: `${pct ?? 0}%`, background: pct >= 70 ? 'var(--s-ganada)' : pct >= 40 ? 'var(--s-atencion)' : 'var(--s-perdida)' }}
       />
     </div>
   </div>
@@ -40,7 +40,7 @@ const Salario = ({ s }) => {
         <span className="text-xs font-semibold" style={{ color: 'var(--s-muted)', letterSpacing: '0.3px' }}>
           LO QUE PUEDES PEDIR
         </span>
-        <span className="text-[26px] font-semibold leading-none" style={{ fontFamily: 'var(--s-display)', color: 'var(--s-accent-dark)' }}>
+        <span className="text-[26px] font-semibold leading-none" style={{ fontFamily: 'var(--s-display)', color: 'var(--s-text)' }}>
           {euros(s.pedir)}
         </span>
       </div>
@@ -80,10 +80,10 @@ const Salario = ({ s }) => {
 
 const Auditoria = ({ a, onAdaptar, onDescartar }) => {
   const rec = {
-    aplicar: { txt: 'Aplica', bg: '#E3EBDC', fg: '#48603F' },
-    aplicar_con_reservas: { txt: 'Aplica con reservas', bg: '#F3EAD6', fg: '#8A6D2E' },
-    descartar: { txt: 'Descártala', bg: '#F3E4E1', fg: '#8A4A3C' },
-  }[a.recomendacion] ?? { txt: a.recomendacion, bg: '#EDEDE8', fg: '#6C6F5C' }
+    aplicar: { txt: 'Aplica', bg: 'var(--s-ganada-f)', fg: 'var(--s-ganada)' },
+    aplicar_con_reservas: { txt: 'Aplica con reservas', bg: 'var(--s-atencion-f)', fg: 'var(--s-atencion)' },
+    descartar: { txt: 'Descártala', bg: 'var(--s-perdida-f)', fg: 'var(--s-perdida)' },
+  }[a.recomendacion] ?? { txt: a.recomendacion, bg: 'var(--s-hueco)', fg: 'var(--s-muted)' }
 
   const imprescindibles = a.requisitos.filter((r) => r.tipo === 'imprescindible')
   const valorables = a.requisitos.filter((r) => r.tipo === 'valorable')
@@ -156,7 +156,7 @@ const Auditoria = ({ a, onAdaptar, onDescartar }) => {
         {/* El filtro que ninguna palabra clave puede aplicar. Se enseña la
             frase exacta: si te descarta una oferta, quieres poder juzgarla. */}
         {a.ingles && (
-          <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: '#F9EDEA', color: '#8A4A3C' }}>
+          <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: 'var(--s-perdida-f)', color: 'var(--s-perdida)' }}>
             <TriangleAlert size={14} className="shrink-0 mt-0.5" />
             <span>
               <b>Inglés imprescindible:</b> «{a.ingles}». Con el filtro activo en Criterios, esta oferta
@@ -166,7 +166,7 @@ const Auditoria = ({ a, onAdaptar, onDescartar }) => {
         )}
 
         {a.encaje.bloqueantes.length > 0 && (
-          <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: '#F9EDEA', color: '#8A4A3C' }}>
+          <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: 'var(--s-perdida-f)', color: 'var(--s-perdida)' }}>
             <TriangleAlert size={14} className="shrink-0 mt-0.5" />
             <span>
               <b>Bloqueantes:</b> {a.encaje.bloqueantes.join(' · ')}. Son imprescindibles que no cumples;
@@ -179,7 +179,7 @@ const Auditoria = ({ a, onAdaptar, onDescartar }) => {
           <button
             onClick={onAdaptar}
             className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold"
-            style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+            style={{ background: 'var(--s-accent)', color: 'var(--s-sobre-acento)' }}
           >
             <Sparkles size={15} /> Tengo encaje — adaptar CV
           </button>

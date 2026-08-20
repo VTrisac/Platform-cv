@@ -84,7 +84,7 @@ const NuevaOferta = ({ onListo, onLote, onCerrar }) => {
                   key={l}
                   onClick={() => setLang(l)}
                   className="px-2.5 py-1 rounded-lg text-xs font-semibold"
-                  style={{ background: lang === l ? 'var(--s-accent)' : 'transparent', color: lang === l ? '#FDFBF4' : 'var(--s-muted)' }}
+                  style={{ background: lang === l ? 'var(--s-accent)' : 'transparent', color: lang === l ? 'var(--s-sobre-acento)' : 'var(--s-muted)' }}
                 >
                   {l.toUpperCase()}
                 </button>
@@ -96,7 +96,7 @@ const NuevaOferta = ({ onListo, onLote, onCerrar }) => {
             onClick={lanzar}
             disabled={loading || !entradas.length}
             className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold disabled:opacity-50"
-            style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+            style={{ background: 'var(--s-accent)', color: 'var(--s-sobre-acento)' }}
           >
             {entradas.length > 1 ? <Layers size={15} /> : <Search size={15} />}
             {loading ? 'Auditando…'
@@ -123,7 +123,7 @@ const NuevaOferta = ({ onListo, onLote, onCerrar }) => {
           />
         )}
         {error && (
-          <p className="text-xs flex gap-1.5" style={{ color: '#8A4A3C' }}>
+          <p className="text-xs flex gap-1.5" style={{ color: 'var(--s-perdida)' }}>
             <TriangleAlert size={13} className="shrink-0 mt-0.5" />{error}
           </p>
         )}

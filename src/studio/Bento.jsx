@@ -30,7 +30,7 @@ const Tile = ({ children, w, h, alt, className = '' }) => (
 )
 
 const Label = ({ children }) => (
-  <span className="text-xs font-semibold" style={{ color: 'var(--s-accent-dark)', letterSpacing: '0.8px' }}>
+  <span className="text-xs font-semibold" style={{ color: 'var(--s-muted)', letterSpacing: '0.8px' }}>
     {children}
   </span>
 )
@@ -63,7 +63,7 @@ const Grupo = ({ n, titulo, hint, onClick, destacado }) => (
     disabled={!n}
     className="flex flex-col gap-0.5 items-start p-3 rounded-xl border text-left disabled:opacity-45 flex-1"
     style={{
-      background: destacado && n ? 'var(--s-chip-green)' : 'var(--s-bg)',
+      background: destacado && n ? 'var(--s-atencion-f)' : 'var(--s-bg)',
       borderColor: destacado && n ? 'var(--s-accent)' : 'var(--s-border)',
     }}
   >
@@ -81,7 +81,7 @@ const Contador = ({ n, titulo, hint, estado, onVerOfertas, destacado }) => (
     disabled={!n}
     className="rounded-[20px] p-5 flex flex-col gap-1 items-start text-left disabled:opacity-45 flex-1"
     style={{
-      background: destacado ? 'var(--s-chip-green)' : 'var(--s-surface)',
+      background: destacado ? 'var(--s-ganada-f)' : 'var(--s-surface)',
       border: `1px solid ${destacado ? 'var(--s-accent)' : 'var(--s-border)'}`,
       boxShadow: 'var(--s-shadow)',
     }}
@@ -98,7 +98,7 @@ const Espera = ({ o }) => {
   const d = diasDesde(desdeCuando(o, o.estado))
   if (d === null) return null
   return (
-    <span className="text-[11px] font-semibold" style={{ color: d >= 21 ? '#8A6D2E' : 'var(--s-muted)' }}>
+    <span className="text-[11px] font-semibold" style={{ color: d >= 21 ? 'var(--s-atencion)' : 'var(--s-muted)' }}>
       {d === 0 ? 'hoy' : `${d} d`}
     </span>
   )
@@ -210,7 +210,7 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
             onClick={() => onVerOfertas('preparada')}
             disabled={!g.listas.length}
             className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold mt-3 w-fit disabled:opacity-45"
-            style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+            style={{ background: 'var(--s-accent)', color: 'var(--s-sobre-acento)' }}
           >
             <Send size={14} /> Ver en Ofertas
           </button>
@@ -273,13 +273,13 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
                 derecha={
                   <span className="flex items-center gap-2">
                     {o.auditoria?.salario?.pedir && (
-                      <span className="text-[11px] font-semibold" style={{ color: 'var(--s-accent-dark)' }}>
+                      <span className="text-[11px] font-semibold" style={{ color: 'var(--s-text)' }}>
                         {o.auditoria.salario.pedir.toLocaleString('es-ES')} €
                       </span>
                     )}
                     <span
                       className="px-2 py-1 rounded-full text-xs font-bold"
-                      style={{ background: '#E3EBDC', color: '#48603F' }}
+                      style={{ background: 'var(--s-ganada-f)', color: 'var(--s-ganada)' }}
                     >
                       {o.auditoria.encaje.imprescindibles}%
                     </span>
@@ -303,7 +303,7 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
                     <span>{v.label}</span>
                     <span className="font-semibold">{n}</span>
                   </div>
-                  <div className="h-2 rounded-full overflow-hidden" style={{ background: '#EFEADB' }}>
+                  <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--s-hueco)' }}>
                     <div className="h-full rounded-full" style={{ width: `${pct}%`, background: v.fg }} />
                   </div>
                 </button>
@@ -313,7 +313,7 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
           {/* La semilla de demo cuenta como candidaturas enviadas hasta que se
               borra, así que el pipeline miente mientras siga ahí. */}
           {g.semilla.length > 0 && (
-            <p className="text-xs flex gap-1.5 mt-auto" style={{ color: '#8A6D2E' }}>
+            <p className="text-xs flex gap-1.5 mt-auto" style={{ color: 'var(--s-atencion)' }}>
               <AlertTriangle size={12} className="shrink-0 mt-0.5" />
               {g.semilla.length} filas son la demo inicial. Quítalas en Ofertas: hasta entonces estos números no son tuyos.
             </p>
@@ -331,7 +331,7 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
                 key={o.id}
                 onClick={() => onEditar(o)}
                 className="flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium h-fit"
-                style={{ background: 'var(--s-chip-green)', color: 'var(--s-accent-dark)' }}
+                style={{ background: 'var(--s-chip-green)', color: 'var(--s-ganada)' }}
               >
                 <FileText size={12} /> {o.variante}
               </button>
@@ -343,7 +343,7 @@ const Bento = ({ ofertas, onNav, onEditar, onVerOfertas }) => {
           <button
             onClick={() => onNav('feed')}
             className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-sm font-semibold"
-            style={{ background: 'var(--s-accent)', color: '#FDFBF4' }}
+            style={{ background: 'var(--s-accent)', color: 'var(--s-sobre-acento)' }}
           >
             <TrendingUp size={15} /> Buscar ofertas nuevas
           </button>
