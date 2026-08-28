@@ -15,14 +15,14 @@ import { conCV, useStudio } from './studio/store'
 // del scraper, no los escribes tú. Se guarda la auditoría entera para que
 // reabrirla no vuelva a gastar una llamada al modelo.
 //
-// El filtro de inglés se aplica AQUÍ y no en el feed porque solo la auditoría
-// sabe distinguir "se valora inglés" de "inglés imprescindible": es la única
-// que ha clasificado los requisitos. Descartada, pero guardada con su motivo
-// para que puedas leer qué frase la tumbó.
-const desdeAuditoria = (a, lang, excluirIngles, url = null) => ({
+// El inglés YA NO descarta (28-08-2026). Era un stopper al final del embudo: la
+// oferta ya te había costado una llamada al modelo y aun así nacía descartada y
+// desaparecía del tracker. La auditoría sigue diciendo qué frase lo exige —eso
+// es información, y se ve en Auditoria.jsx—; decidir es tuyo.
+const desdeAuditoria = (a, lang, url = null) => ({
   empresa: a.empresa,
   puesto: a.rol,
-  estado: a.recomendacion === 'descartar' || (excluirIngles && a.ingles) ? 'descartada' : 'guardada',
+  estado: a.recomendacion === 'descartar' ? 'descartada' : 'guardada',
   fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
   variante: null,
   auditoria: a,
@@ -59,12 +59,8 @@ const Studio = () => {
     setView('editor')
   }
 
-  // El criterio efectivo: el tuyo si has tocado la pantalla, y si no el que el
-  // servidor dice haber aplicado.
-  const excluirIngles = (preset ?? base?.preset)?.excluirInglesImprescindible ?? false
-
   const guardarAuditada = (a, lang) => {
-    setActual(addOferta(desdeAuditoria(a, lang, excluirIngles)))
+    setActual(addOferta(desdeAuditoria(a, lang)))
     setModal(false)
     setView('editor')
   }
@@ -86,7 +82,7 @@ const Studio = () => {
     await enLote(entradas, lang, (i, fase, extra = {}) => {
       const parche = { ...extra }
       if (extra.a) {
-        const nueva = addOferta(desdeAuditoria(extra.a, lang, excluirIngles, esUrl(entradas[i]) ? entradas[i].trim() : null))
+        const nueva = addOferta(desdeAuditoria(extra.a, lang, esUrl(entradas[i]) ? entradas[i].trim() : null))
         ids[i] = nueva.id
         nombres[i] = `${extra.a.empresa} · ${lang.toUpperCase()}`
         estados[i] = nueva.estado
@@ -215,9 +211,8 @@ const Studio = () => {
               updateOferta(actual.id, {
                 auditoria: a, lang, empresa: a.empresa, puesto: a.rol,
                 ...(url ? { url } : {}), // no pisar una URL guardada con null
-                ...(excluirIngles && a.ingles ? { estado: 'descartada' } : {}),
               })
-            } else setActual(addOferta(desdeAuditoria(a, lang, excluirIngles, url)))
+            } else setActual(addOferta(desdeAuditoria(a, lang, url)))
           }}
           // La carta se guarda con la oferta, igual que la auditoría: volver a
           // abrirla no debe costar otra llamada al modelo.

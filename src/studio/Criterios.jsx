@@ -2,11 +2,14 @@ import { useEffect } from 'react'
 import { Info, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { criteriosPorDefecto } from './api'
 
-// Pantalla de criterios: qué buscar, qué excluir y en qué ventana de tiempo.
+// Pantalla de criterios: qué buscar, qué descartar y en qué ventana de tiempo.
 //
-// Todo lo de aquí se resuelve con el texto de la oferta y es gratis, salvo el
-// inglés: distinguir "se valora" de "se exige" necesita criterio, así que lo
-// decide la auditoría cuando abres la oferta. Está señalado donde toca.
+// Desde el 28-08-2026 solo TRES cosas descartan de verdad —ubicación, ventana y
+// palabras vetadas—, porque son inequívocas y las escribes tú. El resto ordena:
+// la oferta que no los cumple sigue estando, marcada, más abajo. Antes cada uno
+// tiraba ofertas por su cuenta y todos juntos eran un AND: medido sobre 534
+// ofertas reales, "remoto" tiraba 388 y el combo de todos los días dejaba 26.
+// Un feed vacío no es un filtro fino, es un filtro roto.
 //
 // El preset vive en localStorage y viaja a /api/feed en cada búsqueda. Mientras
 // sea null manda el servidor con sus valores de siempre; en cuanto tocas algo
@@ -105,7 +108,8 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
           Criterios
         </h1>
         <p className="text-sm" style={{ color: 'var(--s-muted)' }}>
-          Qué buscar y qué descartar. Los cambios se aplican en la siguiente búsqueda del Feed.
+          Solo la ubicación, la ventana y las palabras vetadas descartan ofertas. El resto las ordena:
+          lo que cumple todo lo que pides sale arriba. Se aplica en la siguiente búsqueda del Feed.
         </p>
       </div>
 
@@ -118,11 +122,11 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
           <Pills opciones={IA} valor={c.ia} onChange={(ia) => editar({ ia })} />
         </Card>
 
-        <Card title="MODALIDAD" hint="Sin marcar nada, entran todas. Se busca la palabra en el texto: si la oferta no la dice, se descarta. Casi ninguna oferta presencial se declara presencial — pone una ciudad y ya.">
+        <Card title="MODALIDAD" hint="Se busca la palabra en el texto, y casi ninguna oferta la escribe: por eso ya no descarta. Las que no la dicen bajan marcadas como «no dice la modalidad».">
           <Pills multi opciones={MODALIDADES} valor={c.modalidades} onChange={(modalidades) => editar({ modalidades })} />
         </Card>
 
-        <Card title="LENGUAJES OBLIGATORIOS" hint="Los de tu CV. Se exigen TODOS a la vez: marcar dos deja fuera cualquier oferta que no nombre los dos. Sin marcar nada, no filtra.">
+        <Card title="LENGUAJES" hint="Los de tu CV. Cada uno cuenta por separado: cumplir dos de tres sube más que cumplir uno. Ninguno descarta.">
           <Pills
             multi
             opciones={lenguajesCV.map((l) => [l, l])}
@@ -132,7 +136,7 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
         </Card>
       </div>
 
-      <Card title="SALARIO">
+      <Card title="SALARIO" hint="No descarta: las que no lleguen bajan en la lista, marcadas.">
         <div className="flex items-center gap-4">
           <label className="flex items-center gap-2 text-sm">
             Mínimo
@@ -149,42 +153,30 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
-              checked={c.descartarSinSalario}
-              onChange={(e) => editar({ descartarSinSalario: e.target.checked })}
+              // ?? false: un preset guardado antes del 28-08-2026 trae
+              // `descartarSinSalario` y no esto, y React se queja del control suelto.
+              checked={c.exigirSalario ?? false}
+              onChange={(e) => editar({ exigirSalario: e.target.checked })}
             />
-            Descartar las que no publican salario
+            Priorizar las que publican salario
           </label>
         </div>
         {/* El número está medido, no estimado: 21 ofertas reales de LinkedIn de
-            la última semana, tres con cifra. Va aquí para que la decisión se
-            tome viendo lo que cuesta. */}
+            la última semana, tres con cifra. */}
         <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-atencion-f)', color: 'var(--s-atencion)' }}>
           <Info size={13} className="shrink-0 mt-0.5" />
           <span>
             Solo el <b>14%</b> de las ofertas publica salario (medido sobre 21 reales de LinkedIn).
-            Con el interruptor puesto descartas el 86% restante sin leerlas. Apagado, entran marcadas
-            como «sin salario» y solo se descartan las que dicen una cifra por debajo de tu mínimo.
+            Este interruptor <b>ya no descarta</b> ese 86%: las manda al fondo marcadas como
+            «sin salario». Antes tiraba 392 de 534 ofertas de golpe.
           </span>
         </p>
       </Card>
 
-      <Card title="EXCLUSIONES">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={c.excluirInglesImprescindible}
-            onChange={(e) => editar({ excluirInglesImprescindible: e.target.checked })}
-          />
-          Descartar ofertas donde el inglés sea imprescindible
-        </label>
-        <p className="text-xs flex gap-1.5" style={{ color: 'var(--s-muted)' }}>
-          <Info size={13} className="shrink-0 mt-0.5" />
-          <span>
-            Este no se puede decidir con palabras clave: «English» sale en casi toda oferta técnica,
-            muchas veces como «is a plus». Lo decide la auditoría al abrir la oferta, que es quien
-            separa lo imprescindible de lo valorable — y te dirá qué frase exacta la descartó.
-          </span>
-        </p>
+      {/* El filtro de inglés se quitó el 28-08-2026: frenaba la búsqueda y llegaba
+          demasiado tarde, cuando la oferta ya te había costado una llamada al
+          modelo. La auditoría sigue diciendo qué frase lo exige. */}
+      <Card title="EXCLUSIONES" hint="Lo único de esta pantalla que descarta ofertas de verdad, junto con la ubicación y la ventana.">
         <div className="flex flex-col gap-1.5">
           <span className="text-xs font-semibold" style={{ color: 'var(--s-muted)' }}>
             PALABRAS VETADAS EN EL TÍTULO
@@ -286,24 +278,10 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
         </div>
       </Card>
 
-      {/* Estaba dentro de la tarjeta de tableros, donde parecía que solo valía
-          para ellos. Se aplica a TODAS las fuentes, LinkedIn incluido. */}
-      <Card title="NOTA MÍNIMA DE ENCAJE" hint="Se aplica a todas las fuentes, no solo a los tableros. Es la proporción del stack que pide la oferta que tú cubres: un 10 es cubrirlo entero, un 5 la mitad.">
-        <label className="flex items-center gap-2 text-sm">
-          Descartar por debajo de
-          <input
-            type="number"
-            min={0}
-            max={10}
-            // ?? 5: un preset guardado antes de que la nota existiera trae
-            // minHits y no minNota, y el campo saldría vacío.
-            value={c.minNota ?? 5}
-            onChange={(e) => editar({ minNota: Number(e.target.value) })}
-            style={{ ...campo, width: 70 }}
-          />
-          sobre 10
-        </label>
-      </Card>
+      {/* La NOTA MÍNIMA vivía aquí y se ha borrado (28-08-2026). Era el filtro
+          que más ofertas tiraba —430 de 534— y con la peor explicación posible:
+          "encaje bajo". Ahora la nota solo ORDENA. Si algún día sobran
+          resultados, el sitio para cortar es aquí, no en el motor. */}
 
       <div className="flex items-center gap-4">
         <span className="text-xs" style={{ color: 'var(--s-muted)' }}>

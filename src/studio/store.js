@@ -137,7 +137,12 @@ export function useStudio() {
     // Se exige `preset` además de la fecha: una caché guardada por una versión
     // anterior del endpoint no lo trae, y sin él el panel de criterios no tiene
     // de dónde partir. Caducarla es más barato que defenderse campo a campo.
-    feed: state.feed?.fecha === hoy() && state.feed.preset ? state.feed : null,
+    // Y `parcial`, que solo devuelve el motor del 28-08-2026: sus ofertas
+    // llevan `avisos` y `cumple`, y el Feed los lee sin comprobar. Una caché de
+    // hoy con la forma vieja reventaba la pantalla en la primera fila.
+    feed: state.feed?.fecha === hoy() && state.feed.preset && typeof state.feed.parcial === 'number'
+      ? state.feed
+      : null,
     // Lo que el servidor dice ser de fábrica: su preset, las keywords del CV y
     // su lista de empresas. Vive APARTE del feed cacheado a propósito: cambiar un
     // criterio invalida los resultados, pero no cambia lo que es por defecto.

@@ -153,14 +153,14 @@ const Auditoria = ({ a, onAdaptar, onDescartar }) => {
 
         <p className="text-sm leading-relaxed" style={{ color: 'var(--s-muted)' }}>{a.veredicto}</p>
 
-        {/* El filtro que ninguna palabra clave puede aplicar. Se enseña la
-            frase exacta: si te descarta una oferta, quieres poder juzgarla. */}
+        {/* Un dato, no un bloqueo. Hasta el 28-08-2026 esto descartaba la oferta
+            sola; ahora solo dice qué frase lo exige y decides tú. De ahí el
+            ámbar en vez del rojo: no ha pasado nada, es información. */}
         {a.ingles && (
-          <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: 'var(--s-perdida-f)', color: 'var(--s-perdida)' }}>
-            <TriangleAlert size={14} className="shrink-0 mt-0.5" />
+          <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: 'var(--s-atencion-f)', color: 'var(--s-atencion)' }}>
+            <Info size={14} className="shrink-0 mt-0.5" />
             <span>
-              <b>Inglés imprescindible:</b> «{a.ingles}». Con el filtro activo en Criterios, esta oferta
-              queda descartada automáticamente.
+              <b>Pide inglés como imprescindible:</b> «{a.ingles}».
             </span>
           </div>
         )}

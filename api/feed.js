@@ -2,8 +2,8 @@
 // LinkedIn, baja la descripción de cada oferta y aplica los filtros baratos —los
 // que salen del texto y no cuestan una llamada al modelo.
 //
-// POST /api/feed  { empresas?, ubicacion?, minNota?, ventana?, ...filtros }
-//   -> { jobs[], total, descartes{}, dead[], preset }
+// POST /api/feed  { empresas?, ubicacion?, ventana?, veto?, ...criterios }
+//   -> { jobs[], total, descartes{}, parcial, dead[], preset }
 //
 // Vive en api/ y no en scripts/ porque .vercelignore excluye scripts/ del
 // despliegue: aquí el motor se despliega y scripts/feed.js lo importa para el
@@ -11,9 +11,12 @@
 // se queda allí; esto no sabe nada de ficheros.
 //
 // El orden importa y es el mismo que ya elegiste para auditar antes de adaptar:
-// lo barato primero. Aquí se descarta con expresiones regulares sobre el texto;
-// lo que necesita criterio de verdad —distinguir "se valora inglés" de "inglés
-// imprescindible"— lo decide la auditoría, y solo sobre lo que sobrevive.
+// lo barato primero. Pero DESCARTAR solo descartan tres cosas —ubicación,
+// ventana y palabras vetadas—, porque son inequívocas y las escribes tú. Los
+// demás criterios ANOTAN (`avisos`, `cumple`) y el orden hace el resto: un
+// regex sobre el texto de una oferta no sabe lo suficiente como para borrarla.
+// Medido el 28-08-2026, cuando sí borraban: de 534 ofertas, la nota tiraba 430
+// y el combo de todos los días dejaba 26. Ver filtrarTexto().
 import { gate, fetchOffer, strip } from './tailor.js'
 import { dataEN } from '../src/data.js'
 
@@ -66,9 +69,6 @@ export const COMPANIES = [
 ]
 
 export const UBICACION = 'barcelona|madrid|valencia|spain|españa|remote|emea|europe'
-// Nota mínima de encaje, sobre 10. Cinco es "cubres la mitad de lo que piden";
-// por debajo de eso la oferta no merece ni que la leas.
-export const MIN_NOTA = 5
 
 // Los tres valores que acepta la ventana temporal, y su traducción al filtro
 // nativo de LinkedIn (f_TPR). Comprobado: r86400 devuelve solo las últimas 24 h.
@@ -97,23 +97,55 @@ export const match = (text, terms = keywords) =>
     return new RegExp(`(?<![a-z0-9+#.])${esc}(?![a-z0-9+#])`, 'i').test(text)
   })
 
-// Lo que TÚ no tienes pero las ofertas piden. Sin esto no se puede medir encaje,
-// solo contar aciertos: una oferta de Ruby on Rails que además mencione Docker
-// puntuaría igual que una de Python y FastAPI, porque las dos darían un acierto.
-// Con esto, la de Rails baja — pide cinco cosas y cubres una.
-// ponytail: una lista corta y a mano, no una taxonomía. Añade lo que veas salir.
-const AJENAS = [
-  'Ruby', 'Rails', 'Go', 'Golang', 'Rust', 'PHP', 'Laravel', 'Symfony', '.NET', 'Scala',
+// Lo mismo que ya sabes hacer, dicho con otras palabras. El CV no se toca: esto
+// es el diccionario con el que se LEE la oferta, no lo que el CV afirma saber.
+// Sin esto una oferta que solo dice "build LLM agents with RAG" sacaba un 0, y
+// es literalmente tu trabajo: medido el 28-08-2026, había ofertas tituladas
+// "AI Engineer" puntuando 0/10 y 3/10.
+// ponytail: fuera 'prompt' y 'agents' a secas — "prompt response" y "sales
+// agents" son inglés normal, no tu stack. Los inequívocos sí entran.
+const TAMBIEN_TUYO = [
+  'LLM', 'LLMs', 'GenAI', 'generative AI', 'machine learning', 'deep learning',
+  'NLP', 'prompt engineering', 'agentic', 'embeddings', 'vector database',
+  'fine-tuning', 'chatbot', 'microservices', 'microservicios',
+  'Git', 'Linux', 'pandas', 'NumPy', 'CI/CD',
+]
+
+// Lo tuyo, para leer ofertas. `keywords` sigue siendo solo lo que dice el CV.
+export const MIOS = [...new Set([...keywords, ...TAMBIEN_TUYO])]
+
+// Lo que TÚ no tienes y las ofertas piden. Son DOS listas y no una porque no
+// significan lo mismo, y meterlas en el mismo saco era lo que vaciaba el feed:
+// que una oferta pida Ruby on Rails significa que no es tu puesto; que pida
+// PyTorch o AWS significa que SÍ lo es y hay una herramienta que no has tocado.
+// Medido el 28-08-2026: con una sola lista, 113 de 182 ofertas técnicas reales
+// —"Senior AI Engineer", "Machine Learning Engineer"— bajaban de 5/10 y se
+// descartaban. AWS solo restaba en 43 de ellas.
+//
+// Otro oficio: SÍ cuenta en el denominador y baja la nota.
+// ponytail: 'Go' NO está y no debe volver. Son dos letras y el match es
+// case-insensitive, así que casaba con el verbo inglés — "we go beyond",
+// "go-to-market", "ready to go?", "GO LIVE" —: 32 ofertas técnicas penalizadas
+// por una palabra de relleno. 'Golang' es inequívoco y cubre el caso real.
+const OTRO_MUNDO = [
+  'Ruby', 'Rails', 'Golang', 'Rust', 'PHP', 'Laravel', 'Symfony', '.NET', 'Scala',
   'Elixir', 'Perl', 'Kotlin', 'Swift', 'Objective-C', 'Angular', 'Svelte', 'Ember',
-  'AWS', 'Kubernetes', 'Terraform', 'Ansible', 'Jenkins', 'Kafka', 'RabbitMQ', 'Spark',
-  'Hadoop', 'Snowflake', 'Databricks', 'Airflow', 'dbt', 'Tableau', 'PowerBI', 'Looker',
-  'Salesforce', 'SAP', 'Magento', 'Shopify', 'WordPress', 'Drupal', 'Flutter',
-  'React Native', 'Unity', 'Unreal', 'Selenium', 'Cypress', 'Puppeteer',
-  'PyTorch', 'TensorFlow', 'Keras', 'scikit-learn', 'Hugging Face', 'Kubeflow', 'MLflow',
+  'Magento', 'Shopify', 'WordPress', 'Drupal', 'Flutter', 'React Native',
+  'Unity', 'Unreal', 'SAP', 'Salesforce',
+]
+
+// Tu oficio con una herramienta que no has tocado: NO cuenta en el denominador,
+// se devuelve en `falta` para que la veas. Aprender MLflow no te cambia de
+// profesión; aprender Rails sí.
+const VECINAS = [
+  'AWS', 'Kubernetes', 'Terraform', 'Ansible', 'Jenkins', 'Kafka', 'RabbitMQ',
+  'Spark', 'Hadoop', 'Snowflake', 'Databricks', 'Airflow', 'dbt', 'Tableau',
+  'PowerBI', 'Looker', 'PyTorch', 'TensorFlow', 'Keras', 'scikit-learn',
+  'Hugging Face', 'Kubeflow', 'MLflow', 'Selenium', 'Cypress', 'Puppeteer',
 ]
 
 // El vocabulario con el que se lee el stack de una oferta: lo tuyo y lo ajeno.
-export const VOCABULARIO = [...new Set([...keywords, ...AJENAS])]
+export const VOCABULARIO = [...new Set([...MIOS, ...OTRO_MUNDO, ...VECINAS])]
 
 // La nota de encaje, de 0 a 10: qué proporción de lo que pide la oferta cubres.
 //
@@ -122,10 +154,11 @@ export const VOCABULARIO = [...new Set([...keywords, ...AJENAS])]
 // nada: no hay señal suficiente para afirmar que encajas. Con el suelo, hacen
 // falta al menos cuatro tecnologías tuyas para llegar al 10.
 export function notaDe(texto) {
-  const stack = match(texto, VOCABULARIO)
-  const mios = match(texto, keywords)
-  const nota = Math.min(10, Math.round((10 * mios.length) / Math.max(stack.length, 4)))
-  return { nota, stack, hits: mios }
+  const hits = match(texto, MIOS)
+  const stack = [...hits, ...match(texto, OTRO_MUNDO)]
+  const nota = Math.min(10, Math.round((10 * hits.length) / Math.max(stack.length, 4)))
+  // `falta` no puntúa en contra: es lo vecino que la oferta pide y no has tocado.
+  return { nota, stack, hits, falta: match(texto, VECINAS) }
 }
 
 // Fechas: cada fuente la da en su formato (ISO, epoch en milisegundos, o solo
@@ -364,9 +397,22 @@ export async function board(c, ctx = {}) {
 // desaparecer.
 // Lotes de 3 y un segundo entre ellos: con 5 en paralelo y medio segundo,
 // LinkedIn responde 429 y te quedas sin fuente. Es el servidor de otro.
-export async function detalle(jobs, lote = 3) {
+//
+// Y un presupuesto de tiempo, que es lo que faltaba. Medido el 28-08-2026 con
+// este mismo código y el mismo día: 159 descripciones en 78 s cuando LinkedIn
+// responde, y 3.184 s —53 minutos— cuando te está limitando el ritmo, que es lo
+// que pasa al pulsar "Actualizar" dos veces seguidas mientras ajustas criterios.
+// Con el techo de 300 s de Vercel eso no era un feed lento: era un 504 y CERO
+// ofertas, tirando también las descripciones que ya estaban bajadas. Al agotarse
+// el presupuesto, las que quedan se quedan con el texto de su tarjeta —lo mismo
+// que ya pasa cuando un fetchOffer falla—.
+//
+// Muta `jobs` en el sitio, como siempre; devuelve cuántas se quedaron sin bajar.
+export async function detalle(jobs, lote = 3, limiteMs = 180000) {
+  const fin = Date.now() + limiteMs
   const pendientes = jobs.filter((j) => j.pendiente)
   for (let i = 0; i < pendientes.length; i += lote) {
+    if (Date.now() >= fin) return pendientes.length - i
     await Promise.all(pendientes.slice(i, i + lote).map(async (j) => {
       try {
         j.text = await fetchOffer(j.url)
@@ -377,7 +423,7 @@ export async function detalle(jobs, lote = 3) {
     }))
     if (i + lote < pendientes.length) await pausa(1000)
   }
-  return jobs
+  return 0
 }
 
 // --- filtros de nivel 1: texto, gratis ------------------------------------
@@ -438,35 +484,61 @@ export function filtrarCabecera(jobs, { ubicacion = UBICACION, ventana = 'todo',
   })
 }
 
-// Lo que necesita la descripción completa.
+// Lo que necesita la descripción completa. AVISA, no descarta.
+//
+// Antes cada criterio era un descarte binario y todos juntos eran un AND, así
+// que se multiplicaban. Medido el 28-08-2026 sobre las 534 ofertas que pasaban
+// ubicación: "remoto" tiraba 388 —casi ninguna oferta escribe la palabra, cosa
+// que la propia pantalla de criterios ya admitía—, "descartar las que no
+// publican salario" tiraba 392, y exigir Python + JavaScript dejaba 6. El combo
+// de todos los días dejaba 26 de 534, y con la ventana de 24 h, cero.
+//
+// Ahora la oferta entra SIEMPRE, con sus avisos puestos, y el trabajo lo hace el
+// orden: arriba lo que cumple todo lo que pediste, abajo lo que no. Un criterio
+// que no encuentras es información; un criterio que borra la oferta es un feed
+// vacío sin explicación.
 export function filtrarTexto(jobs, {
-  minNota = MIN_NOTA, salarioMin = 0, descartarSinSalario = false,
+  salarioMin = 0, exigirSalario = false,
   modalidades = [], lenguajes = [], ia = 'indiferente',
 } = {}) {
-  const { pasan, descartes } = cribar(jobs, (j) => {
+  for (const j of jobs) {
     const texto = j.text ?? ''
+    const avisos = []
+    let ok = 0
+    let de = 0
+    const mide = (cumple, aviso) => {
+      de++
+      if (cumple) ok++
+      else avisos.push(aviso)
+    }
+
     j.salario = salarioDe(texto)
-    // Fuera del `if (salarioMin > 0)` en el que vivía: con el mínimo en 0, que
-    // es el valor por defecto, marcar "descartar las que no publican salario" no
-    // hacía absolutamente nada. Son dos criterios independientes.
-    if (j.salario == null) { if (descartarSinSalario) return 'sin salario publicado' }
-    else if (salarioMin > 0 && j.salario < salarioMin) return 'salario bajo'
-    if (modalidades.length && !modalidades.some((m) => MODALIDAD[m]?.test(texto))) return 'modalidad'
-    if (lenguajes.length && !lenguajes.every((l) => match(texto, [l]).length)) return 'falta lenguaje'
-    if (ia === 'con' && !IA.test(texto)) return 'sin IA'
-    if (ia === 'sin' && IA.test(texto)) return 'con IA'
-    Object.assign(j, notaDe(texto))
-    if (j.nota < minNota) return 'encaje bajo'
-    return null
-  })
+    if (exigirSalario || salarioMin > 0) {
+      if (j.salario == null) mide(false, 'sin salario publicado')
+      else mide(j.salario >= salarioMin, `paga ${Math.round(j.salario / 1000)}k`)
+    }
+    if (modalidades.length) {
+      mide(modalidades.some((m) => MODALIDAD[m]?.test(texto)), 'no dice la modalidad')
+    }
+    // Uno por lenguaje y no un todo-o-nada: cumplir dos de tres tiene que pesar
+    // más que cumplir cero, y con `every` las dos cosas valían lo mismo.
+    for (const l of lenguajes) mide(match(texto, [l]).length > 0, `no menciona ${l}`)
+    if (ia !== 'indiferente') {
+      mide(ia === 'con' ? IA.test(texto) : !IA.test(texto), ia === 'con' ? 'sin IA' : 'con IA')
+    }
+
+    Object.assign(j, notaDe(texto), { avisos, cumple: { ok, de } })
+  }
 
   // El texto crudo son decenas de KB por oferta y nadie lo lee al otro lado.
-  // A igual nota, primero la que cubre más tecnologías: un 8 sobre 10 pedidas
-  // pesa más que un 8 sobre 4.
+  // Primero lo que cumple más criterios TUYOS; a igual cumplimiento, la nota; y
+  // a igual nota, la que cubre más tecnologías: un 8 sobre 10 pedidas pesa más
+  // que un 8 sobre 4.
   return {
-    pasan: pasan.map(({ text, pendiente, ...j }) => j)
-      .sort((a, b) => b.nota - a.nota || b.hits.length - a.hits.length),
-    descartes,
+    pasan: jobs.map(({ text, pendiente, ...j }) => j).sort(
+      (a, b) => b.cumple.ok - a.cumple.ok || b.nota - a.nota || b.hits.length - a.hits.length
+    ),
+    descartes: {},
   }
 }
 
@@ -507,14 +579,14 @@ export const presetEfectivo = (preset = {}) => ({
   empresas: preset.empresas ?? COMPANIES,
   ventana: preset.ventana ?? 'todo',
   ubicacion: preset.ubicacion ?? UBICACION,
-  minNota: preset.minNota ?? MIN_NOTA,
   veto: preset.veto ?? [],
   salarioMin: preset.salarioMin ?? 0,
-  descartarSinSalario: preset.descartarSinSalario ?? false,
+  // Renombrado desde `descartarSinSalario`: ya no descarta nada, ordena. Un
+  // nombre que miente sobre lo que hace el código es la próxima avería.
+  exigirSalario: preset.exigirSalario ?? false,
   modalidades: preset.modalidades ?? [],
   lenguajes: preset.lenguajes ?? [],
   ia: preset.ia ?? 'indiferente',
-  excluirInglesImprescindible: preset.excluirInglesImprescindible ?? false,
 })
 
 // Lo que la pantalla de criterios necesita saber, sin salir a buscar nada.
@@ -531,12 +603,17 @@ export async function buscar(preset = {}) {
   // le pide al servidor de otro, así que solo se hace sobre lo que ya ha pasado
   // ubicación, fecha y veto de título.
   const cabecera = filtrarCabecera(jobs, { ...preset, ventana })
-  const texto = filtrarTexto(await detalle(cabecera.pasan), preset)
+  const sinDescripcion = await detalle(cabecera.pasan)
+  const texto = filtrarTexto(cabecera.pasan, preset)
 
   return {
     jobs: texto.pasan,
     total: jobs.length,
     descartes: { ...cabecera.descartes, ...texto.descartes },
+    // Cuántas se quedaron con el texto de la tarjeta porque se agotó el
+    // presupuesto de tiempo. Su nota es peor de lo que les toca y hay que
+    // decirlo: callarlo es volver a descartar en silencio.
+    parcial: sinDescripcion,
     // Sin resultados casi siempre significa token caducado, no que no haya
     // ofertas: se devuelve para poder avisar en vez de fallar en silencio.
     dead: boards.filter((b) => b.error || b.jobs.length === 0)

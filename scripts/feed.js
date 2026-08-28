@@ -10,7 +10,7 @@
 //   node scripts/feed.js --selftest      -> comprueba la lógica de filtrado
 import { strict as a } from 'node:assert'
 import { readFileSync, readdirSync } from 'node:fs'
-import { ATS, COMPANIES, UBICACION, board, buscar, deduplicar, desdeHace, filtrar, iso, keywords, match, notaDe, salarioDe } from '../api/feed.js'
+import { ATS, COMPANIES, UBICACION, VOCABULARIO, board, buscar, deduplicar, desdeHace, detalle, filtrar, iso, keywords, match, notaDe, salarioDe } from '../api/feed.js'
 
 // Anthropic lista varias sedes separadas por "|": rompería la tabla markdown.
 const cell = (s) => (s ?? '').replace(/\|/g, '/').trim()
@@ -26,7 +26,7 @@ function alreadySeen() {
 }
 
 // --- selftest --------------------------------------------------------------
-function selftest() {
+async function selftest() {
   a.deepEqual(match('we use Python daily', ['Python']), ['Python'])
   a.deepEqual(match('very Pythonic code', ['Python']), [], 'sufijo no debe casar')
   a.deepEqual(match('strong JavaScript skills', ['Java']), [], 'Java != JavaScript')
@@ -61,9 +61,29 @@ function selftest() {
   a.ok(tuyo.nota > rails.nota, `tu stack (${tuyo.nota}) debe puntuar más que uno ajeno (${rails.nota})`)
   a.equal(tuyo.nota, 10, 'cubrir las 5 que pide es un 10')
   a.ok(rails.nota <= 5, 'cubrir 2 de 6 no llega al aprobado')
-  a.ok(rails.stack.includes('Ruby') && rails.stack.includes('Kubernetes'),
-    'el stack incluye lo que NO tienes: es el denominador')
+  a.ok(rails.stack.includes('Ruby'), 'otro oficio SÍ entra en el denominador')
   a.ok(!rails.hits.includes('Ruby'), 'hits sigue siendo solo lo tuyo')
+
+  // --- lo vecino no puede restar: era lo que vaciaba el feed ---------------
+  // Medido el 28-08-2026: 113 de 182 ofertas técnicas reales se descartaban
+  // porque AWS, Kubernetes y PyTorch contaban como puntos EN CONTRA.
+  const ia = notaDe('Senior AI Engineer. Build LLM agents with Python, LangChain '
+    + 'and RAG, deploy on AWS with Kubernetes, fine-tune models in PyTorch.')
+  a.equal(ia.nota, 10, 'tu puesto ideal sacaba un 4 y se tiraba; ahora es un 10')
+  a.deepEqual(ia.falta, ['AWS', 'Kubernetes', 'PyTorch'], 'lo vecino se enseña, no resta')
+  a.ok(!ia.stack.some((t) => ia.falta.includes(t)), 'lo vecino no entra en el denominador')
+  // Dos coincidencias con suelo 4 son un 5, no un 10: el suelo sigue impidiendo
+  // el aprobado alto por una mención suelta. Lo que importa es que antes era 0,
+  // porque ni "LLM" ni "prompt engineering" estaban en el vocabulario.
+  a.equal(notaDe('You will build LLM agents with prompt engineering').nota, 5,
+    'una oferta que habla de tu trabajo con otras palabras sacaba un 0')
+
+  // --- 'Go' casaba con el verbo inglés en 32 ofertas técnicas --------------
+  for (const t of ['we go beyond', 'Go-to-market strategy', 'ready to go?', 'GO LIVE']) {
+    a.deepEqual(match(t, VOCABULARIO), [], `"${t}" no nombra ninguna tecnología`)
+  }
+  a.deepEqual(match('Experience with Golang', VOCABULARIO), ['Golang'], 'el caso real sí')
+  a.deepEqual(match('push to GitHub', ['Git']), [], 'Git != GitHub')
 
   // El suelo del denominador: sin él, una mención suelta daría un 10 vacío.
   a.equal(notaDe('We use Python').nota, 3, 'una sola coincidencia no es un 10')
@@ -81,10 +101,13 @@ function selftest() {
   a.ok(notaDe('Python, FastAPI, Django, Docker, PostgreSQL, React, TypeScript').nota === 10,
     'siete tuyas y ninguna ajena: 10')
 
-  // --- filtrar: cada criterio y su motivo de descarte ----------------------
+  // --- filtrar: qué descarta de verdad y qué solo avisa --------------------
+  // Solo tres cosas descartan, y son las inequívocas que escribes tú: dónde,
+  // desde cuándo y qué palabra no quieres en el título. Todo lo demás anota.
   const hoy = new Date('2026-08-12T12:00:00Z')
   const oferta = (p) => ({ title: 'Backend Engineer', location: 'Barcelona', fecha: '2026-08-12', text: 'Python and Docker', ...p })
-  const solo = (jobs, crit) => filtrar(jobs, { hoy, minNota: 1, ...crit })
+  const solo = (jobs, crit) => filtrar(jobs, { hoy, ...crit })
+  const una = (jobs, crit) => solo(jobs, crit).pasan[0]
 
   a.equal(solo([oferta({})], {}).pasan.length, 1, 'una oferta normal pasa')
   a.equal(solo([oferta({ location: 'Tokyo' })], {}).descartes['ubicación'], 1)
@@ -101,45 +124,56 @@ function selftest() {
   a.equal(solo([oferta({ title: 'Internal Tools Engineer' })], { veto: ['intern'] }).descartes['palabra vetada'], 1,
     'el veto casa por prefijo de palabra, a propósito')
 
-  const conSueldo = oferta({ text: 'Python Docker, salary €45.000' })
-  a.equal(solo([conSueldo], { salarioMin: 40000 }).pasan.length, 1, '45.000 pasa un mínimo de 40.000')
-  a.equal(solo([conSueldo], { salarioMin: 50000 }).descartes['salario bajo'], 1, 'y no uno de 50.000')
-  a.equal(solo([oferta({})], { salarioMin: 40000 }).pasan.length, 1, 'sin cifra pasa por defecto')
-  a.equal(solo([oferta({})], { salarioMin: 40000, descartarSinSalario: true }).descartes['sin salario publicado'], 1,
-    'con el interruptor puesto, sin cifra se descarta')
+  // --- lo que ANTES descartaba y ahora solo avisa --------------------------
+  // Este bloque es la corrección del 28-08-2026. Cada uno de estos criterios
+  // tiraba ofertas por su cuenta y todos juntos eran un AND: "remoto" tiraba
+  // 388 de 534 ofertas reales, "sin salario" 392, y Python+JavaScript dejaba 6.
+  const noTira = (crit, aviso, texto = 'Python and Docker') => {
+    const r = solo([oferta({ text: texto })], crit)
+    a.equal(r.pasan.length, 1, `${aviso}: la oferta tiene que seguir estando`)
+    a.deepEqual(r.descartes, {}, `${aviso}: nada se descarta por esto`)
+    a.ok(r.pasan[0].avisos.includes(aviso), `${aviso}: pero se avisa`)
+    a.equal(r.pasan[0].cumple.ok, 0, `${aviso}: y cuenta como criterio incumplido`)
+  }
+  noTira({ modalidades: ['hibrido'] }, 'no dice la modalidad')
+  noTira({ modalidades: ['hibrido'] }, 'no dice la modalidad', 'Python fully on-site')
+  noTira({ lenguajes: ['Go'] }, 'no menciona Go')
+  noTira({ ia: 'con' }, 'sin IA')
+  noTira({ ia: 'sin' }, 'con IA', 'Python with LLM agents')
+  noTira({ exigirSalario: true }, 'sin salario publicado')
+  noTira({ salarioMin: 50000 }, 'paga 45k', 'Python Docker, salary €45.000')
 
-  a.equal(solo([oferta({ text: 'Python hybrid work' })], { modalidades: ['hibrido'] }).pasan.length, 1)
-  a.equal(solo([oferta({ text: 'Python fully on-site' })], { modalidades: ['hibrido'] }).descartes['modalidad'], 1)
-  a.equal(solo([oferta({ text: 'Python remote-first' })], { modalidades: ['hibrido', 'remoto'] }).pasan.length, 1,
-    'basta con cumplir una de las aceptadas')
+  // Y cuando SÍ cumple, ni aviso ni penalización.
+  const cumple = una([oferta({ text: 'Python remote-first with LLM agents, salary €60.000' })],
+    { modalidades: ['hibrido', 'remoto'], ia: 'con', salarioMin: 50000, lenguajes: ['Python'] })
+  a.deepEqual(cumple.avisos, [], 'cumplirlo todo no deja avisos')
+  a.deepEqual(cumple.cumple, { ok: 4, de: 4 }, 'los cuatro criterios contados')
+  a.equal(cumple.salario, 60000)
 
-  a.equal(solo([oferta({ text: 'Python and Docker' })], { lenguajes: ['Python'] }).pasan.length, 1)
-  a.equal(solo([oferta({ text: 'Python and Docker' })], { lenguajes: ['Python', 'Go'] }).descartes['falta lenguaje'], 1,
-    'los lenguajes obligatorios se exigen todos')
+  // Los lenguajes se cuentan uno a uno, no todo-o-nada: con `every` cumplir dos
+  // de tres valía lo mismo que cumplir cero, y eso ordena mal.
+  const dosDeTres = una([oferta({ text: 'Python, TypeScript and Docker' })], { lenguajes: ['Python', 'TypeScript', 'Java'] })
+  a.deepEqual(dosDeTres.cumple, { ok: 2, de: 3 })
+  a.deepEqual(dosDeTres.avisos, ['no menciona Java'])
 
-  a.equal(solo([oferta({ text: 'Python with LLM agents' })], { ia: 'con' }).pasan.length, 1)
-  a.equal(solo([oferta({ text: 'Python and Docker' })], { ia: 'con' }).descartes['sin IA'], 1)
-  a.equal(solo([oferta({ text: 'Python with LLM agents' })], { ia: 'sin' }).descartes['con IA'], 1)
-
-  a.equal(solo([oferta({ text: 'Python' })], { minNota: 5 }).descartes['encaje bajo'], 1,
-    'un 3 no pasa el mínimo de 5')
-  a.equal(solo([oferta({ text: 'Python and Docker' })], { minNota: 5 }).pasan.length, 1, 'un 5 sí')
-  a.ok(!('text' in (solo([oferta({})], {}).pasan[0])), 'el texto crudo no viaja al cliente')
-
-  // Se ordena por nota, no por número de coincidencias.
+  // El orden hace el trabajo que antes hacía el descarte.
   const ordenadas = solo([
-    oferta({ title: 'A', text: 'Python, Docker, SQL, Java, React, Ruby, Rails, AWS, Kubernetes, Terraform' }),
+    oferta({ title: 'no cumple', text: 'Python and Docker' }),
+    oferta({ title: 'cumple', text: 'Python and Docker, fully remote' }),
+  ], { modalidades: ['remoto'] }).pasan
+  a.equal(ordenadas.length, 2, 'las dos siguen ahí')
+  a.equal(ordenadas[0].title, 'cumple', 'la que cumple tus criterios va primero')
+
+  a.equal(una([oferta({ text: 'We build spreadsheets' })], {}).nota, 0,
+    'una oferta que no es lo tuyo entra igual, pero con un 0 y al fondo')
+  a.ok(!('text' in una([oferta({})], {})), 'el texto crudo no viaja al cliente')
+
+  // A igual cumplimiento manda la nota, y a igual nota las coincidencias.
+  const porNota = solo([
+    oferta({ title: 'A', text: 'Python, Docker, SQL, Java, React, Ruby, Rails, PHP, Scala, Perl' }),
     oferta({ title: 'B', text: 'Python, FastAPI, Django, Docker' }),
   ], {}).pasan
-  a.equal(ordenadas[0].title, 'B', 'cubrir todo lo que piden gana a coincidir mucho en una oferta larga')
-
-  // --- salario: los dos criterios son independientes ----------------------
-  // Vivía dentro de un `if (salarioMin > 0)`, así que con el mínimo por defecto
-  // —que es 0— marcar la casilla no hacía nada.
-  a.equal(solo([oferta({})], { descartarSinSalario: true }).descartes['sin salario publicado'], 1,
-    'sin mínimo, "descartar las que no publican salario" tiene que seguir descartando')
-  a.equal(solo([conSueldo], { descartarSinSalario: true }).pasan.length, 1,
-    'y la que sí publica cifra pasa aunque no haya mínimo')
+  a.equal(porNota[0].title, 'B', 'cubrir todo lo que piden gana a coincidir mucho en una oferta larga')
 
   // --- Workday: no da fecha, da "hace cuánto" ------------------------------
   // Sin traducirlo, filtrarCabecera tira TODAS sus ofertas por "fuera de la
@@ -198,6 +232,14 @@ function selftest() {
   a.equal(notaDe(rok[1].text).nota, 10, 'lo que la oferta SÍ dice sigue puntuando')
   a.ok(rok[0].location.startsWith('Remote'), 'todo lo suyo es remoto, aunque su location venga rara')
 
+  // --- el presupuesto de tiempo del detalle --------------------------------
+  // Sin él, LinkedIn limitando el ritmo convertía la búsqueda en 53 minutos y
+  // Vercel devolvía un 504 con cero ofertas. Con 0 ms no sale a la red siquiera.
+  const pend = [{ url: 'https://example.invalid/1', pendiente: true, text: 'tarjeta' }]
+  a.equal(await detalle(pend, 3, 0), 1, 'dice cuántas se quedaron sin bajar')
+  a.equal(pend[0].text, 'tarjeta', 'y las deja con el texto de su tarjeta')
+  a.ok(pend[0].pendiente, 'sin tocar: nadie ha ido a por ellas')
+
   console.log(`ok — ${keywords.length} keywords del CV; nota, filtros, fechas y las fuentes nuevas verificados`)
 }
 
@@ -206,7 +248,7 @@ const flags = process.argv.slice(2)
 const valor = (f) => flags[flags.indexOf(f) + 1]
 
 if (flags.includes('--selftest')) {
-  selftest()
+  await selftest()
 } else if (flags.includes('--check')) {
   for (const b of await Promise.all(COMPANIES.map((c) => board(c, { ventana: 'semana' })))) {
     const roto = b.error || b.jobs.length === 0
@@ -215,7 +257,7 @@ if (flags.includes('--selftest')) {
 } else {
   const ventana = flags.includes('--desde') ? valor('--desde') : 'todo'
   // --all: regex vacía, casa con cualquier ubicación (incluso sin ubicación).
-  const { jobs, total, descartes, dead } = await buscar({
+  const { jobs, total, descartes, dead, parcial } = await buscar({
     ventana,
     ...(flags.includes('--all') ? { ubicacion: '(?:)' } : {}),
   })
@@ -224,14 +266,20 @@ if (flags.includes('--selftest')) {
 
   console.log(`# Feed — ${jobs.length} de ${total} ofertas${ventana !== 'todo' ? ` (ventana: ${ventana})` : ''}`)
   console.log(motivos ? `\nDescartadas: ${motivos}.\n` : '')
-  console.log('| Encaje | Fecha | Empresa | Puesto | Ubicación | € | Cubres |')
-  console.log('|--------|-------|---------|--------|-----------|---|--------|')
+  console.log('| Cumple | Encaje | Fecha | Empresa | Puesto | Ubicación | € | Cubres | Avisos |')
+  console.log('|--------|--------|-------|---------|--------|-----------|---|--------|--------|')
   for (const r of jobs) {
     const mark = seen.includes(r.company.toLowerCase()) ? ' ·visto' : ''
-    console.log(`| ${r.nota}/10 | ${r.fecha ?? '—'} | ${cell(r.company)}${mark} | [${cell(r.title)}](${r.url}) `
+    console.log(`| ${r.cumple.de ? `${r.cumple.ok}/${r.cumple.de}` : '—'} `
+      + `| ${r.nota}/10 | ${r.fecha ?? '—'} | ${cell(r.company)}${mark} | [${cell(r.title)}](${r.url}) `
       + `| ${cell(r.location)} | ${r.salario ? `${Math.round(r.salario / 1000)}k` : '—'} `
-      + `| ${r.hits.length}/${r.stack.length}: ${r.hits.slice(0, 5).join(', ')} |`)
+      + `| ${r.hits.length}/${r.stack.length}: ${r.hits.slice(0, 5).join(', ')} `
+      + `| ${cell(r.avisos.join(', ')) || '—'} |`)
   }
 
+  // El presupuesto de tiempo del detalle. Callarlo sería volver a descartar en
+  // silencio: estas ofertas puntúan con el texto de su tarjeta, no con la
+  // descripción, así que su nota es peor de lo que les toca.
+  if (parcial) console.error(`\n⚠ ${parcial} ofertas sin descripción: se agotó el presupuesto de tiempo. Vuelve a lanzarlo.`)
   if (dead.length) console.error(`\n⚠ sin resultados (token o ATS cambiado): ${dead.map((d) => d.name).join(', ')}`)
 }

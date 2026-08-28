@@ -17,8 +17,20 @@ import Proceso from './Proceso'
 const BUSQUEDA = [
   ['tableros', 'Consultando tableros'],
   ['detalle', 'Bajando descripciones'],
-  ['filtrar', 'Filtrando por tus criterios'],
+  ['filtrar', 'Ordenando por tus criterios'],
 ]
+
+// Un criterio que no se cumple es un aviso, no una desaparición (28-08-2026).
+// Antes cada uno borraba la oferta y el único rastro era un contador de
+// descartes: "388 por modalidad" y a saber cuál era la buena.
+const Aviso = ({ children }) => (
+  <span
+    className="px-1.5 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap"
+    style={{ background: 'var(--s-atencion-f)', color: 'var(--s-atencion)' }}
+  >
+    {children}
+  </span>
+)
 
 const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
   const [loading, setLoading] = useState(false)
@@ -62,6 +74,10 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
   const jobs = vista?.jobs ?? []
   const descartes = Object.entries(vista?.descartes ?? {})
   const ventana = vista?.preset?.ventana
+  // Cuántos criterios blandos tienes puestos. Con cero, no hay nada que separar
+  // y la lista es simplemente el orden por encaje.
+  const criterios = jobs[0]?.cumple?.de ?? 0
+  const corte = criterios ? jobs.findIndex((j) => j.cumple.ok < j.cumple.de) : -1
 
   return (
     <div className="p-8 flex flex-col gap-5">
@@ -86,6 +102,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
             <p className="text-sm" style={{ color: 'var(--s-muted)' }}>
               {vista
                 ? `${jobs.length} de ${vista.total} ofertas`
+                  + (corte > 0 ? ` · ${corte} cumplen todo lo que pides` : '')
                   + (ventana === '24h' ? ' · últimas 24 horas' : ventana === 'semana' ? ' · última semana' : '')
                 : 'Sin resultados todavía.'}
             </p>
@@ -117,11 +134,24 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
         </p>
       )}
 
-      {/* Por qué se cayó cada oferta. Un filtro que descarta en silencio es un
-          filtro en el que dejas de confiar a la semana. */}
+      {/* Solo quedan tres motivos de descarte —ubicación, ventana y palabra
+          vetada—, los tres inequívocos. Los demás criterios ya no borran nada. */}
       {descartes.length > 0 && (
         <p className="text-xs" style={{ color: 'var(--s-muted)' }}>
           Descartadas: {descartes.map(([m, n]) => `${n} por ${m}`).join(' · ')}.
+        </p>
+      )}
+
+      {/* El presupuesto de tiempo del detalle. Estas ofertas puntúan con el
+          texto de su tarjeta, no con la descripción: su encaje es peor de lo que
+          les toca, y callarlo sería volver a descartar en silencio. */}
+      {vista?.parcial > 0 && (
+        <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-atencion-f)', color: 'var(--s-atencion)' }}>
+          <TriangleAlert size={13} className="shrink-0 mt-0.5" />
+          <span>
+            <b>{vista.parcial} ofertas sin descripción:</b> se agotó el tiempo de búsqueda y se han
+            puntuado solo con su titular. Vuelve a pulsar «Actualizar» dentro de un rato.
+          </span>
         </p>
       )}
 
@@ -147,7 +177,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
           className="flex items-center gap-4 px-5 py-2.5 text-xs font-semibold"
           style={{ background: 'var(--s-bg)', color: 'var(--s-muted)', letterSpacing: '0.3px' }}
         >
-          <span className="w-[60px]">ENCAJE</span>
+          <span className="w-[76px]">ENCAJE</span>
           <span className="w-[90px]">FECHA</span>
           <span className="w-[150px]">EMPRESA</span>
           <span className="flex-1">PUESTO</span>
@@ -157,44 +187,69 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
           <span className="w-[150px] text-right">ACCIONES</span>
         </div>
 
+        {/* Ya solo puede quedarse vacío por los tres filtros que descartan de
+            verdad, así que se nombran: "afloja los criterios" mandaba a mirar
+            seis interruptores que ahora no tiran nada. */}
         {!loading && jobs.length === 0 && (
           <p className="px-5 py-8 text-sm text-center" style={{ color: 'var(--s-muted)' }}>
-            Ninguna oferta pasa los filtros. Amplía la ventana de tiempo o afloja los criterios.
+            Ninguna oferta pasa la ubicación, la ventana de tiempo ni las palabras vetadas.
+            Son los tres únicos criterios que descartan: amplía la ventana o revisa la ubicación.
           </p>
         )}
 
-        {jobs.map((j) => {
+        {jobs.map((j, i) => {
           const yaVista = vistas.has(`${j.company}|${j.title}`.toLowerCase())
           return (
+            <div key={j.url}>
+            {/* Dónde acaba lo que cumple todo lo que pediste. Sin esta línea, las
+                dos mitades se leen como una sola lista y el orden no se ve. */}
+            {i === corte && corte > 0 && (
+              <p className="px-5 py-2 text-xs border-t" style={{ borderColor: 'var(--s-border)', background: 'var(--s-bg)', color: 'var(--s-muted)' }}>
+                A partir de aquí, no cumplen todo lo que pides. Siguen ordenadas por encaje.
+              </p>
+            )}
             <div
-              key={j.url}
               className="flex items-center gap-4 px-5 py-3.5 border-t"
               style={{ borderColor: 'var(--s-border)', opacity: yaVista ? 0.55 : 1 }}
             >
-              <span className="w-[60px]">
+              <span className="w-[76px] flex flex-col items-start gap-1">
                 <span
                   className="px-2 py-1 rounded-full text-xs font-bold"
                   style={{
                     background: j.nota >= 8 ? 'var(--s-ganada-f)' : j.nota >= 6 ? 'var(--s-atencion-f)' : 'var(--s-hueco)',
                     color: j.nota >= 8 ? 'var(--s-ganada)' : j.nota >= 6 ? 'var(--s-atencion)' : 'var(--s-muted)',
                   }}
-                  title={`Cubres ${j.hits.length} de las ${j.stack.length} tecnologías que pide`}
+                  title={j.falta.length
+                    ? `Cubres ${j.hits.length} de las ${j.stack.length} tecnologías que pide. Además usa: ${j.falta.join(', ')}`
+                    : `Cubres ${j.hits.length} de las ${j.stack.length} tecnologías que pide`}
                 >
                   {j.nota}/10
                 </span>
+                {j.cumple.de > 0 && (
+                  <span className="text-[10px] font-semibold" style={{ color: 'var(--s-muted)' }} title="Criterios tuyos que cumple">
+                    {j.cumple.ok}/{j.cumple.de} criterios
+                  </span>
+                )}
               </span>
               <span className="w-[90px] text-[13px]" style={{ color: 'var(--s-muted)' }}>{j.fecha ?? '—'}</span>
               <span className="w-[150px] text-sm font-semibold truncate" title={j.company}>{j.company}</span>
-              <a
-                href={j.url}
-                target="_blank"
-                rel="noreferrer"
-                className="flex-1 text-sm truncate flex items-center gap-1.5 hover:underline"
-                title={j.title}
-              >
-                {j.title}
-                <ExternalLink size={12} className="shrink-0" style={{ color: 'var(--s-muted)' }} />
-              </a>
+              <span className="flex-1 min-w-0 flex flex-col gap-1">
+                <a
+                  href={j.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-sm truncate flex items-center gap-1.5 hover:underline"
+                  title={j.title}
+                >
+                  {j.title}
+                  <ExternalLink size={12} className="shrink-0" style={{ color: 'var(--s-muted)' }} />
+                </a>
+                {j.avisos.length > 0 && (
+                  <span className="flex gap-1 flex-wrap">
+                    {j.avisos.map((av) => <Aviso key={av}>{av}</Aviso>)}
+                  </span>
+                )}
+              </span>
               <span className="w-[160px] text-[13px] truncate" style={{ color: 'var(--s-muted)' }} title={j.location}>
                 {j.location}
               </span>
@@ -236,6 +291,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
                   </button>
                 )}
               </span>
+            </div>
             </div>
           )
         })}
