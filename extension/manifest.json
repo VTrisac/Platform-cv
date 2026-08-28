@@ -23,7 +23,8 @@
     "https://*.teamtailor.com/*",
     "https://*.personio.de/*",
     "https://*.factorialhr.com/*",
-    "https://remoteok.com/*"
+    "https://remoteok.com/*",
+    "https://*.amazon.jobs/*"
   ],
   "optional_host_permissions": [
     "*://*/*"
@@ -55,7 +56,9 @@
         "https://*.recruitee.com/*",
         "https://*.teamtailor.com/*",
         "https://*.personio.de/*",
-        "https://*.factorialhr.com/*"
+        "https://*.factorialhr.com/*",
+        "https://*.amazon.jobs/*",
+        "https://remoteok.com/*"
       ],
       "js": [
         "campos.js",

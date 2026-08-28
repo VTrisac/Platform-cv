@@ -217,7 +217,9 @@ for (const [url, esperado, msg] of [
   ['https://novartis.wd3.myworkdayjobs.com/x/job/y', true],
   ['https://careers.empresa-random.com/apply/7', false, 'portal propio: NO cubierto'],
   ['https://notgreenhouse.io/jobs/1', false, 'no vale con acabar parecido'],
-  ['https://remoteok.com/remote-jobs/1', false, 'está en host_permissions pero NO en content_scripts'],
+  ['https://remoteok.com/remote-jobs/1', true, 'remoteok: ya inyecta, no solo permiso de host'],
+  ['https://www.amazon.jobs/en/jobs/123', true, 'amazon.jobs, 17 ofertas del feed salían sin cubrir'],
+  ['https://amazon.jobs/en/jobs/123', true, '*.amazon.jobs cubre el dominio pelado'],
   ['no soy una url', false, 'basura no revienta'],
   ['', false],
 ]) {
