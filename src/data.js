@@ -1,11 +1,11 @@
 // Certificaciones LinkedIn (linkedin.com/in/victortrisac) — todas Anthropic, expedidas may. 2026
 const certList = (date) => [
-  "Claude with Google Cloud's Vertex AI",
-  "Claude in Amazon Bedrock",
   "Model Context Protocol: Advanced Topics",
   "Introduction to Model Context Protocol",
-  "Claude Code in Action",
   "Introduction to Subagents",
+  "Claude Code in Action",
+  "Claude with Google Cloud's Vertex AI",
+  "Claude in Amazon Bedrock",
   "Introduction to Agent Skills",
   "Claude Code 101",
   "Introduction to Claude Cowork",
@@ -14,8 +14,8 @@ const certList = (date) => [
 
 export const dataES = {
   name: "VÍCTOR TRISAC",
-  title: "Senior AI Engineer | Full Stack Developer",
-  profile: "Senior AI Engineer y Full Stack Developer con experiencia entregando proyectos para grandes cuentas (BBVA, Iberia, Telefónica, Decathlon, KFC). Combino agentes y copilotos LLM en producción con Claude y OpenAI con una base full stack sólida: Python, FastAPI, Django, Node.js, React y Vue. Despliegue y delivery en Azure y GCP con Docker y CI/CD. Experiencia en sectores industrial, financiero y hotelero, y en mentoring de equipos de ingeniería.",
+  title: "Senior AI Engineer | AI Ops & Observabilidad",
+  profile: "Senior AI Engineer de perfil híbrido IA + operación: IA generativa aplicada en producción (agentes, RAG, tool use, MCP) sobre una base sólida de Kubernetes, Docker y observabilidad con Dynatrace. Python como lenguaje principal, control de versiones con Git/GitHub y CI/CD con GitHub Actions sobre Azure y GCP. Entrega para grandes cuentas (BBVA, Iberia, Telefónica, Decathlon, KFC) con correlación de eventos, runbooks operativos y mentoring de equipos de ingeniería.",
   contact: {
     phone: "+34 663 769 539",
     email: "victorperez694@gmail.com",
@@ -30,23 +30,23 @@ export const dataES = {
       dates: "Feb. 2026 - Actualidad",
       description: "Diseño y despliegue de soluciones de IA generativa y agénticas con Claude (Anthropic) para grandes clientes (BBVA, Iberia, Telefónica, Decathlon, KFC) dentro de la unidad Tech & Data.",
       achievements: [
-        "Liderazgo técnico construyendo agentes y copilotos LLM en producción sobre Claude, integrando RAG, tool use y orquestación multi-agente.",
-        "Arquitectura de plataformas de IA en Azure y GCP con FastAPI, vector stores y pipelines de evaluación automática.",
-        "Mentoring del equipo y buenas prácticas de MLOps (Machine Learning Ops), observabilidad y seguridad de modelos."
+        "Liderazgo técnico construyendo agentes y copilotos LLM en producción sobre Claude, integrando RAG, tool use, MCP y orquestación multi-agente.",
+        "Observabilidad y correlación de eventos con Dynatrace sobre los servicios en producción, con alertado y buenas prácticas de MLOps y seguridad de modelos.",
+        "Arquitectura de plataformas de IA en Azure y GCP sobre contenedores, con FastAPI, vector stores y pipelines de evaluación automática."
       ],
-      tech: ["Python", "Claude (Anthropic)", "Azure AI", "GCP Vertex", "FastAPI", "LangChain", "OpenAI", "Docker", "RAG"]
+      tech: ["Python", "Dynatrace", "Kubernetes", "Claude (Anthropic)", "MCP", "LangChain", "Azure OpenAI", "GCP Vertex", "Docker", "RAG"]
     },
     {
       project: "EASO MAGNO",
       role: "DevOps & AI Full Stack Developer",
       dates: "Jul. 2025 - Nov. 2025",
-      description: "Liderazgo en la automatización de flujos de trabajo empresariales mediante microservicios y LLMs.",
+      description: "Liderazgo en la automatización de flujos de trabajo operativos mediante microservicios, Kubernetes y LLMs.",
       achievements: [
-        "Implementación de pipelines CI/CD con GitHub Actions y Docker en Azure/GCP.",
-        "Orquestación de servicios mediante contenedores para asegurar escalabilidad y alta disponibilidad.",
-        "Diseño de flujos inteligentes en n8n reduciendo tiempos de procesamiento manual significativamente."
+        "Orquestación de servicios en Kubernetes sobre Azure/GCP, asegurando escalabilidad y alta disponibilidad.",
+        "Implementación de pipelines CI/CD con GitHub Actions y Docker, con control de versiones en GitHub.",
+        "Elaboración de runbooks operativos y diseño de flujos inteligentes en n8n, reduciendo tiempos de procesamiento manual."
       ],
-      tech: ["Python", "FastAPI", "Azure", "GCP", "Docker", "CI/CD", "n8n", "OpenAI"]
+      tech: ["Kubernetes", "Docker", "GitHub Actions", "CI/CD", "Python", "FastAPI", "Azure", "GCP", "n8n", "OpenAI"]
     },
     {
       project: "Kauai",
@@ -116,7 +116,7 @@ export const dataES = {
   skills: {
     backend: ["Python (Experto)", "FastAPI", "Django", "Java/SpringBoot", "Node.js"],
     frontend: ["React.js", "Vue.js", "TypeScript", "Tailwind CSS"],
-    ai_devops: ["OpenAI API", "Azure (Microsoft)/GCP", "Docker", "CI/CD", "n8n (Automatización)"],
+    ai_devops: ["Kubernetes", "Dynatrace", "Docker", "Git / GitHub", "GitHub Copilot", "CI/CD (GitHub Actions)", "Azure OpenAI / GCP", "LangChain / MCP", "n8n"],
     databases: ["PostgreSQL", "SQL Server", "MongoDB", "MySQL", "MariaDB"]
   },
   languages: ["Castellano (Nativo)", "Catalán (Nativo)", "Inglés (Técnico)"],
@@ -136,8 +136,8 @@ export const dataES = {
 
 export const dataEN = {
   name: "VÍCTOR TRISAC",
-  title: "Senior AI Engineer | Full Stack Developer",
-  profile: "Senior AI Engineer and Full Stack Developer with a track record delivering projects for enterprise accounts (BBVA, Iberia, Telefónica, Decathlon, KFC). I combine production LLM agents and copilots on Claude and OpenAI with a solid full stack foundation: Python, FastAPI, Django, Node.js, React, and Vue. Deployment and delivery on Azure and GCP with Docker and CI/CD. Experience across industrial, financial, and hospitality sectors, plus engineering team mentoring.",
+  title: "Senior AI Engineer | AI Ops & Observability",
+  profile: "Senior AI Engineer with a hybrid AI + operations profile: applied generative AI in production (agents, RAG, tool use, MCP) on a solid foundation of Kubernetes, Docker, and observability with Dynatrace. Python as primary language, version control with Git/GitHub, and CI/CD with GitHub Actions on Azure and GCP. Delivery for enterprise accounts (BBVA, Iberia, Telefónica, Decathlon, KFC) with event correlation, operational runbooks, and engineering team mentoring.",
   contact: {
     phone: "+34 663 769 539",
     email: "victorperez694@gmail.com",
@@ -152,23 +152,23 @@ export const dataEN = {
       dates: "Feb. 2026 - Present",
       description: "Design and deployment of generative and agentic AI solutions powered by Claude (Anthropic) for enterprise clients (BBVA, Iberia, Telefónica, Decathlon, KFC) within the Tech & Data unit.",
       achievements: [
-        "Technical leadership building production LLM agents and copilots on Claude — RAG, tool use, and multi-agent orchestration.",
-        "AI platform architecture on Azure and GCP using FastAPI, vector stores, and automated evaluation pipelines.",
-        "Team mentoring and MLOps (Machine Learning Ops), observability, and model security best practices."
+        "Technical leadership building production LLM agents and copilots on Claude — RAG, tool use, MCP, and multi-agent orchestration.",
+        "Observability and event correlation with Dynatrace across production services, with alerting and MLOps (Machine Learning Ops) and model security best practices.",
+        "AI platform architecture on Azure and GCP over containers, using FastAPI, vector stores, and automated evaluation pipelines."
       ],
-      tech: ["Python", "Claude (Anthropic)", "Azure AI", "GCP Vertex", "FastAPI", "LangChain", "OpenAI", "Docker", "RAG"]
+      tech: ["Python", "Dynatrace", "Kubernetes", "Claude (Anthropic)", "MCP", "LangChain", "Azure OpenAI", "GCP Vertex", "Docker", "RAG"]
     },
     {
       project: "EASO MAGNO",
       role: "DevOps & AI Full Stack Developer",
       dates: "Jul. 2025 - Nov. 2025",
-      description: "Leadership in enterprise workflow automation through microservices and LLMs.",
+      description: "Leadership in operational workflow automation through microservices, Kubernetes, and LLMs.",
       achievements: [
-        "Implementation of CI/CD pipelines with GitHub Actions and Docker on Azure/GCP.",
-        "Service orchestration through containers ensuring scalability and high availability.",
-        "Design of intelligent workflows in n8n significantly reducing manual processing times."
+        "Service orchestration on Kubernetes over Azure/GCP, ensuring scalability and high availability.",
+        "Implementation of CI/CD pipelines with GitHub Actions and Docker, with version control on GitHub.",
+        "Authoring of operational runbooks and design of intelligent workflows in n8n, reducing manual processing times."
       ],
-      tech: ["Python", "FastAPI", "Azure", "GCP", "Docker", "CI/CD", "n8n", "OpenAI"]
+      tech: ["Kubernetes", "Docker", "GitHub Actions", "CI/CD", "Python", "FastAPI", "Azure", "GCP", "n8n", "OpenAI"]
     },
     {
       project: "Kauai",
@@ -238,7 +238,7 @@ export const dataEN = {
   skills: {
     backend: ["Python (Expert)", "FastAPI", "Django", "Java/SpringBoot", "Node.js"],
     frontend: ["React.js", "Vue.js", "TypeScript", "Tailwind CSS"],
-    ai_devops: ["OpenAI API", "Azure (Microsoft)/GCP", "Docker", "CI/CD", "n8n (Automation)"],
+    ai_devops: ["Kubernetes", "Dynatrace", "Docker", "Git / GitHub", "GitHub Copilot", "CI/CD (GitHub Actions)", "Azure OpenAI / GCP", "LangChain / MCP", "n8n"],
     databases: ["PostgreSQL", "SQL Server", "MongoDB", "MySQL", "MariaDB"]
   },
   languages: ["Spanish (Native)", "Catalan (Native)", "English (Technical)"],
