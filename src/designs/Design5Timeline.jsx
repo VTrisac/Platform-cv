@@ -56,7 +56,7 @@ const Design5Timeline = ({ data }) => {
                         </span>
                       </div>
                       {exp.dates && (
-                        <p className="text-[10px] uppercase tracking-widest text-[var(--accent-2)] mb-2 font-bold">{exp.dates}</p>
+                        <p className="text-[10px] uppercase text-[var(--accent-2)] mb-2 font-bold">{exp.dates}</p>
                       )}
                       <p className="text-xs text-[var(--text-muted)] mb-3 italic">{exp.description}</p>
                       <ul className="space-y-1.5 mb-3">
@@ -131,7 +131,7 @@ const Design5Timeline = ({ data }) => {
                   <div key={idx} className="bg-gradient-to-r from-[var(--surface-alt)] to-[var(--chip-bg)] p-4 rounded-xl border-l-4 border-[var(--accent)]">
                     <p className="font-bold text-[var(--text)] text-sm">{edu.degree}</p>
                     <p className="text-xs text-[var(--text-muted)]">{edu.center}</p>
-                    {edu.dates && <p className="text-[10px] uppercase tracking-widest text-[var(--accent-2)] mt-1 font-bold">{edu.dates}</p>}
+                    {edu.dates && <p className="text-[10px] uppercase text-[var(--accent-2)] mt-1 font-bold">{edu.dates}</p>}
                     <p className="text-xs text-[var(--accent)] font-medium mt-1">{edu.note}</p>
                   </div>
                 ))}

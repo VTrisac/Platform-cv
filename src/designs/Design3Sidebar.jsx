@@ -15,7 +15,7 @@ const Design3Sidebar = ({ data }) => {
               className="w-32 h-32 rounded-full object-cover object-top mx-auto border-4 border-[var(--accent-contrast)]/30 mb-4"
             />
             <h1 className="text-xl font-bold mb-1">{data.name}</h1>
-            <p className="text-[color:var(--accent-contrast)]/80 text-xs uppercase tracking-wider">{data.title}</p>
+            <p className="text-[color:var(--accent-contrast)]/80 text-xs uppercase">{data.title}</p>
           </div>
 
           {/* Contacto */}
@@ -95,7 +95,7 @@ const Design3Sidebar = ({ data }) => {
                     <span className="text-xs text-[var(--accent)] bg-[var(--chip-bg)] px-2 py-1 rounded-full">{exp.role}</span>
                   </div>
                   {exp.dates && (
-                    <p className="text-[10px] uppercase tracking-widest text-[var(--accent-2)] mb-2">{exp.dates}</p>
+                    <p className="text-[10px] uppercase text-[var(--accent-2)] mb-2">{exp.dates}</p>
                   )}
                   <p className="text-xs text-[var(--text-muted)] mb-2 italic">{exp.description}</p>
                   <ul className="space-y-1 mb-2">
@@ -125,7 +125,7 @@ const Design3Sidebar = ({ data }) => {
                 <div key={idx} className="bg-[var(--surface-alt)] p-4 rounded-lg">
                   <p className="font-bold text-[var(--text)] text-sm">{edu.degree}</p>
                   <p className="text-xs text-[var(--text-muted)]">{edu.center}</p>
-                  {edu.dates && <p className="text-[10px] uppercase tracking-widest text-[var(--accent-2)] mt-1">{edu.dates}</p>}
+                  {edu.dates && <p className="text-[10px] uppercase text-[var(--accent-2)] mt-1">{edu.dates}</p>}
                   <p className="text-xs text-[var(--accent)] mt-1">{edu.note}</p>
                 </div>
               ))}

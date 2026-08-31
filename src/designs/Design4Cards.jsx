@@ -91,7 +91,7 @@ const Design4Cards = ({ data }) => {
                   <div key={idx} className="bg-gradient-to-r from-[var(--surface-alt)] to-[var(--chip-bg)] p-4 rounded-xl">
                     <p className="font-bold text-[var(--text)] text-sm">{edu.degree}</p>
                     <p className="text-xs text-[var(--text-muted)] mt-1">{edu.center}</p>
-                    {edu.dates && <p className="text-[10px] uppercase tracking-widest text-[var(--accent-2)] mt-1">{edu.dates}</p>}
+                    {edu.dates && <p className="text-[10px] uppercase text-[var(--accent-2)] mt-1">{edu.dates}</p>}
                     <p className="text-xs text-[var(--accent)] font-medium mt-1">{edu.note}</p>
                   </div>
                 ))}
@@ -142,11 +142,11 @@ const Design4Cards = ({ data }) => {
                   <div>
                     <h3 className="font-bold text-[var(--text)] text-lg">{exp.project}</h3>
                     {exp.dates && (
-                      <p className="text-[10px] uppercase tracking-widest text-[var(--accent-2)] mb-1">{exp.dates}</p>
+                      <p className="text-[10px] uppercase text-[var(--accent-2)] mb-1">{exp.dates}</p>
                     )}
                     <p className="text-xs text-[var(--text-muted)] italic">{exp.description}</p>
                   </div>
-                  <span className="text-xs font-bold text-[var(--accent-contrast)] bg-[var(--accent)] px-4 py-2 rounded-full text-center inline-flex items-center justify-center max-w-[180px]">
+                  <span className="text-xs font-bold text-[var(--accent-contrast)] bg-[var(--accent)] px-4 py-2 rounded-full text-center inline-flex items-center justify-center whitespace-nowrap">
                     {exp.role}
                   </span>
                 </div>

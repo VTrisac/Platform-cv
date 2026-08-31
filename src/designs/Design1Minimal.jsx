@@ -16,7 +16,7 @@ const Design1Minimal = ({ data }) => {
             />
             <div>
               <h1 className="text-3xl font-light text-[var(--text)] mb-1">{data.name}</h1>
-              <p className="text-sm text-[var(--text-muted)] uppercase tracking-widest mb-4">{data.title}</p>
+              <p className="text-sm text-[var(--text-muted)] uppercase mb-4">{data.title}</p>
               <div className="flex gap-6 text-xs text-[var(--text-muted)]">
                 <span className="flex items-center gap-1"><Mail size={12}/> {data.contact.email}</span>
                 <span className="flex items-center gap-1"><Phone size={12}/> {data.contact.phone}</span>
@@ -42,7 +42,7 @@ const Design1Minimal = ({ data }) => {
                   <span className="text-xs text-[var(--text-muted)]">{exp.role}</span>
                 </div>
                 {exp.dates && (
-                  <p className="text-[10px] uppercase tracking-widest text-[var(--text-muted)] mb-2">{exp.dates}</p>
+                  <p className="text-[10px] uppercase text-[var(--text-muted)] mb-2">{exp.dates}</p>
                 )}
                 <ul className="space-y-1 mb-3">
                   {exp.achievements.map((ach, i) => (
@@ -78,7 +78,7 @@ const Design1Minimal = ({ data }) => {
               <div key={idx} className="mb-3">
                 <p className="text-sm text-[var(--text)]">{edu.degree}</p>
                 {edu.center && <p className="text-xs text-[var(--text-muted)]">{edu.center}</p>}
-                {edu.dates && <p className="text-[10px] uppercase tracking-widest text-[var(--text-muted)]">{edu.dates}</p>}
+                {edu.dates && <p className="text-[10px] uppercase text-[var(--text-muted)]">{edu.dates}</p>}
                 <p className="text-xs text-[var(--text-muted)]">{edu.note}</p>
               </div>
             ))}
