@@ -34,7 +34,7 @@ export const dataES = {
         "Observabilidad y correlación de eventos con Dynatrace sobre los servicios en producción, con alertado y buenas prácticas de MLOps y seguridad de modelos.",
         "Arquitectura de plataformas de IA en Azure y GCP sobre contenedores, con FastAPI, vector stores y pipelines de evaluación automática."
       ],
-      tech: ["Python", "Dynatrace", "Kubernetes", "Claude (Anthropic)", "MCP", "LangChain", "Azure OpenAI", "GCP Vertex", "Docker", "RAG"]
+      tech: ["Python", "Dynatrace", "Datadog", "Kubernetes", "Claude (Anthropic)", "MCP", "LangChain", "LangGraph", "LangSmith", "Langfuse", "Azure OpenAI", "GCP Vertex", "Docker", "RAG", "pgvector"]
     },
     {
       project: "EASO MAGNO",
@@ -46,7 +46,7 @@ export const dataES = {
         "Implementación de pipelines CI/CD con GitHub Actions y Docker, con control de versiones en GitHub.",
         "Elaboración de runbooks operativos y diseño de flujos inteligentes en n8n, reduciendo tiempos de procesamiento manual."
       ],
-      tech: ["Kubernetes", "Docker", "GitHub Actions", "CI/CD", "Python", "FastAPI", "Azure", "GCP", "n8n", "OpenAI"]
+      tech: ["Kubernetes", "Docker", "GitHub Actions", "CI/CD", "Python", "FastAPI", "AWS", "Azure", "GCP", "Kafka", "Airflow", "n8n", "OpenAI"]
     },
     {
       project: "Kauai",
@@ -58,7 +58,7 @@ export const dataES = {
         "Creación de APIs REST con FastAPI para el procesamiento de datos en tiempo real.",
         "Integración de modelos de IA para la automatización de tareas críticas internas."
       ],
-      tech: ["Python", "Vue.js", "FastAPI", "PostgreSQL", "Docker"]
+      tech: ["Python", "Vue.js", "FastAPI", "LlamaIndex", "PostgreSQL", "Docker"]
     },
     {
       project: "Proaltus Capital Partners",
@@ -116,8 +116,8 @@ export const dataES = {
   skills: {
     backend: ["Python (Experto)", "FastAPI", "Django", "Java/SpringBoot", "Node.js"],
     frontend: ["React.js", "Vue.js", "TypeScript", "Tailwind CSS"],
-    ai_devops: ["Kubernetes", "Dynatrace", "Docker", "Git / GitHub", "GitHub Copilot", "CI/CD (GitHub Actions)", "Azure OpenAI / GCP", "LangChain / MCP", "n8n"],
-    databases: ["PostgreSQL", "SQL Server", "MongoDB", "MySQL", "MariaDB"]
+    ai_devops: ["Kubernetes", "Dynatrace", "Datadog", "Docker", "AWS", "Git / GitHub", "GitHub Copilot", "CI/CD (GitHub Actions)", "Azure OpenAI / GCP", "LangChain / MCP", "LangGraph", "LlamaIndex", "LangSmith", "Langfuse", "Kafka", "Airflow", "n8n"],
+    databases: ["PostgreSQL", "pgvector", "Pinecone", "BigQuery", "SQL Server", "MongoDB", "MySQL", "MariaDB"]
   },
   languages: ["Castellano (Nativo)", "Catalán (Nativo)", "Inglés (Técnico)"],
   certifications: certList("may. 2026"),
@@ -156,7 +156,7 @@ export const dataEN = {
         "Observability and event correlation with Dynatrace across production services, with alerting and MLOps (Machine Learning Ops) and model security best practices.",
         "AI platform architecture on Azure and GCP over containers, using FastAPI, vector stores, and automated evaluation pipelines."
       ],
-      tech: ["Python", "Dynatrace", "Kubernetes", "Claude (Anthropic)", "MCP", "LangChain", "Azure OpenAI", "GCP Vertex", "Docker", "RAG"]
+      tech: ["Python", "Dynatrace", "Datadog", "Kubernetes", "Claude (Anthropic)", "MCP", "LangChain", "LangGraph", "LangSmith", "Langfuse", "Azure OpenAI", "GCP Vertex", "Docker", "RAG", "pgvector"]
     },
     {
       project: "EASO MAGNO",
@@ -168,7 +168,7 @@ export const dataEN = {
         "Implementation of CI/CD pipelines with GitHub Actions and Docker, with version control on GitHub.",
         "Authoring of operational runbooks and design of intelligent workflows in n8n, reducing manual processing times."
       ],
-      tech: ["Kubernetes", "Docker", "GitHub Actions", "CI/CD", "Python", "FastAPI", "Azure", "GCP", "n8n", "OpenAI"]
+      tech: ["Kubernetes", "Docker", "GitHub Actions", "CI/CD", "Python", "FastAPI", "AWS", "Azure", "GCP", "Kafka", "Airflow", "n8n", "OpenAI"]
     },
     {
       project: "Kauai",
@@ -180,7 +180,7 @@ export const dataEN = {
         "Creation of REST APIs with FastAPI for real-time data processing.",
         "Integration of AI models for automation of critical internal tasks."
       ],
-      tech: ["Python", "Vue.js", "FastAPI", "PostgreSQL", "Docker"]
+      tech: ["Python", "Vue.js", "FastAPI", "LlamaIndex", "PostgreSQL", "Docker"]
     },
     {
       project: "Proaltus Capital Partners",
@@ -238,8 +238,8 @@ export const dataEN = {
   skills: {
     backend: ["Python (Expert)", "FastAPI", "Django", "Java/SpringBoot", "Node.js"],
     frontend: ["React.js", "Vue.js", "TypeScript", "Tailwind CSS"],
-    ai_devops: ["Kubernetes", "Dynatrace", "Docker", "Git / GitHub", "GitHub Copilot", "CI/CD (GitHub Actions)", "Azure OpenAI / GCP", "LangChain / MCP", "n8n"],
-    databases: ["PostgreSQL", "SQL Server", "MongoDB", "MySQL", "MariaDB"]
+    ai_devops: ["Kubernetes", "Dynatrace", "Datadog", "Docker", "AWS", "Git / GitHub", "GitHub Copilot", "CI/CD (GitHub Actions)", "Azure OpenAI / GCP", "LangChain / MCP", "LangGraph", "LlamaIndex", "LangSmith", "Langfuse", "Kafka", "Airflow", "n8n"],
+    databases: ["PostgreSQL", "pgvector", "Pinecone", "BigQuery", "SQL Server", "MongoDB", "MySQL", "MariaDB"]
   },
   languages: ["Spanish (Native)", "Catalan (Native)", "English (Technical)"],
   certifications: certList("May 2026"),
