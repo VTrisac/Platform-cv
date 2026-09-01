@@ -137,12 +137,17 @@ const OTRO_MUNDO = [
 // Tu oficio con una herramienta que no has tocado: NO cuenta en el denominador,
 // se devuelve en `falta` para que la veas. Aprender MLflow no te cambia de
 // profesión; aprender Rails sí.
+//
+// Se le resta lo tuyo, y no es cosmético: Kubernetes entró en el CV en 645e356 y
+// se quedó también aquí, así que el feed lo contaba como cubierto Y avisaba de
+// que te faltaba, en la misma fila. Con el filtro, meter una en data.js la saca
+// de vecinas sola.
 const VECINAS = [
   'AWS', 'Kubernetes', 'Terraform', 'Ansible', 'Jenkins', 'Kafka', 'RabbitMQ',
   'Spark', 'Hadoop', 'Snowflake', 'Databricks', 'Airflow', 'dbt', 'Tableau',
   'PowerBI', 'Looker', 'PyTorch', 'TensorFlow', 'Keras', 'scikit-learn',
   'Hugging Face', 'Kubeflow', 'MLflow', 'Selenium', 'Cypress', 'Puppeteer',
-]
+].filter((t) => !MIOS.some((m) => m.toLowerCase() === t.toLowerCase()))
 
 // El vocabulario con el que se lee el stack de una oferta: lo tuyo y lo ajeno.
 export const VOCABULARIO = [...new Set([...MIOS, ...OTRO_MUNDO, ...VECINAS])]

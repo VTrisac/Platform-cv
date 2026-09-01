@@ -56,11 +56,14 @@ async function selftest() {
   // --- la nota de encaje: proporción de lo que pide la oferta que cubres ---
   // Lo que hace que la nota signifique algo: la oferta de Rails no puede sacar
   // lo mismo que la de Python solo por ser larga.
-  const rails = notaDe('We work with Ruby on Rails, PostgreSQL, AWS, Kubernetes and Docker')
+  // En la oferta ajena solo va tech que NUNCA vas a tener (Ruby, Rails). Llevaba
+  // AWS y Kubernetes, y el día que Kubernetes entró en data.js (645e356) la nota
+  // subió a 6 y el test se cayó solo, sin que nada estuviera roto.
+  const rails = notaDe('We work with Ruby on Rails, PostgreSQL and Docker')
   const tuyo = notaDe('We work with Python, FastAPI, PostgreSQL, Docker and React')
   a.ok(tuyo.nota > rails.nota, `tu stack (${tuyo.nota}) debe puntuar más que uno ajeno (${rails.nota})`)
   a.equal(tuyo.nota, 10, 'cubrir las 5 que pide es un 10')
-  a.ok(rails.nota <= 5, 'cubrir 2 de 6 no llega al aprobado')
+  a.ok(rails.nota <= 5, 'cubrir 2 de 4 no llega al aprobado')
   a.ok(rails.stack.includes('Ruby'), 'otro oficio SÍ entra en el denominador')
   a.ok(!rails.hits.includes('Ruby'), 'hits sigue siendo solo lo tuyo')
 
@@ -70,7 +73,10 @@ async function selftest() {
   const ia = notaDe('Senior AI Engineer. Build LLM agents with Python, LangChain '
     + 'and RAG, deploy on AWS with Kubernetes, fine-tune models in PyTorch.')
   a.equal(ia.nota, 10, 'tu puesto ideal sacaba un 4 y se tiraba; ahora es un 10')
-  a.deepEqual(ia.falta, ['AWS', 'Kubernetes', 'PyTorch'], 'lo vecino se enseña, no resta')
+  // Invariantes, no una lista de nombres: la lista caduca cada vez que una
+  // vecina entra en data.js. Kubernetes la rompió en 645e356 y AWS otra vez hoy.
+  a.ok(ia.falta.includes('PyTorch'), 'lo vecino que NO tienes se enseña')
+  a.ok(!ia.falta.some((t) => ia.hits.includes(t)), 'nada puede faltarte y cubrirte a la vez')
   a.ok(!ia.stack.some((t) => ia.falta.includes(t)), 'lo vecino no entra en el denominador')
   // Dos coincidencias con suelo 4 son un 5, no un 10: el suelo sigue impidiendo
   // el aprobado alto por una mención suelta. Lo que importa es que antes era 0,

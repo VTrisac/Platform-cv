@@ -14,6 +14,15 @@ import { agrupar, esSemilla, contar, conCV, SIGUIENTE, ESTADOS, aplicarPatch,
 import { hashPassword } from './set-password.js'
 import { dataEN } from '../src/data.js'
 
+// Canarios: tech que NO está en tu CV. NO uses una real (Kubernetes, Go, Rust…):
+// el día que esa tech entra de verdad en data.js el test se cae solo sin que nada
+// esté roto. Pasó con Kubernetes en 645e356. El assert de abajo avisa el día que
+// alguno deje de ser mentira.
+const [FANTASMA, FANTASMA2, FANTASMA_SKILL] = ['Fortran-77', 'COBOL', 'Prolog']
+for (const f of [FANTASMA, FANTASMA2, FANTASMA_SKILL]) {
+  a.ok(!JSON.stringify(dataEN).includes(f), `el canario ${f} ya no está ausente del CV: elige otro`)
+}
+
 // Un parche hostil: cambia empresas y fechas, añade stack que no tiene,
 // inventa un puesto extra y mete 5 logros donde caben 3.
 const evil = {
@@ -22,9 +31,9 @@ const evil = {
   experience: dataEN.experience.map((e, i) => ({
     description: `desc ${i}`,
     achievements: ['a', 'b', 'c', 'd', 'e'],
-    tech: i === 0 ? ['Kubernetes', 'Rust', 'Python'] : e.tech,
+    tech: i === 0 ? [FANTASMA, FANTASMA2, 'Python'] : e.tech,
   })),
-  skills: { backend: ['Go', 'Python'], frontend: [], ai_devops: [], databases: [] },
+  skills: { backend: [FANTASMA_SKILL, 'Python'], frontend: [], ai_devops: [], databases: [] },
   role: 'x', company: 'y', gaps: [],
 }
 
@@ -38,8 +47,8 @@ for (const [i, e] of data.experience.entries()) {
   a.ok(e.achievements.length <= 3, 'máximo 3 logros por puesto')
   for (const t of e.tech) a.ok(dataEN.experience[i].tech.includes(t), `tech inventada: ${t}`)
 }
-a.ok(dropped.includes('Kubernetes') && dropped.includes('Rust'), 'la tech inventada se reporta')
-a.ok(!JSON.stringify(data).includes('Kubernetes'), 'Kubernetes no llega al CV')
+a.ok(dropped.includes(FANTASMA) && dropped.includes(FANTASMA2), 'la tech inventada se reporta')
+a.ok(!JSON.stringify(data).includes(FANTASMA), 'la tech inventada no llega al CV')
 a.deepEqual(data.education, dataEN.education, 'los estudios no se tocan')
 a.deepEqual(data.certifications, dataEN.certifications, 'las certificaciones no se tocan')
 a.deepEqual(data.contact, dataEN.contact, 'el contacto no se toca')
@@ -47,7 +56,7 @@ a.equal(data.skills.backend.length, dataEN.skills.backend.length, 'skills se reo
 a.deepEqual([...data.skills.backend].sort(), [...dataEN.skills.backend].sort(), 'mismas skills')
 // El modelo pidió "Python" a secas; se reordena, pero conserva TU matiz.
 a.equal(data.skills.backend[0], 'Python (Expert)', 'lo pedido va primero, con el string del CV')
-a.ok(dropped.includes('Go'), 'Go no está en tu CV: bloqueado')
+a.ok(dropped.includes(FANTASMA_SKILL), 'una skill que no está en tu CV: bloqueada')
 
 // --- parche incompleto ------------------------------------------------------
 // Ya no hay decodificación restringida que garantice la forma del parche (se
@@ -116,10 +125,10 @@ a.deepEqual(findInventions(dataEN, honest.gaps, escrito(honest)), [], 'sin contr
 
 // La carta es texto libre de principio a fin: applyPatch no puede filtrar nada
 // ahí, así que esta es la ÚNICA red que tiene. Mismo detector, otro texto.
-const cartaMentirosa = 'I have shipped production Kubernetes clusters and built RAG systems in Python.'
-const invCarta = findInventions(dataEN, ['No experience with Kubernetes.'], cartaMentirosa)
-a.deepEqual(invCarta, ['Kubernetes'], 'la carta que se contradice con sus gaps se caza igual')
-a.deepEqual(findInventions(dataEN, ['No Kubernetes.'], 'Built RAG systems in Python at WeAi.'), [],
+const cartaMentirosa = `I have shipped production ${FANTASMA} systems and built RAG systems in Python.`
+const invCarta = findInventions(dataEN, [`No experience with ${FANTASMA}.`], cartaMentirosa)
+a.deepEqual(invCarta, [FANTASMA], 'la carta que se contradice con sus gaps se caza igual')
+a.deepEqual(findInventions(dataEN, [`No ${FANTASMA}.`], 'Built RAG systems in Python at WeAi.'), [],
   'una carta que se ciñe al CV no dispara el aviso')
 
 // Caso real observado con nemotron a la primera: el prompt le prohíbe hablar de
