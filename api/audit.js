@@ -16,6 +16,18 @@ import { dataES, dataEN } from '../src/data.js'
 
 export const maxDuration = 300
 
+// Auditar y adaptar no piden lo mismo. Adaptar quiere velocidad y un modelo que
+// se atreva a reescribir; auditar quiere el que menos "sí" regale. Medido
+// 01-09-2026 contra la oferta de Chery (Big Data: el CV no tiene nada de esa
+// pila) — ninguno se inventó un "sí" sobre ella, la diferencia está en el resto:
+//   kimi-k3           102s  11 requisitos  3 sí / 3 parcial / 5 no  1.034 tokens
+//   minimax-m3         77s  13 requisitos  4 / 6 / 3               1.242
+//   deepseek-v4-flash  91s  14 requisitos  2 / 5 / 7               1.612 (+1 reint.)
+//   nemotron-3-super  149s  ✗ se pasa del timeout del cliente      4.598
+// kimi-k3 es el más severo y el más barato de salida. deepseek-v4-flash saca más
+// requisitos pero se quedó sin responder adaptando, así que no se fía de él aquí.
+const AUDIT_MODEL = process.env.AUDIT_MODEL || 'moonshotai/kimi-k3'
+
 const schema = {
   type: 'object',
   properties: {
@@ -227,6 +239,7 @@ export default async function handler(req, res) {
     const { datos: a, usage } = await pedirJSON({
       system: SYSTEM,
       schema,
+      model: AUDIT_MODEL,
       // Una auditoría son hasta 14 requisitos con su evidencia, y el modelo
       // razona 1.000-2.000 tokens antes de escribir el primero. Con 8000 se
       // cortaba en ofertas normales de LinkedIn (medido). Ver pedirJSON.

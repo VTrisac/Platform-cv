@@ -14,13 +14,16 @@ import { dataES, dataEN } from '../src/data.js'
 
 // NVIDIA NIM habla el protocolo de OpenAI, de ahí el SDK. El modelo es abierto,
 // no es Claude. NO se usa json_schema: ver pedirJSON(), su decodificación
-// restringida se atasca con este modelo y devuelve la respuesta cortada.
-// Medido contra la oferta de Factorial con este mismo código:
-//   nemotron-3-super-120b-a12b  17-24s  ✓ (MoE, 12B activos: por eso vuela)
-//   meta/llama-3.3-70b-instruct    112s  ✗ texto corrupto, perfil en otro idioma
-//   openai/gpt-oss-120b            565s  ✗ inviable en serverless
-// Cámbialo con TAILOR_MODEL si quieres reevaluar.
-const MODEL = process.env.TAILOR_MODEL || 'nvidia/nemotron-3-super-120b-a12b'
+// restringida se atasca y devuelve la respuesta cortada.
+// Medido 01-09-2026 adaptando la oferta de Chery (Big Data, que el CV no cubre):
+//   minimaxai/minimax-m3         48-83s  ✓ 3 de 3, ~1.050 tokens, adapta el título
+//   nvidia/nemotron-3-super-120b   107s  ✓ pero 6.574 tokens y NO tocó el título
+//   moonshotai/kimi-k3             112s  ✓ 1.305 tokens
+//   deepseek-v4-flash, gemma-4-31b-it, nemotron-3.5-lightning-30b, deepseek-v4-pro,
+//   mistral-nemotron                     ✗ timeout, en solitario y sin concurrencia
+// El anterior, nemotron-3-super, encima se pasaba del timeout auditando (149s).
+// Cámbialo con TAILOR_MODEL. El auditor va aparte: AUDIT_MODEL, en audit.js.
+const MODEL = process.env.TAILOR_MODEL || 'minimaxai/minimax-m3'
 const BASE_URL = 'https://integrate.api.nvidia.com/v1'
 
 export const maxDuration = 300
@@ -274,9 +277,11 @@ export function gate(req, res, needsKey = true) {
 
 // timeout y maxRetries explícitos: por defecto el SDK reintenta dos veces y
 // espera 10 minutos, así que una llamada atascada se comía el techo de 300 s de
-// la función sin que nadie viera por qué. Mejor fallar a los 100 s y decirlo.
+// la función sin que nadie viera por qué.
+// 130 s y no 120: kimi-k3 tardó 111,5 s en una pasada buena, y 8 s no son margen.
+// Peor caso con un reintento: 260 s + los 20 s del scrape, dentro de maxDuration.
 export const client = () => new OpenAI({
-  apiKey: process.env.NVIDIA_API_KEY, baseURL: BASE_URL, timeout: 120000, maxRetries: 1,
+  apiKey: process.env.NVIDIA_API_KEY, baseURL: BASE_URL, timeout: 130000, maxRetries: 1,
 })
 export { MODEL }
 
@@ -295,11 +300,11 @@ export { MODEL }
 // El esquema viaja en el prompt —con sus `description`, que es donde el modelo
 // lee cuánto escribir en cada campo— y el JSON se valida aquí. La garantía
 // anti-invención nunca fue el esquema: es applyPatch, que es código.
-export async function pedirJSON({ system, user, schema, max_tokens = 8000 }) {
+export async function pedirJSON({ system, user, schema, max_tokens = 8000, model = MODEL }) {
   let completion
   try {
     completion = await client().chat.completions.create({
-      model: MODEL,
+      model,
       max_tokens,
       messages: [
         { role: 'system', content: `${system}\n\nDevuelve SOLO un objeto JSON, sin texto alrededor, con este esquema exacto:\n${JSON.stringify(schema)}` },
