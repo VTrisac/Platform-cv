@@ -1,38 +1,15 @@
-import { useEffect, useRef, useState, Suspense, lazy } from 'react'
+import { useEffect, useRef, useState, Suspense } from 'react'
 import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, Send, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react'
 import { dataES, dataEN } from '../data'
 import { conPerfil, conSalario } from '../perfil'
 import Auditoria from './Auditoria'
 import Proceso from './Proceso'
-import { FASES } from './lote'
+import { FASES, preparar } from './lote'
 import { apiPost, auditar as auditarOferta, aplicar as mandarAExtension, base64, descargarPdf, hayExtension, INSTALAR, nombrePdf, olvidarCarpeta, pdfBlob } from './api'
-
-const DESIGNS = [
-  { id: 5, name: 'ATS', load: () => import('../designs/Design6ATS') },
-  { id: 0, name: 'Minimalista', load: () => import('../designs/Design1Minimal') },
-  { id: 3, name: 'Tarjetas', load: () => import('../designs/Design4Cards') },
-]
-const components = DESIGNS.map((d) => lazy(d.load))
-
-const Card = ({ title, children, right }) => (
-  <div
-    className="rounded-[20px] border p-5 flex flex-col gap-2.5"
-    style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)', boxShadow: 'var(--s-shadow)' }}
-  >
-    <div className="flex items-center justify-between">
-      <span className="text-xs font-semibold" style={{ color: 'var(--s-muted)', letterSpacing: '0.3px' }}>
-        {title}
-      </span>
-      {right}
-    </div>
-    {children}
-  </div>
-)
-
-const field = {
-  background: 'var(--s-bg)', border: '1px solid var(--s-border)', borderRadius: 10,
-  padding: '9px 12px', outline: 'none', width: '100%', fontSize: 13,
-}
+// El catálogo vive en designs/: lo comparte con el visor de impresión, y sus
+// ids son los que entiende scripts/pdf.py.
+import { DESIGNS, components } from '../designs'
+import { Card, campo as field } from './ui'
 
 const PASOS = [
   ['oferta', 'Auditar oferta'],
@@ -190,36 +167,38 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
     const entrada = texto.trim()
     if (!entrada) return setError('Pega la URL de la oferta o su texto.')
     setError(null)
+    // Lo que ya se pagó al modelo no se vuelve a pagar. Solo si es de ESTA
+    // oferta —de ahí el centinela—, nunca de la que quedó en pantalla: cambiar
+    // el textarea no limpia `audit`, y el CV se adaptaría a la que ya no está.
+    const previo = origen === entrada ? { a: audit, cv: data } : {}
+    // La auditoría en curso, fuera del closure: `audit` es el del render actual
+    // y setAudit no lo actualiza a tiempo, así que la variante saldría llamada
+    // "Oferta · ES" y todos los PDF se pisarían con el mismo nombre.
+    let enCurso = previo.a
     try {
-      // Se reanuda por donde se quedó: lo que ya se pagó al modelo en un intento
-      // anterior no se vuelve a pagar. Solo si es de ESTA oferta —de ahí el
-      // centinela—, nunca de la que quedó en pantalla.
-      // `a.texto` (recién scrapeado), no el estado `audit`: setState es async y
-      // aún no habría cuajado para los dos pasos siguientes.
-      let a = origen === entrada ? audit : null
-      let cv = origen === entrada ? data : null
-      if (!a) {
-        setLoading('auditar')
-        a = await auditarOferta(entrada, lang)
-        cv = null // auditoría nueva: el CV que hubiera era de otra oferta
-        setAudit(a); setOrigen(entrada); setNombre(`${a.empresa} · ${lang.toUpperCase()}`); setPaso('auditoria')
-        onAuditada?.(a, lang, fuenteUrl)
-      }
-      if (a.recomendacion === 'descartar') return // se para, decides tú desde el informe
-
-      if (!cv) {
-        setLoading('adaptar')
-        const j = await apiPost('/api/tailor', { text: a.texto, lang })
-        setData(j.data); setMeta(j); setPaso('cv')
-        // Se guarda con la oferta AQUÍ, igual que la auditoría y la carta. Sin
-        // esto el CV solo vivía en este componente: al volver al tracker no había
-        // nada que mandar al portal y por eso el botón "Aplicar" no salía nunca.
-        onCV?.(`${a.empresa} · ${lang.toUpperCase()}`, j.data)
-      }
-
-      setLoading('carta')
-      const c = await apiPost('/api/cover', { text: a.texto, lang })
-      setCarta(c.carta); setCartaInv(c.inventions ?? []); onCarta?.(c.carta)
+      // El flujo lo lleva preparar(), el mismo que corre la Cola. Aquí solo se
+      // pinta lo que va llegando. Tenerlo escrito dos veces costó que arreglar
+      // la reanudación hubiera que hacerlo dos veces.
+      await preparar(entrada, lang, (fase, extra = {}) => {
+        setLoading(['listo', 'parado'].includes(fase) ? null : fase)
+        if (extra.a) {
+          enCurso = extra.a
+          setAudit(extra.a); setOrigen(entrada)
+          setNombre(`${extra.a.empresa} · ${lang.toUpperCase()}`)
+          setPaso('auditoria')
+          onAuditada?.(extra.a, lang, fuenteUrl)
+        }
+        if (extra.cv) {
+          setData(extra.cv); setMeta(extra.meta); setPaso('cv')
+          // Se guarda con la oferta AQUÍ, igual que la auditoría y la carta. Sin
+          // esto el CV solo vivía en este componente: al volver al tracker no
+          // había nada que mandar al portal y "Aplicar" no salía nunca.
+          onCV?.(`${enCurso?.empresa ?? oferta?.empresa ?? 'Oferta'} · ${lang.toUpperCase()}`, extra.cv)
+        }
+        if (extra.carta) {
+          setCarta(extra.carta); setCartaInv(extra.cartaInv ?? []); onCarta?.(extra.carta)
+        }
+      }, previo)
     } catch (e) { setError(e.message) } finally { setLoading(null) }
   }
 

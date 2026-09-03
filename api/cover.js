@@ -6,7 +6,8 @@
 // contra el CV maestro —una carta es texto libre de principio a fin—, así que
 // la única red posible es findInventions: si el modelo declara un gap y luego
 // lo escribe en la carta, se contradice, y eso se avisa.
-import { gate, pedirJSON, findInventions, PRESUPUESTO } from './tailor.js'
+import { pedirJSON, findInventions, PRESUPUESTO } from './tailor.js'
+import { gate } from '../src/acceso.js'
 import { dataES, dataEN } from '../src/data.js'
 
 export const maxDuration = 300

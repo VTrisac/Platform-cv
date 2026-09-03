@@ -8,9 +8,14 @@
 // imposible que invente un empleo aunque el prompt falle. Y las tecnologías se
 // filtran contra las del CV maestro, así que tampoco puede añadir un stack que
 // no tienes.
-import { scryptSync, timingSafeEqual } from 'node:crypto'
 import OpenAI from 'openai'
 import { dataES, dataEN } from '../src/data.js'
+// La puerta y las vías viven fuera: así /api/feed y /api/pdf pueden exigir la
+// contraseña sin cargar el SDK de OpenAI que se importa aquí arriba.
+import { gate, vias } from '../src/acceso.js'
+// El scrape vive fuera por el mismo motivo que la puerta: /api/feed lo usa y no
+// tiene por qué cargar el SDK del modelo para bajarse una oferta.
+import { fetchOffer } from '../src/scrape.js'
 
 // NVIDIA NIM habla el protocolo de OpenAI, de ahí el SDK. El modelo es abierto,
 // no es Claude. NO se usa json_schema: ver pedirJSON(), su decodificación
@@ -25,76 +30,9 @@ import { dataES, dataEN } from '../src/data.js'
 // Cámbialo con TAILOR_MODEL. El auditor va aparte: AUDIT_MODEL, en audit.js.
 // Es el modelo de la vía NIM; el de la vía gateway se elige en MODELOS, abajo.
 const MODEL = process.env.TAILOR_MODEL || 'minimaxai/minimax-m3'
-const BASE_URL = 'https://integrate.api.nvidia.com/v1'
 
 export const maxDuration = 300
 
-const LINKEDIN_ID = /(?:currentJobId=|\/jobs\/view\/(?:[^/?]*-)?)(\d{6,})/
-const GUEST = 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/'
-
-// Sin dependencia de parseo: quitar scripts y etiquetas basta para dárselo al
-// modelo, que tolera el ruido mucho mejor que un selector CSS el rediseño de
-// un portal.
-export const strip = (html) => html
-  .replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ')
-  .replace(/<[^>]+>/g, '\n')
-  .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(n))
-  .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
-
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/131.0 Safari/537.36'
-const bajar = (url) => fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(20000) })
-
-// Ashby y compañía son React puro: el HTML no trae ni una línea de la oferta,
-// y strip() devolvía menos de 400 caracteres, así que el scrape moría con un
-// "pide login" que era mentira. Pero sí publican la oferta entera en el
-// <script type="application/ld+json"> de schema.org, que strip() borraba junto
-// con el resto de scripts. Es un estándar, no un apaño para un portal: lo
-// sirven Ashby, Greenhouse, Indeed, InfoJobs y cualquiera que quiera salir en
-// Google for Jobs.
-export function jobPosting(html) {
-  for (const [, crudo] of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
-    try {
-      // Algunos lo envuelven en @graph o en un array; se aplana y se busca.
-      const d = JSON.parse(crudo)
-      const nodos = [d, ...(d['@graph'] ?? []), ...(Array.isArray(d) ? d : [])]
-      const j = nodos.find((n) => n?.['@type'] === 'JobPosting' && n.description)
-      if (j) return strip([j.title, j.hiringOrganization?.name, j.jobLocation?.address?.addressLocality, j.description].filter(Boolean).join('\n'))
-    } catch {
-      // Un ld+json roto no debe tumbar el scrape: se prueba el siguiente.
-    }
-  }
-  return null
-}
-
-// Workable sirve una cáscara vacía SIN ld+json, pero tiene API pública. La
-// cuenta no está en el enlace corto (/j/<code>), solo aparece tras la
-// redirección — de ahí que se mire res.url y no la URL que te pasaron.
-const WORKABLE = /apply\.workable\.com\/([^/]+)\/j\/([^/?]+)/
-
-export async function fetchOffer(url) {
-  const m = LINKEDIN_ID.exec(url)
-  const res = await bajar(m ? GUEST + m[1] : url)
-  if (!res.ok) throw new Error(`El portal respondió ${res.status}. Pega el texto de la oferta a mano.`)
-  const html = await res.text()
-
-  const wk = WORKABLE.exec(res.url)
-  // El JSON de la API no lleva etiquetas, pero la descripción de dentro sí:
-  // strip() la limpia igual que haría con una página.
-  if (wk) {
-    const api = strip(await (await bajar(`https://apply.workable.com/api/v2/accounts/${wk[1]}/jobs/${wk[2]}`)).text())
-    if (api.length >= 400) return api
-  }
-
-  // Se queda el más largo de los dos, no el ld+json siempre: en RemoteOK el
-  // ld+json trae 1.000 caracteres y la página 13.000. El modelo tolera el ruido
-  // de una página entera mucho mejor que la falta de media oferta.
-  const plano = strip(html)
-  const ld = jobPosting(html) ?? ''
-  const text = ld.length > plano.length ? ld : plano
-
-  if (text.length < 400) throw new Error('Apenas se ha extraído texto: la oferta pide login. Pega el texto a mano.')
-  return text
-}
 
 // --- lo único que el modelo puede escribir ---------------------------------
 const schema = (n) => ({
@@ -226,82 +164,6 @@ export function findInventions(cv, gaps, written) {
 
   return [...terms].filter((t) => has(written, t) && !has(master, t))
 }
-
-// Verifica una contraseña contra un hash `salt:derivado` (hex) de scrypt, en
-// tiempo constante. scrypt es stdlib: ni bcrypt ni ninguna dependencia. El
-// mismo formato que genera scripts/set-password.js.
-export function verifyPassword(password, stored) {
-  const [salt, hex] = String(stored).split(':')
-  if (!salt || !hex) return false
-  const esperado = Buffer.from(hex, 'hex')
-  const recibido = scryptSync(String(password), salt, esperado.length)
-  // Longitudes distintas harían petar timingSafeEqual: se descarta antes.
-  return esperado.length === recibido.length && timingSafeEqual(esperado, recibido)
-}
-
-// Puerta compartida por /api/tailor, /api/audit, /api/feed y /api/cover. Devuelve
-// null si todo va bien, o el error ya enviado; el llamante solo hace return.
-//
-// La URL de Vercel es pública y cada llamada gasta créditos de tu cuenta.
-// ponytail: un secreto compartido, no OAuth. Un solo usuario, un solo secreto.
-// En producción se exige SIEMPRE: si falta el secreto, no se atiende a nadie
-// (fallar cerrado). En local es opcional para poder probar sin fricción.
-//
-// El secreto se guarda hasheado en TAILOR_PASSWORD_HASH; TAILOR_PASSWORD en
-// claro sigue valiendo como camino de compatibilidad, para que un despliegue no
-// te deje fuera mientras migras. Pon el hash, comprueba, y borra la clave clara.
-//
-// needsKey=false para los endpoints que no llaman al modelo (/api/feed): la
-// contraseña se sigue exigiendo igual, pero faltar la clave de NVIDIA no es
-// motivo para negarles servicio.
-export function gate(req, res, needsKey = true) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Usa POST' })
-
-  const hash = process.env.TAILOR_PASSWORD_HASH
-  const claro = process.env.TAILOR_PASSWORD
-  if (process.env.VERCEL || hash || claro) {
-    if (!hash && !claro) {
-      return res.status(500).json({ error: 'Falta TAILOR_PASSWORD_HASH en el entorno: el endpoint queda cerrado.' })
-    }
-    const enviada = req.headers['x-tailor-key'] ?? ''
-    const ok = hash ? verifyPassword(enviada, hash) : enviada === claro
-    if (!ok) return res.status(401).json({ error: 'Contraseña incorrecta.' })
-  }
-
-  // Basta con UNA vía al modelo: el gateway de Vercel o NVIDIA. Antes se exigía
-  // NVIDIA y solo NVIDIA, que era justo lo que dejaba la app a merced de un
-  // proveedor.
-  if (needsKey && !vias().length) {
-    return res.status(500).json({
-      error: 'No hay vía al modelo. Pon AI_GATEWAY_API_KEY (recomendada) o NVIDIA_API_KEY. '
-        + 'En local: en .env.local. Desplegado: vercel env add AI_GATEWAY_API_KEY.',
-    })
-  }
-  return null
-}
-
-// --- las dos vías al modelo -------------------------------------------------
-// NIM es gratis, pero su latencia es salvaje y no avisa: medido el 03-09-2026
-// con la misma auditoría, kimi-k3 tardó 150,7 s y el PRIMER token llegó 14 ms
-// antes que el último —no emite nada mientras trabaja, así que ni el streaming
-// ni un "va por la mitad" son posibles—. Los cuatro modelos lanzados a la vez:
-// gpt-oss-120b 166 s · deepseek-v4-flash 198 s · kimi-k3 203 s · minimax-m3
-// >240 s. NINGUNO bajó de 166 s: va lento el servicio, no un modelo, y por eso
-// tampoco sirve correr varios a la vez. Con el timeout de 130 s que había aquí,
-// toda llamada fallaba, y maxRetries la repetía contra el mismo sitio saturado:
-// 260 s de espera para leer "el modelo no ha respondido a tiempo".
-//
-// El gateway de Vercel habla el protocolo de OpenAI, así que es este mismo SDK
-// con otra baseURL. Va primero porque enruta al proveedor más rápido de los
-// varios que sirven el mismo modelo abierto (providerOptions.gateway.sort) y
-// cae solo al siguiente modelo si el suyo falla (gateway.models).
-const VIAS = [
-  { nombre: 'gateway', env: 'AI_GATEWAY_API_KEY', baseURL: 'https://ai-gateway.vercel.sh/v1', techo: 90000 },
-  { nombre: 'nim', env: 'NVIDIA_API_KEY', baseURL: BASE_URL, techo: Infinity },
-]
-
-// Las que tienen clave, en orden. Si solo hay una, se lleva el presupuesto entero.
-export const vias = (entorno = process.env) => VIAS.filter((v) => entorno[v.env])
 
 // Modelos por vía. En el gateway el primero es el que se usa y los demás son su
 // red: precios del catálogo el 03-09-2026, por millón de tokens (entrada/salida).

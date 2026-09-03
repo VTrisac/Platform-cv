@@ -8,7 +8,9 @@
 // `texto` es la oferta ya scrapeada: el paso 3 la reenvía a /api/tailor tal
 // cual, así no se baja dos veces ni se arriesga a que el portal cambie entre
 // una llamada y la otra.
-import { fetchOffer, gate, pedirJSON, PRESUPUESTO } from './tailor.js'
+import { pedirJSON, PRESUPUESTO } from './tailor.js'
+import { gate } from '../src/acceso.js'
+import { fetchOffer } from '../src/scrape.js'
 // La misma regex que ya usa el feed para la columna "salario": si la oferta
 // publica cifra, no hay nada que estimar.
 import { salarioDe } from './feed.js'

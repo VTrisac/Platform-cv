@@ -190,7 +190,6 @@ export function useStudio() {
       const fuera = new Set(ids)
       setState((s) => ({ ...s, ofertas: s.ofertas.filter((o) => !fuera.has(o.id)) }))
     },
-    reset: () => setState(load()),
   }
 }
 

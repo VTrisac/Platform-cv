@@ -8,7 +8,7 @@
 // un navegador de verdad. Aquí lo hace Chromium headless, el mismo motor que
 // scripts/pdf.py, pero recibiendo el HTML del CV YA adaptado (que solo existe en
 // el navegador, no en data.js).
-import { gate } from './tailor.js'
+import { gate } from '../src/acceso.js'
 
 export const maxDuration = 300
 

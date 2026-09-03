@@ -4,8 +4,9 @@
     npm run build                       # una vez, o cuando cambie src/
     .venv/bin/python scripts/pdf.py --design 5 --lang en --out CV_ATS_EN.pdf
 
-design 5 = el diseño ATS. Los 0-4 son los bonitos, para enviar por email o
-enseñar; para SUBIR a un portal usa el 5 y pásalo por scripts/ats.js.
+Hay tres diseños y sus números NO son correlativos, salen de src/designs/index.js:
+5 = ATS (el que se sube a un portal, pásalo por scripts/ats.js),
+3 = Tarjetas y 0 = Minimalista (los bonitos, para enviar por email o enseñar).
 
 ponytail: sirve dist/ con http.server en vez de file:// porque Vite genera
 rutas absolutas (/assets/...) que file:// no resuelve.

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Info, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { criteriosPorDefecto } from './api'
+import { Card, campo } from './ui'
 
 // Pantalla de criterios: qué buscar, qué descartar y en qué ventana de tiempo.
 //
@@ -14,31 +15,10 @@ import { criteriosPorDefecto } from './api'
 // El preset vive en localStorage y viaja a /api/feed en cada búsqueda. Mientras
 // sea null manda el servidor con sus valores de siempre; en cuanto tocas algo
 // se guarda entero y mandas tú.
-// Sin adzuna: su fuente existe en api/feed.js pero necesita ADZUNA_APP_ID y
-// ADZUNA_APP_KEY, que no están puestas. Ofrecerla era ofrecer una opción que
-// solo puede devolver "faltan las claves". Vuelve a la lista cuando las haya.
 const ATS = ['greenhouse', 'lever', 'ashby', 'workable', 'workday', 'amazon', 'remoteok']
 const VENTANAS = [['24h', 'Últimas 24 horas'], ['semana', 'Última semana'], ['todo', 'Sin límite']]
 const MODALIDADES = [['presencial', 'Presencial'], ['hibrido', 'Híbrido'], ['remoto', 'Remoto']]
 const IA = [['indiferente', 'Indiferente'], ['con', 'Solo con IA'], ['sin', 'Solo sin IA']]
-
-const campo = {
-  background: 'var(--s-bg)', border: '1px solid var(--s-border)', borderRadius: 10,
-  padding: '8px 11px', outline: 'none', fontSize: 13,
-}
-
-const Card = ({ title, hint, children }) => (
-  <div
-    className="rounded-[20px] border p-5 flex flex-col gap-3.5"
-    style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)', boxShadow: 'var(--s-shadow)' }}
-  >
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-semibold" style={{ color: 'var(--s-muted)', letterSpacing: '0.3px' }}>{title}</span>
-      {hint && <span className="text-xs" style={{ color: 'var(--s-muted)' }}>{hint}</span>}
-    </div>
-    {children}
-  </div>
-)
 
 const Pills = ({ opciones, valor, onChange, multi }) => (
   <div className="flex gap-2 flex-wrap">

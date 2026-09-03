@@ -17,7 +17,8 @@
 // regex sobre el texto de una oferta no sabe lo suficiente como para borrarla.
 // Medido el 28-08-2026, cuando sí borraban: de 534 ofertas, la nota tiraba 430
 // y el combo de todos los días dejaba 26. Ver filtrarTexto().
-import { gate, fetchOffer, strip } from './tailor.js'
+import { gate } from '../src/acceso.js'
+import { fetchOffer, strip } from '../src/scrape.js'
 import { dataEN } from '../src/data.js'
 
 export const maxDuration = 300
@@ -112,7 +113,7 @@ const TAMBIEN_TUYO = [
 ]
 
 // Lo tuyo, para leer ofertas. `keywords` sigue siendo solo lo que dice el CV.
-export const MIOS = [...new Set([...keywords, ...TAMBIEN_TUYO])]
+const MIOS = [...new Set([...keywords, ...TAMBIEN_TUYO])]
 
 // Lo que TÚ no tienes y las ofertas piden. Son DOS listas y no una porque no
 // significan lo mismo, y meterlas en el mismo saco era lo que vaciaba el feed:
@@ -241,20 +242,6 @@ export const ATS = {
       // SEO quiere vender. Medido: los demás tableros no hacen esto, así que
       // siguen serializándose enteros.
       text: [j.position, j.company, j.description, j.location].filter(Boolean).join('\n'),
-    })),
-  },
-  // El token es el término de búsqueda ("ai engineer"), no un slug de empresa.
-  // Necesita claves gratuitas: developer.adzuna.com -> .env.local y Vercel.
-  adzuna: {
-    url: (t) => {
-      const { ADZUNA_APP_ID: id, ADZUNA_APP_KEY: key } = process.env
-      if (!id || !key) throw new Error('faltan ADZUNA_APP_ID y ADZUNA_APP_KEY')
-      return `https://api.adzuna.com/v1/api/jobs/es/search/1?app_id=${id}&app_key=${key}`
-        + `&results_per_page=50&content-type=application/json&what=${encodeURIComponent(t)}`
-    },
-    jobs: (d) => (d.results ?? []).map((j) => ({
-      title: j.title, url: j.redirect_url, company: j.company?.display_name,
-      location: j.location?.display_name ?? '', fecha: iso(j.created), text: JSON.stringify(j),
     })),
   },
   // Workday: donde viven las farmacéuticas y buena parte de las grandes.
@@ -502,7 +489,7 @@ export function filtrarCabecera(jobs, { ubicacion = UBICACION, ventana = 'todo',
 // orden: arriba lo que cumple todo lo que pediste, abajo lo que no. Un criterio
 // que no encuentras es información; un criterio que borra la oferta es un feed
 // vacío sin explicación.
-export function filtrarTexto(jobs, {
+function filtrarTexto(jobs, {
   salarioMin = 0, exigirSalario = false,
   modalidades = [], lenguajes = [], ia = 'indiferente',
 } = {}) {
@@ -539,18 +526,17 @@ export function filtrarTexto(jobs, {
   // Primero lo que cumple más criterios TUYOS; a igual cumplimiento, la nota; y
   // a igual nota, la que cubre más tecnologías: un 8 sobre 10 pedidas pesa más
   // que un 8 sobre 4.
-  return {
-    pasan: jobs.map(({ text, pendiente, ...j }) => j).sort(
-      (a, b) => b.cumple.ok - a.cumple.ok || b.nota - a.nota || b.hits.length - a.hits.length
-    ),
-    descartes: {},
-  }
+  //
+  // Devuelve las ofertas y ya: aquí no se descarta ninguna, así que no hay
+  // `descartes` que devolver. Los descartes son cosa de filtrarCabecera().
+  return jobs.map(({ text, pendiente, ...j }) => j).sort(
+    (a, b) => b.cumple.ok - a.cumple.ok || b.nota - a.nota || b.hits.length - a.hits.length
+  )
 }
 
 export function filtrar(jobs, criterios = {}) {
   const cabecera = filtrarCabecera(jobs, criterios)
-  const texto = filtrarTexto(cabecera.pasan, criterios)
-  return { pasan: texto.pasan, descartes: { ...cabecera.descartes, ...texto.descartes } }
+  return { pasan: filtrarTexto(cabecera.pasan, criterios), descartes: cabecera.descartes }
 }
 
 // --- búsqueda --------------------------------------------------------------
@@ -563,7 +549,7 @@ export function filtrar(jobs, criterios = {}) {
 // ponytail: no cruza fuentes distintas —la misma oferta en LinkedIn y en el
 // tablero de la empresa tiene URLs distintas y no se detecta—. Es raro y no
 // vale la pena; si molesta, se añade una clave empresa+puesto normalizada.
-export const claveDedup = (j) => {
+const claveDedup = (j) => {
   const m = /\/jobs\/view\/(?:[^/?]*-)?(\d{6,})/.exec(j.url ?? '')
   return m ? `li:${m[1]}` : (j.url || `${j.company}|${j.title}`.toLowerCase())
 }
@@ -580,7 +566,7 @@ export function deduplicar(jobs) {
 
 // Los criterios que se aplican de verdad: los tuyos donde los hayas puesto, y
 // los de siempre en el resto.
-export const presetEfectivo = (preset = {}) => ({
+const presetEfectivo = (preset = {}) => ({
   empresas: preset.empresas ?? COMPANIES,
   ventana: preset.ventana ?? 'todo',
   ubicacion: preset.ubicacion ?? UBICACION,
@@ -609,12 +595,11 @@ export async function buscar(preset = {}) {
   // ubicación, fecha y veto de título.
   const cabecera = filtrarCabecera(jobs, { ...preset, ventana })
   const sinDescripcion = await detalle(cabecera.pasan)
-  const texto = filtrarTexto(cabecera.pasan, preset)
 
   return {
-    jobs: texto.pasan,
+    jobs: filtrarTexto(cabecera.pasan, preset),
     total: jobs.length,
-    descartes: { ...cabecera.descartes, ...texto.descartes },
+    descartes: cabecera.descartes,
     // Cuántas se quedaron con el texto de la tarjeta porque se agotó el
     // presupuesto de tiempo. Su nota es peor de lo que les toca y hay que
     // decirlo: callarlo es volver a descartar en silencio.

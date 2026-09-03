@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check, Copy, Info, TriangleAlert } from 'lucide-react'
 import { conPerfil } from '../perfil'
 import { hayExtension } from './api'
+import { Card, campo } from './ui'
 
 // La ruta que hay que elegir en "Cargar descomprimida". Va a pelo porque es la
 // de ESTE repo en ESTA máquina; una web no puede averiguar dónde está su propio
@@ -78,24 +79,6 @@ const Extension = () => {
 // Lo que ya está en el CV (email, teléfono, ubicación, LinkedIn, portfolio) se
 // enseña editable pero viene de src/data.js: cambiar el CV cambia esto, y
 // cambiarlo aquí solo afecta a los formularios.
-const campo = {
-  background: 'var(--s-bg)', border: '1px solid var(--s-border)', borderRadius: 10,
-  padding: '8px 11px', outline: 'none', fontSize: 13, width: '100%',
-}
-
-const Card = ({ title, hint, children }) => (
-  <div
-    className="rounded-[20px] border p-5 flex flex-col gap-3.5"
-    style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)', boxShadow: 'var(--s-shadow)' }}
-  >
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-semibold" style={{ color: 'var(--s-muted)', letterSpacing: '0.3px' }}>{title}</span>
-      {hint && <span className="text-xs" style={{ color: 'var(--s-muted)' }}>{hint}</span>}
-    </div>
-    {children}
-  </div>
-)
-
 const SiNo = ({ label, valor, onChange }) => (
   <label className="flex items-center justify-between gap-4 text-[13px]">
     <span>{label}</span>

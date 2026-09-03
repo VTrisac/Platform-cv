@@ -12,7 +12,8 @@
 // donde declaras tres años de algo que no has tocado te cuesta la entrevista.
 // No hace falta CORS: la extensión llama desde su service worker, que con
 // host_permissions no pasa por la comprobación de origen del navegador.
-import { gate, pedirJSON, findInventions, PRESUPUESTO } from './tailor.js'
+import { pedirJSON, findInventions, PRESUPUESTO } from './tailor.js'
+import { gate } from '../src/acceso.js'
 import { dataES, dataEN } from '../src/data.js'
 
 export const maxDuration = 300

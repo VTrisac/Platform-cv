@@ -73,11 +73,15 @@ export async function preparar(entrada, lang, onFase, previo = {}) {
     // arriesga a que el portal devuelva otra cosa entre una llamada y la otra.
     const j = await apiPost('/api/tailor', { text: a.texto, lang })
     cv = j.data
-    onFase('carta', { cv })
+    // `meta` y `cartaInv` solo los mira el editor —son los avisos de invención—;
+    // la Cola los ignora. Viajan aquí para que esta siga siendo la ÚNICA
+    // implementación del flujo: si el editor tuviera la suya para poder
+    // enseñarlos, volveríamos a tener dos que mantener en paralelo.
+    onFase('carta', { cv, meta: j })
   }
 
-  const { carta } = await apiPost('/api/cover', { text: a.texto, lang })
-  onFase('listo', { carta })
+  const c = await apiPost('/api/cover', { text: a.texto, lang })
+  onFase('listo', { carta: c.carta, cartaInv: c.inventions ?? [] })
 }
 
 // Un pool de tamaño fijo tirando del mismo índice. ponytail: son ocho líneas y

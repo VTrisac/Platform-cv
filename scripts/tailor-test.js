@@ -4,8 +4,10 @@
 //
 //   node scripts/tailor-test.js
 import { strict as a } from 'node:assert'
-import handler, { applyPatch, findInventions, strip, verifyPassword, jobPosting,
-  vias, reparto, pedirJSON, PRESUPUESTO } from '../api/tailor.js'
+import handler, { applyPatch, findInventions,
+  reparto, pedirJSON, PRESUPUESTO } from '../api/tailor.js'
+import { strip, jobPosting } from '../src/scrape.js'
+import { vias, verifyPassword } from '../src/acceso.js'
 import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles, normalizar, pedirSalario } from '../api/audit.js'
 import feed from '../api/feed.js'
 import { findFigures, textoCarta } from '../api/cover.js'
