@@ -1,4 +1,4 @@
-import { ExternalLink, FileText, TriangleAlert } from 'lucide-react'
+import { ExternalLink, FileText, RotateCw, TriangleAlert } from 'lucide-react'
 import Proceso from './Proceso'
 import { FASES } from './lote'
 
@@ -21,7 +21,7 @@ const titulo = (t) => {
   return primera.length > 90 ? `${primera.slice(0, 90)}…` : primera
 }
 
-const Cola = ({ cola, onAbrir, onNueva }) => {
+const Cola = ({ cola, onAbrir, onNueva, onReintentar }) => {
   const corriendo = cola.filter((t) => !['listo', 'parado', 'error'].includes(t.fase)).length
 
   return (
@@ -83,6 +83,16 @@ const Cola = ({ cola, onAbrir, onNueva }) => {
                       style={{ color: 'var(--s-accent)' }}
                     >
                       <FileText size={13} /> Abrir
+                    </button>
+                  )}
+                  {t.fase === 'error' && (
+                    <button
+                      onClick={() => onReintentar(i)}
+                      title="Repite solo lo que falló: la auditoría y el CV que ya salieron se conservan"
+                      className="flex items-center gap-1.5 text-xs font-semibold"
+                      style={{ color: 'var(--s-accent)' }}
+                    >
+                      <RotateCw size={13} /> Reintentar
                     </button>
                   )}
                   {/^https?:\/\//i.test(t.entrada.trim()) && (

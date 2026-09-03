@@ -12,7 +12,7 @@
 // donde declaras tres años de algo que no has tocado te cuesta la entrevista.
 // No hace falta CORS: la extensión llama desde su service worker, que con
 // host_permissions no pasa por la comprobación de origen del navegador.
-import { gate, pedirJSON, findInventions } from './tailor.js'
+import { gate, pedirJSON, findInventions, PRESUPUESTO } from './tailor.js'
 import { dataES, dataEN } from '../src/data.js'
 
 export const maxDuration = 300
@@ -58,6 +58,7 @@ cadena vacía y la pregunta va a "gaps". Vacío es una respuesta correcta; inven
 export default async function handler(req, res) {
   const blocked = gate(req, res)
   if (blocked) return blocked
+  const hasta = Date.now() + PRESUPUESTO
 
   try {
     const { preguntas = [], text = '', lang = 'en', carta = null, perfil = null } = req.body ?? {}
@@ -84,6 +85,7 @@ export default async function handler(req, res) {
         + `Preguntas del formulario:\n${lista}`,
       schema,
       max_tokens: 4000,
+      hasta,
     })
 
     // El modelo devuelve las respuestas por número: pedirle que copie la

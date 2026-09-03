@@ -4,11 +4,12 @@
 //
 //   node scripts/tailor-test.js
 import { strict as a } from 'node:assert'
-import handler, { applyPatch, findInventions, strip, verifyPassword, jobPosting } from '../api/tailor.js'
+import handler, { applyPatch, findInventions, strip, verifyPassword, jobPosting,
+  vias, reparto, pedirJSON, PRESUPUESTO } from '../api/tailor.js'
 import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles, normalizar, pedirSalario } from '../api/audit.js'
 import feed from '../api/feed.js'
-import { findFigures } from '../api/cover.js'
-import { partir, enLote } from '../src/studio/lote.js'
+import { findFigures, textoCarta } from '../api/cover.js'
+import { partir, enLote, preparar } from '../src/studio/lote.js'
 import { agrupar, esSemilla, contar, conCV, SIGUIENTE, ESTADOS, aplicarPatch,
   desdeCuando, diasDesde, migrar, hoy } from '../src/studio/store.js'
 import { hashPassword } from './set-password.js'
@@ -427,6 +428,88 @@ a.deepEqual(migrar([
   a.equal(esSemilla({ id: crypto.randomUUID() }), false, 'una oferta real nunca es semilla')
   a.deepEqual(agrupar([]).vivas, [], 'un tablero vacío no revienta')
   a.equal(contar(tablero).guardada, 4, 'contar() sigue contando estados, sin cambios')
+}
+
+// La carta no siempre viene como string: minimax-m3 la devolvió partida en
+// párrafos el 03-09-2026 y el endpoint reventaba con "carta?.trim is not a
+// function".
+a.equal(textoCarta('Estimados:'), 'Estimados:')
+a.equal(textoCarta(['Uno.', 'Dos.']), 'Uno.\n\nDos.', 'los párrafos se unen')
+a.equal(textoCarta({ parrafos: ['x'] }), '', 'un objeto es carta vacía, no "[object Object]"')
+a.equal(textoCarta(null), '')
+
+// --- las dos vías al modelo y el presupuesto de tiempo -------------------------
+// Lo que rompía el 03-09-2026: un timeout fijo de 130 s contra un servicio que
+// tardaba 150-240 s, y un reintento contra el mismo sitio atascado.
+{
+  a.deepEqual(vias({}).map((v) => v.nombre), [], 'sin claves no hay vía')
+  a.deepEqual(vias({ NVIDIA_API_KEY: 'x' }).map((v) => v.nombre), ['nim'])
+  a.deepEqual(vias({ AI_GATEWAY_API_KEY: 'x', NVIDIA_API_KEY: 'y' }).map((v) => v.nombre),
+    ['gateway', 'nim'], 'el gateway va primero: enruta al proveedor más rápido')
+
+  const [gw, nim] = vias({ AI_GATEWAY_API_KEY: 'x', NVIDIA_API_KEY: 'y' })
+  const ahora = 1_000_000
+  const hasta = ahora + PRESUPUESTO
+
+  // NIM no tiene techo: se lleva lo que quede menos la reserva para responder.
+  a.equal(reparto(nim, hasta, ahora), PRESUPUESTO - 15000)
+  // Y eso es más del doble de los 130 s de antes, que es justo el arreglo.
+  a.ok(reparto(nim, hasta, ahora) > 2 * 130000)
+  // El gateway sí: si en 90 s no ha contestado, el resto es para NIM.
+  a.equal(reparto(gw, hasta, ahora), 90000)
+  // Lo que el scrape gasta se descuenta solo, porque el reloj arranca antes.
+  a.equal(reparto(nim, hasta, ahora + 20000), PRESUPUESTO - 15000 - 20000)
+  // Sin tiempo para un intento serio no se intenta: morir contra el techo de
+  // Vercel devuelve un 504 en HTML que el navegador ni sabe leer.
+  a.equal(reparto(nim, hasta, hasta - 30000), 0)
+  a.equal(reparto(nim, hasta, hasta + 5000), 0, 'pasado el plazo, nunca negativo')
+
+  // Sin ninguna clave, el fallo es inmediato y dice qué falta.
+  const sin = { ...process.env }
+  delete process.env.NVIDIA_API_KEY; delete process.env.AI_GATEWAY_API_KEY
+  await a.rejects(() => pedirJSON({ system: 's', user: 'u', schema: {} }), /vía al modelo/)
+  Object.assign(process.env, sin)
+}
+
+// --- reanudar sin volver a pagar ------------------------------------------------
+// El caso real: la carta falla y al reintentar se repetían las tres llamadas.
+{
+  globalThis.localStorage ??= { getItem: () => 'clave', setItem() {} }
+  const llamadas = []
+  const audit = { recomendacion: 'aplicar', empresa: 'Acme', texto: 'OFERTA' }
+  globalThis.fetch = async (url) => {
+    llamadas.push(String(url))
+    const cuerpo = String(url).includes('audit') ? audit
+      : String(url).includes('tailor') ? { data: { title: 'CV' } }
+        : { carta: 'Estimados…' }
+    return { ok: true, status: 200, json: async () => cuerpo }
+  }
+
+  const fases = []
+  const on = (fase, extra) => fases.push([fase, Object.keys(extra ?? {})])
+
+  // Desde cero: las tres llamadas.
+  llamadas.length = 0; fases.length = 0
+  await preparar('texto', 'es', on)
+  a.equal(llamadas.length, 3)
+
+  // Con la auditoría ya pagada: no se vuelve a auditar.
+  llamadas.length = 0; fases.length = 0
+  await preparar('texto', 'es', on, { a: audit })
+  a.deepEqual(llamadas.map((u) => u.split('/').pop()), ['tailor', 'cover'])
+  // Y el `{ a }` NO se reenvía: es lo que crea la oferta, llegaría duplicada.
+  a.ok(!fases.some(([, k]) => k.includes('a')), 'la auditoría no se reemite al reanudar')  // claves exactas: 'carta' contiene una "a"
+
+  // Con el CV también hecho: solo queda la carta, que es lo que había fallado.
+  llamadas.length = 0
+  await preparar('texto', 'es', on, { a: audit, cv: { title: 'CV' } })
+  a.deepEqual(llamadas.map((u) => u.split('/').pop()), ['cover'])
+
+  // Una descartada sigue parándose, tenga lo que tenga guardado.
+  llamadas.length = 0; fases.length = 0
+  await preparar('texto', 'es', on, { a: { ...audit, recomendacion: 'descartar' } })
+  a.equal(llamadas.length, 0)
+  a.deepEqual(fases.at(-1), ['parado', []])
 }
 
 console.log(`ok — ${dropped.length} inventos bloqueados (${dropped.join(', ')}); puerta cerrada en prod`)

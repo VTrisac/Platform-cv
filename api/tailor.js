@@ -23,6 +23,7 @@ import { dataES, dataEN } from '../src/data.js'
 //   mistral-nemotron                     ✗ timeout, en solitario y sin concurrencia
 // El anterior, nemotron-3-super, encima se pasaba del timeout auditando (149s).
 // Cámbialo con TAILOR_MODEL. El auditor va aparte: AUDIT_MODEL, en audit.js.
+// Es el modelo de la vía NIM; el de la vía gateway se elige en MODELOS, abajo.
 const MODEL = process.env.TAILOR_MODEL || 'minimaxai/minimax-m3'
 const BASE_URL = 'https://integrate.api.nvidia.com/v1'
 
@@ -267,26 +268,72 @@ export function gate(req, res, needsKey = true) {
     if (!ok) return res.status(401).json({ error: 'Contraseña incorrecta.' })
   }
 
-  if (needsKey && !process.env.NVIDIA_API_KEY) {
+  // Basta con UNA vía al modelo: el gateway de Vercel o NVIDIA. Antes se exigía
+  // NVIDIA y solo NVIDIA, que era justo lo que dejaba la app a merced de un
+  // proveedor.
+  if (needsKey && !vias().length) {
     return res.status(500).json({
-      error: 'Falta NVIDIA_API_KEY. En local: ponla en .env.local. Desplegado: vercel env add NVIDIA_API_KEY.',
+      error: 'No hay vía al modelo. Pon AI_GATEWAY_API_KEY (recomendada) o NVIDIA_API_KEY. '
+        + 'En local: en .env.local. Desplegado: vercel env add AI_GATEWAY_API_KEY.',
     })
   }
   return null
 }
 
-// timeout y maxRetries explícitos: por defecto el SDK reintenta dos veces y
-// espera 10 minutos, así que una llamada atascada se comía el techo de 300 s de
-// la función sin que nadie viera por qué.
-// 130 s y no 120: kimi-k3 tardó 111,5 s en una pasada buena, y 8 s no son margen.
-// Peor caso con un reintento: 260 s + los 20 s del scrape, dentro de maxDuration.
-export const client = () => new OpenAI({
-  apiKey: process.env.NVIDIA_API_KEY, baseURL: BASE_URL, timeout: 130000, maxRetries: 1,
-})
-export { MODEL }
+// --- las dos vías al modelo -------------------------------------------------
+// NIM es gratis, pero su latencia es salvaje y no avisa: medido el 03-09-2026
+// con la misma auditoría, kimi-k3 tardó 150,7 s y el PRIMER token llegó 14 ms
+// antes que el último —no emite nada mientras trabaja, así que ni el streaming
+// ni un "va por la mitad" son posibles—. Los cuatro modelos lanzados a la vez:
+// gpt-oss-120b 166 s · deepseek-v4-flash 198 s · kimi-k3 203 s · minimax-m3
+// >240 s. NINGUNO bajó de 166 s: va lento el servicio, no un modelo, y por eso
+// tampoco sirve correr varios a la vez. Con el timeout de 130 s que había aquí,
+// toda llamada fallaba, y maxRetries la repetía contra el mismo sitio saturado:
+// 260 s de espera para leer "el modelo no ha respondido a tiempo".
+//
+// El gateway de Vercel habla el protocolo de OpenAI, así que es este mismo SDK
+// con otra baseURL. Va primero porque enruta al proveedor más rápido de los
+// varios que sirven el mismo modelo abierto (providerOptions.gateway.sort) y
+// cae solo al siguiente modelo si el suyo falla (gateway.models).
+const VIAS = [
+  { nombre: 'gateway', env: 'AI_GATEWAY_API_KEY', baseURL: 'https://ai-gateway.vercel.sh/v1', techo: 90000 },
+  { nombre: 'nim', env: 'NVIDIA_API_KEY', baseURL: BASE_URL, techo: Infinity },
+]
+
+// Las que tienen clave, en orden. Si solo hay una, se lleva el presupuesto entero.
+export const vias = (entorno = process.env) => VIAS.filter((v) => entorno[v.env])
+
+// Modelos por vía. En el gateway el primero es el que se usa y los demás son su
+// red: precios del catálogo el 03-09-2026, por millón de tokens (entrada/salida).
+//   openai/gpt-oss-120b      0,10 / 0,50  -> ~0,1 céntimos por auditoría
+//   deepseek-v4-flash-0731   0,08 / 0,15
+//   minimax/minimax-m3-free  0,00 / 0,00  -> gratis, de última red
+// El de pago va primero a propósito: lo que se compra aquí es velocidad, y 100
+// auditorías cuestan 12 céntimos. Cámbialos sin desplegar con las variables.
+export const MODELOS = {
+  gateway: (process.env.TAILOR_MODEL_GW || 'openai/gpt-oss-120b,minimax/minimax-m3-free').split(','),
+  nim: MODEL,
+}
+
+// --- el presupuesto de tiempo ------------------------------------------------
+// La función tiene 300 s (maxDuration). El handler fija el final ANTES del
+// scrape, así que lo que este gasta se descuenta solo.
+export const PRESUPUESTO = 300000
+const RESERVA = 15000 // para responder al navegador sin morir contra el techo
+const MINIMO = 20000  // por debajo de esto no da tiempo ni a intentarlo
+
+// Lo que puede durar un intento por esta vía, o 0 si ya no cabe.
+export function reparto(via, hasta, ahora = Date.now()) {
+  const queda = hasta - ahora - RESERVA
+  return queda < MINIMO ? 0 : Math.min(queda, via.techo)
+}
+
+// maxRetries: 0 — el reintento lo gobierna pedirJSON(), que además CAMBIA DE
+// VÍA. El del SDK repetía contra el mismo servicio atascado y duplicaba la espera.
+export const client = (via) => new OpenAI({ apiKey: process.env[via.env], baseURL: via.baseURL, maxRetries: 0 })
 
 // La única forma de pedirle JSON al modelo, compartida por /api/tailor,
-// /api/audit y /api/cover.
+// /api/audit, /api/cover y /api/answers.
 //
 // NO usa response_format json_schema. La decodificación restringida de NIM se
 // atasca con este modelo: deja de emitir a mitad del objeto y RELLENA CON
@@ -300,40 +347,95 @@ export { MODEL }
 // El esquema viaja en el prompt —con sus `description`, que es donde el modelo
 // lee cuánto escribir en cada campo— y el JSON se valida aquí. La garantía
 // anti-invención nunca fue el esquema: es applyPatch, que es código.
-export async function pedirJSON({ system, user, schema, max_tokens = 8000, model = MODEL }) {
-  let completion
-  try {
-    completion = await client().chat.completions.create({
-      model,
-      max_tokens,
-      messages: [
-        { role: 'system', content: `${system}\n\nDevuelve SOLO un objeto JSON, sin texto alrededor, con este esquema exacto:\n${JSON.stringify(schema)}` },
-        { role: 'user', content: user },
-      ],
-      response_format: { type: 'json_object' },
-    })
-  } catch (e) {
-    // El SDK dice "Request timed out." y nada más. Aquí se sabe contra qué se
-    // estaba hablando, así que se dice.
-    throw new Error(/timed? ?out/i.test(e.message)
-      ? 'El modelo no ha respondido a tiempo (NVIDIA va lento ahora mismo). Vuelve a probar.'
-      : e.message)
+// `valida(datos)` es opcional: devuelve false y la respuesta se trata como un
+// fallo de esa vía, así que se reintenta o se pasa a la siguiente. Sin esto, un
+// modelo que contesta rápido pero con la forma equivocada se colaba hasta el
+// endpoint —medido en /api/cover: 1 de cada 2 cartas llegaba inservible—.
+export async function pedirJSON({ system, user, schema, max_tokens = 8000, modelos = MODELOS, valida, hasta = Date.now() + PRESUPUESTO }) {
+  const disponibles = vias()
+  if (!disponibles.length) throw new Error('No hay ninguna vía al modelo configurada.')
+  const fallos = []
+
+  for (const via of disponibles) {
+    const lista = [].concat(modelos[via.nombre] ?? []).filter(Boolean)
+    if (!lista.length) continue
+
+    // Dos pasadas como mucho. La segunda solo si merece la pena:
+    //   - el fallo fue instantáneo: NIM devuelve 401/404/503 espurios en menos
+    //     de un segundo con la clave buena, y repetirlo no gasta presupuesto;
+    //   - o fue de contenido: el modelo contestó, pero con JSON roto o con una
+    //     forma que no sirve, y otra tirada suele salir bien.
+    // Un timeout NO se repite aquí: ya se comió su parte y lo que toca es
+    // cambiar de vía, que es de lo que iba todo esto.
+    for (let intento = 0; intento < 2; intento++) {
+      const timeout = reparto(via, hasta)
+      if (!timeout) { fallos.push(`${via.nombre}: sin tiempo`); break }
+      const t0 = Date.now()
+      try {
+        return await unaVez({ via, modelos: lista, system, user, schema, max_tokens, timeout, valida })
+      } catch (e) {
+        const seg = Math.round((Date.now() - t0) / 1000)
+        // El SDK dice "Request timed out." y nada más; en castellano y con el
+        // tiempo delante se entiende sin abrir los logs.
+        fallos.push(`${via.nombre} ${seg}s: ${/timed? ?out/i.test(e.message) ? 'no ha respondido a tiempo' : e.message}`)
+        if (Date.now() - t0 > 10000 && !e.contenido) break
+        // Un 429 o un 503 se pasan solos en un segundo; repetir en el mismo
+        // instante es tirar el segundo intento. Medido: NIM devuelve el 429 en
+        // 0 s, así que sin esta pausa los dos intentos son el mismo momento.
+        await new Promise((sigue) => setTimeout(sigue, 1000))
+      }
+    }
   }
+
+  // Se dice contra qué se estaba hablando y cuánto se esperó: "el modelo no ha
+  // respondido" a secas mandó a rotar una clave que estaba perfecta.
+  throw new Error(`No se ha podido generar (${fallos.join(' · ')}). Vuelve a probar.`)
+}
+
+// Un fallo de contenido se marca para que pedirJSON sepa que reintentar sirve.
+const deContenido = (mensaje) => Object.assign(new Error(mensaje), { contenido: true })
+
+async function unaVez({ via, modelos, system, user, schema, max_tokens, timeout, valida }) {
+  const completion = await client(via).chat.completions.create({
+    model: modelos[0],
+    max_tokens,
+    messages: [
+      { role: 'system', content: `${system}\n\nDevuelve SOLO un objeto JSON, sin texto alrededor, con este esquema exacto:\n${JSON.stringify(schema)}` },
+      { role: 'user', content: user },
+    ],
+    response_format: { type: 'json_object' },
+    // Solo el gateway los entiende; NIM ignoraría el campo, pero no se le manda.
+    // sort ttft = de los proveedores que sirven este modelo, el que antes
+    // responde, que es exactamente lo que aquí falla. models = su red de abajo.
+    ...(via.nombre === 'gateway' && {
+      providerOptions: { gateway: { sort: 'ttft', ...(modelos.length > 1 && { models: modelos }) } },
+    }),
+  }, { timeout })
+
   const choice = completion.choices?.[0]
   // Algún modelo envuelve el JSON en ```json … ```. Quitarlo es una línea.
   const crudo = String(choice?.message?.content ?? '').trim().replace(/^```(?:json)?|```$/g, '').trim()
+  let datos
   try {
-    return { datos: JSON.parse(crudo), usage: completion.usage }
+    datos = JSON.parse(crudo)
   } catch {
-    throw new Error(choice?.finish_reason === 'length'
-      ? 'La respuesta del modelo se ha cortado. Prueba con una oferta más corta.'
-      : 'El modelo no ha devuelto JSON válido. Vuelve a intentarlo.')
+    // Se lanza para que pedirJSON reintente o pruebe la vía siguiente: otro
+    // proveedor puede devolver JSON bueno donde este devolvió prosa.
+    throw deContenido(choice?.finish_reason === 'length'
+      ? 'respuesta cortada (prueba con una oferta más corta)'
+      : 'no ha devuelto JSON válido')
   }
+  if (valida && !valida(datos)) throw deContenido('la respuesta no sirve')
+  return { datos, usage: completion.usage }
 }
 
 export default async function handler(req, res) {
   const blocked = gate(req, res)
   if (blocked) return blocked
+
+  // El reloj arranca aquí, ANTES del scrape: lo que ese gasta se le descuenta
+  // solo al modelo, en vez de sumarse por fuera y pasarse del techo de la función.
+  const hasta = Date.now() + PRESUPUESTO
 
   try {
     const { url, text, lang = 'en' } = req.body ?? {}
@@ -354,6 +456,7 @@ export default async function handler(req, res) {
     const { datos: patch, usage } = await pedirJSON({
       system: SYSTEM,
       schema: schema(cv.experience.length),
+      hasta,
       // El idioma va aquí y al final, no en el system: enterrado allí lo
       // ignoraba y devolvía inglés con el CV en español (probado).
       user: `CV actual:\n${JSON.stringify(editable, null, 2)}\n\n---\n\nOFERTA:\n${offer.slice(0, 40000)}\n\n---\n\n`

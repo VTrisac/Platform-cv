@@ -8,7 +8,7 @@
 // `texto` es la oferta ya scrapeada: el paso 3 la reenvía a /api/tailor tal
 // cual, así no se baja dos veces ni se arriesga a que el portal cambie entre
 // una llamada y la otra.
-import { fetchOffer, gate, pedirJSON } from './tailor.js'
+import { fetchOffer, gate, pedirJSON, PRESUPUESTO } from './tailor.js'
 // La misma regex que ya usa el feed para la columna "salario": si la oferta
 // publica cifra, no hay nada que estimar.
 import { salarioDe } from './feed.js'
@@ -26,7 +26,14 @@ export const maxDuration = 300
 //   nemotron-3-super  149s  ✗ se pasa del timeout del cliente      4.598
 // kimi-k3 es el más severo y el más barato de salida. deepseek-v4-flash saca más
 // requisitos pero se quedó sin responder adaptando, así que no se fía de él aquí.
-const AUDIT_MODEL = process.env.AUDIT_MODEL || 'moonshotai/kimi-k3'
+// En el gateway el primero es el que se usa y el segundo es su red. gpt-oss-120b
+// sacó 10 requisitos donde kimi-k3 sacaba 12, y cuesta 0,10/0,50 $ por millón
+// frente a 3,00/15,00: para auditar es el cambio bueno. Ajústalos con
+// AUDIT_MODEL_GW (gateway) y AUDIT_MODEL (NVIDIA) sin tocar el código.
+const MODELOS = {
+  gateway: (process.env.AUDIT_MODEL_GW || 'openai/gpt-oss-120b,deepseek/deepseek-v4-flash-0731').split(','),
+  nim: process.env.AUDIT_MODEL || 'moonshotai/kimi-k3',
+}
 
 const schema = {
   type: 'object',
@@ -214,6 +221,8 @@ export function pedirSalario(a, encaje, publicado = null) {
 export default async function handler(req, res) {
   const blocked = gate(req, res)
   if (blocked) return blocked
+  // Antes del scrape: lo que este gasta sale del presupuesto del modelo.
+  const hasta = Date.now() + PRESUPUESTO
 
   try {
     const { url, text, lang = 'es' } = req.body ?? {}
@@ -239,7 +248,8 @@ export default async function handler(req, res) {
     const { datos: a, usage } = await pedirJSON({
       system: SYSTEM,
       schema,
-      model: AUDIT_MODEL,
+      modelos: MODELOS,
+      hasta,
       // Una auditoría son hasta 14 requisitos con su evidencia, y el modelo
       // razona 1.000-2.000 tokens antes de escribir el primero. Con 8000 se
       // cortaba en ofertas normales de LinkedIn (medido). Ver pedirJSON.

@@ -8,7 +8,7 @@ import Editor from './studio/Editor'
 import NuevaOferta from './studio/NuevaOferta'
 import Perfil from './studio/Perfil'
 import Cola from './studio/Cola'
-import { enLote, esUrl } from './studio/lote'
+import { enLote, esUrl, preparar } from './studio/lote'
 import { conCV, useStudio } from './studio/store'
 
 // La oferta se crea a partir de la auditoría: empresa, puesto y encaje salen
@@ -69,17 +69,14 @@ const Studio = () => {
   // —la auditoría al llegar, luego el CV, luego la carta—, igual que hace el
   // editor con una sola: si te vas a otra pantalla o cierras a mitad, lo que ya
   // se ha pagado al modelo no se pierde.
-  const lanzarLote = async (entradas, lang) => {
-    setModal(false)
-    setCola(entradas.map((entrada) => ({ entrada, fase: 'espera' })))
-    setView('cola')
-
-    // El id y el nombre de variante de cada oferta creada, por índice: el estado
-    // de React no se puede leer desde dentro de este callback.
-    const ids = []
-    const nombres = []
-    const estados = []
-    await enLote(entradas, lang, (i, fase, extra = {}) => {
+  // El avance de una fila: crea la oferta en cuanto cae su auditoría y le va
+  // colgando el CV y la carta. Sacado aquí fuera porque lo comparten el lote
+  // entero y el reintento de una fila suelta.
+  //
+  // El id y el nombre de variante de cada oferta creada van por índice: el
+  // estado de React no se puede leer desde dentro de este callback.
+  const avance = (entradas, lang, ids = [], nombres = [], estados = []) =>
+    (i, fase, extra = {}) => {
       const parche = { ...extra }
       if (extra.a) {
         const nueva = addOferta(desdeAuditoria(extra.a, lang, esUrl(entradas[i]) ? entradas[i].trim() : null))
@@ -96,7 +93,31 @@ const Studio = () => {
       }
       if (ids[i] && extra.carta) updateOferta(ids[i], { carta: extra.carta })
       setCola((c) => c.map((t, n) => (n === i ? { ...t, fase, ...parche } : t)))
-    })
+    }
+
+  const lanzarLote = async (entradas, lang) => {
+    setModal(false)
+    // El idioma viaja en la fila: el reintento lo necesita y no puede adivinarlo.
+    setCola(entradas.map((entrada) => ({ entrada, fase: 'espera', lang })))
+    setView('cola')
+    await enLote(entradas, lang, avance(entradas, lang))
+  }
+
+  // Repite SOLO lo que le faltó a esa fila. Se pasa por enLote —con un solo
+  // elemento— para no duplicar su try/catch, que es quien marca la fila en error.
+  const reintentar = (i) => {
+    const t = cola[i]
+    // Todo va indexado por la posición de la fila, que es la que `avance` lee:
+    // sembrarlo en la 0 le haría perder el id y crear una oferta duplicada.
+    const entradas = []; entradas[i] = t.entrada
+    const ids = []; ids[i] = t.id
+    const nombres = []; nombres[i] = t.a && `${t.a.empresa} · ${String(t.lang).toUpperCase()}`
+    const estados = []; estados[i] = ofertas.find((o) => o.id === t.id)?.estado
+    const alFase = avance(entradas, t.lang, ids, nombres, estados)
+
+    setCola((c) => c.map((f, n) => (n === i ? { ...f, error: null } : f)))
+    return enLote([t.entrada], t.lang, (_, fase, extra) => alFase(i, fase, extra), 1,
+      (entrada, lang, onFase) => preparar(entrada, lang, onFase, { a: t.a, cv: t.cv }))
   }
 
   return (
@@ -158,6 +179,7 @@ const Studio = () => {
       {view === 'cola' && (
         <Cola
           cola={cola}
+          onReintentar={reintentar}
           onNueva={() => setModal(true)}
           onAbrir={(id) => {
             const o = ofertas.find((x) => x.id === id)

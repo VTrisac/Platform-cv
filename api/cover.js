@@ -6,7 +6,7 @@
 // contra el CV maestro —una carta es texto libre de principio a fin—, así que
 // la única red posible es findInventions: si el modelo declara un gap y luego
 // lo escribe en la carta, se contradice, y eso se avisa.
-import { gate, pedirJSON, findInventions } from './tailor.js'
+import { gate, pedirJSON, findInventions, PRESUPUESTO } from './tailor.js'
 import { dataES, dataEN } from '../src/data.js'
 
 export const maxDuration = 300
@@ -56,6 +56,15 @@ disponibilidad, ni fecha de incorporación, ni preaviso. No los sabes, y una cif
 inventada le compromete en una negociación real. Si la oferta pregunta por el
 salario, la carta lo ignora.`
 
+// Sin decodificación restringida, "carta" no siempre es un string: hay modelos
+// que la devuelven partida en párrafos. Visto con minimax-m3 el 03-09-2026, y
+// `carta?.trim()` reventaba con un "carta?.trim is not a function" que no dice
+// nada. Un array se une; cualquier otra cosa se trata como carta vacía, nunca
+// como "[object Object]" colado en la carta que mandas.
+export const textoCarta = (carta) => (Array.isArray(carta)
+  ? carta.filter((p) => typeof p === 'string').join('\n\n')
+  : typeof carta === 'string' ? carta : '')
+
 // El prompt le prohíbe hablar de dinero y aun así se inventó "65.000-70.000 €
 // brutos anuales" en la primera prueba real. Una cifra salarial inventada le
 // compromete en una negociación, así que no basta con pedirlo: se detecta.
@@ -69,6 +78,7 @@ export function findFigures(carta) {
 export default async function handler(req, res) {
   const blocked = gate(req, res)
   if (blocked) return blocked
+  const hasta = Date.now() + PRESUPUESTO
 
   try {
     const { text, lang = 'es' } = req.body ?? {}
@@ -103,25 +113,28 @@ export default async function handler(req, res) {
     //   4000  2 de 2, 15-30 s
     // 4000 por margen, no por necesidad. Sigue siendo bajo a propósito para que
     // un intento fallido muera pronto: tres de ~30 s caben en el techo de 300.
-    let carta, gaps, usage
-    for (let intento = 0; ; intento++) {
-      try {
-        const r = await pedirJSON({ system: SYSTEM, user, schema, max_tokens: 4000 })
-        ;({ carta, gaps } = r.datos)
-        usage = r.usage
-        break
-      } catch (e) {
-        if (intento === 2) throw e
-      }
+    // El bucle de tres intentos que había aquí se ha subido a pedirJSON(), que
+    // además cambia de proveedor entre uno y otro y respeta el presupuesto.
+    // La carta inservible se trata como fallo de la llamada, no como respuesta:
+    // así se reintenta sola en vez de llegar aquí y morir en un 502. Medido el
+    // 03-09-2026: 1 de cada 2 pasadas de minimax-m3 la devolvía con otra forma.
+    const { datos: { carta, gaps }, usage } = await pedirJSON({
+      system: SYSTEM, user, schema, max_tokens: 4000, hasta, valida: (d) => textoCarta(d.carta).trim().length > 0,
+    })
+    const texto = textoCarta(carta)
+    if (!texto.trim()) {
+      // Qué llegó exactamente, en los logs: "carta vacía" a secas dejaba a
+      // ciegas cuando el modelo devolvía la carta con otra forma.
+      console.error('cover: carta no utilizable ->', JSON.stringify(carta)?.slice(0, 300))
+      return res.status(502).json({ error: 'El modelo ha devuelto una carta vacía. Vuelve a probar.' })
     }
-    if (!carta?.trim()) return res.status(502).json({ error: 'El modelo ha devuelto una carta vacía. Vuelve a probar.' })
 
     res.status(200).json({
-      carta: carta.trim(),
+      carta: texto.trim(),
       gaps: gaps ?? [],
       // Dos redes distintas: una para lo que se contradice con sus propios
       // gaps, otra para las cifras de dinero que no debería haber escrito.
-      inventions: [...findInventions(cv, gaps, carta), ...findFigures(carta)],
+      inventions: [...findInventions(cv, gaps, texto), ...findFigures(texto)],
       usage: { input: usage?.prompt_tokens, output: usage?.completion_tokens },
     })
   } catch (e) {

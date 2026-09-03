@@ -47,20 +47,34 @@ export const FASES = [
 // `onFase(fase, resultado)` se llama con la fase que EMPIEZA y el resultado de la
 // que acaba de terminar. Así quien escucha puede guardar cada trozo en cuanto
 // existe: si cierras la pestaña a mitad, lo que ya se pagó no se pierde.
-export async function preparar(entrada, lang, onFase) {
-  onFase('auditar')
-  const a = await auditar(entrada, lang)
-  // Si la auditoría dice que la descartes, se para ahí: gastar la adaptación y
-  // la carta en una oferta que no vale la pena es justo lo que este orden evita.
-  // 'parado' y no 'listo' a propósito: 'listo' pinta los tres pasos como hechos,
-  // y en una descartada el CV no se ha adaptado ni la carta se ha escrito.
-  onFase(a.recomendacion === 'descartar' ? 'parado' : 'adaptar', { a })
+// `previo` es lo que esa oferta ya tiene pagado de un intento anterior: se
+// reanuda por donde se quedó en vez de volver a gastar las tres llamadas. Antes
+// una fila que fallaba en la carta repetía auditoría y adaptación enteras.
+export async function preparar(entrada, lang, onFase, previo = {}) {
+  let { a, cv } = previo
+
+  if (!a) {
+    onFase('auditar')
+    a = await auditar(entrada, lang)
+    // Si la auditoría dice que la descartes, se para ahí: gastar la adaptación y
+    // la carta en una oferta que no vale la pena es justo lo que este orden evita.
+    // 'parado' y no 'listo' a propósito: 'listo' pinta los tres pasos como hechos,
+    // y en una descartada el CV no se ha adaptado ni la carta se ha escrito.
+    onFase(a.recomendacion === 'descartar' ? 'parado' : 'adaptar', { a })
+  } else {
+    // El `{ a }` NO se reenvía al reanudar: es lo que crea la oferta en el
+    // tracker, y volver a mandarlo la duplicaría.
+    onFase(a.recomendacion === 'descartar' ? 'parado' : cv ? 'carta' : 'adaptar')
+  }
   if (a.recomendacion === 'descartar') return
 
-  // El texto que ya scrapeó la auditoría, no la URL: ni se baja dos veces ni se
-  // arriesga a que el portal devuelva otra cosa entre una llamada y la otra.
-  const { data: cv } = await apiPost('/api/tailor', { text: a.texto, lang })
-  onFase('carta', { cv })
+  if (!cv) {
+    // El texto que ya scrapeó la auditoría, no la URL: ni se baja dos veces ni se
+    // arriesga a que el portal devuelva otra cosa entre una llamada y la otra.
+    const j = await apiPost('/api/tailor', { text: a.texto, lang })
+    cv = j.data
+    onFase('carta', { cv })
+  }
 
   const { carta } = await apiPost('/api/cover', { text: a.texto, lang })
   onFase('listo', { carta })

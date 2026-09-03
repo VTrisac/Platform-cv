@@ -54,6 +54,10 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
   // Si la oferta ya trae auditoría guardada, se entra directo al informe: es
   // el caso normal desde el tracker, y volver a auditar costaría otra llamada.
   const [audit, setAudit] = useState(oferta?.auditoria ?? null)
+  // De qué texto salió la auditoría que hay ahora mismo. Sin esto, "Preparar
+  // todo" reanudaría sobre la oferta anterior si pegas otra encima: cambiar el
+  // textarea no limpia `audit`, y el CV se adaptaría a la que ya no está.
+  const [origen, setOrigen] = useState(null)
   // Con el CV ya adaptado guardado se entra directo al paso 3: reabrir una
   // oferta del tracker no debe volver a pagar la adaptación.
   const [paso, setPaso] = useState(oferta?.cv ? 'cv' : oferta?.auditoria ? 'auditoria' : 'oferta')
@@ -171,7 +175,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
     setLoading('auditar'); setError(null)
     try {
       const a = await auditarOferta(texto, lang)
-      setAudit(a)
+      setAudit(a); setOrigen(texto.trim())
       setNombre(`${a.empresa} · ${lang.toUpperCase()}`)
       setPaso('auditoria')
       onAuditada?.(a, lang, fuenteUrl) // se guarda con la oferta, no se vuelve a pagar
@@ -183,24 +187,35 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
   // des tú. Si la auditoría recomienda descartar, se para ahí y no gasta las
   // dos llamadas siguientes en una oferta que no vale la pena.
   const prepararTodo = async () => {
-    if (!texto.trim()) return setError('Pega la URL de la oferta o su texto.')
+    const entrada = texto.trim()
+    if (!entrada) return setError('Pega la URL de la oferta o su texto.')
     setError(null)
     try {
-      setLoading('auditar')
+      // Se reanuda por donde se quedó: lo que ya se pagó al modelo en un intento
+      // anterior no se vuelve a pagar. Solo si es de ESTA oferta —de ahí el
+      // centinela—, nunca de la que quedó en pantalla.
       // `a.texto` (recién scrapeado), no el estado `audit`: setState es async y
       // aún no habría cuajado para los dos pasos siguientes.
-      const a = await auditarOferta(texto, lang)
-      setAudit(a); setNombre(`${a.empresa} · ${lang.toUpperCase()}`); setPaso('auditoria')
-      onAuditada?.(a, lang, fuenteUrl)
+      let a = origen === entrada ? audit : null
+      let cv = origen === entrada ? data : null
+      if (!a) {
+        setLoading('auditar')
+        a = await auditarOferta(entrada, lang)
+        cv = null // auditoría nueva: el CV que hubiera era de otra oferta
+        setAudit(a); setOrigen(entrada); setNombre(`${a.empresa} · ${lang.toUpperCase()}`); setPaso('auditoria')
+        onAuditada?.(a, lang, fuenteUrl)
+      }
       if (a.recomendacion === 'descartar') return // se para, decides tú desde el informe
 
-      setLoading('adaptar')
-      const j = await apiPost('/api/tailor', { text: a.texto, lang })
-      setData(j.data); setMeta(j); setPaso('cv')
-      // Se guarda con la oferta AQUÍ, igual que la auditoría y la carta. Sin
-      // esto el CV solo vivía en este componente: al volver al tracker no había
-      // nada que mandar al portal y por eso el botón "Aplicar" no salía nunca.
-      onCV?.(`${a.empresa} · ${lang.toUpperCase()}`, j.data)
+      if (!cv) {
+        setLoading('adaptar')
+        const j = await apiPost('/api/tailor', { text: a.texto, lang })
+        setData(j.data); setMeta(j); setPaso('cv')
+        // Se guarda con la oferta AQUÍ, igual que la auditoría y la carta. Sin
+        // esto el CV solo vivía en este componente: al volver al tracker no había
+        // nada que mandar al portal y por eso el botón "Aplicar" no salía nunca.
+        onCV?.(`${a.empresa} · ${lang.toUpperCase()}`, j.data)
+      }
 
       setLoading('carta')
       const c = await apiPost('/api/cover', { text: a.texto, lang })
