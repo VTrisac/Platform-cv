@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import Topbar from './studio/Topbar'
 import Bento from './studio/Bento'
 import Feed from './studio/Feed'
@@ -8,27 +8,14 @@ import Editor from './studio/Editor'
 import NuevaOferta from './studio/NuevaOferta'
 import Perfil from './studio/Perfil'
 import Cola from './studio/Cola'
-import { enLote, esUrl, preparar } from './studio/lote'
-import { conCV, useStudio } from './studio/store'
+import Salarios from './studio/Salarios'
 
-// La oferta se crea a partir de la auditoría: empresa, puesto y encaje salen
-// del scraper, no los escribes tú. Se guarda la auditoría entera para que
-// reabrirla no vuelva a gastar una llamada al modelo.
-//
-// El inglés YA NO descarta (28-08-2026). Era un stopper al final del embudo: la
-// oferta ya te había costado una llamada al modelo y aun así nacía descartada y
-// desaparecía del tracker. La auditoría sigue diciendo qué frase lo exige —eso
-// es información, y se ve en Auditoria.jsx—; decidir es tuyo.
-const desdeAuditoria = (a, lang, url = null) => ({
-  empresa: a.empresa,
-  puesto: a.rol,
-  estado: a.recomendacion === 'descartar' ? 'descartada' : 'guardada',
-  fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
-  variante: null,
-  auditoria: a,
-  url, // el enlace para postular; null si pegaste el texto a mano
-  lang,
-})
+// El mapa del flujo se lleva dentro el paquete de Excalidraw, 2,6 MB. Con lazy()
+// sale en su propio chunk y solo lo descarga quien abre la pestaña; importado
+// arriba lo pagaría todo el que abre la app.
+const Mapa = lazy(() => import('./studio/Mapa'))
+import { enLote, esUrl, preparar } from './studio/lote'
+import { nuevaOferta, useStudio } from './studio/store'
 
 // `feed.keywords` son las 36 tecnologías del CV enteras: RAG, JWT, n8n,
 // Industrial Automation, Tailwind CSS… Ofrecerlas TODAS como "lenguajes
@@ -39,7 +26,8 @@ const LENGUAJES = ['Python', 'Java', 'JavaScript', 'TypeScript', 'SQL', 'HTML5',
 // Shell de CV Studio. ponytail: sin react-router — cuatro vistas y un estado.
 // Una dependencia de routing para esto sería peso muerto.
 const Studio = () => {
-  const { ofertas, feed, setFeed, base, setBase, preset, setPreset, perfil, setPerfil, addOferta, updateOferta, removeOferta, removeOfertas } = useStudio()
+  const { ofertas, feed, setFeed, base, setBase, preset, setPreset, perfil, setPerfil,
+    addOferta, updateOferta, suceso, removeOferta, removeOfertas } = useStudio()
   const [view, setView] = useState('bento')
   const [actual, setActual] = useState(null)
   const [urlInicial, setUrlInicial] = useState(null)
@@ -60,7 +48,7 @@ const Studio = () => {
   }
 
   const guardarAuditada = (a, lang) => {
-    setActual(addOferta(desdeAuditoria(a, lang)))
+    setActual(addOferta(nuevaOferta(a, lang)))
     setModal(false)
     setView('editor')
   }
@@ -74,22 +62,20 @@ const Studio = () => {
   // entero y el reintento de una fila suelta.
   //
   // El id y el nombre de variante de cada oferta creada van por índice: el
-  // estado de React no se puede leer desde dentro de este callback.
-  const avance = (entradas, lang, ids = [], nombres = [], estados = []) =>
+  // estado de React no se puede leer desde dentro de este callback. El ESTADO ya
+  // no: lo decide SUCESOS leyendo la oferta viva dentro del store, así que ya no
+  // hay que acarrearlo por aquí ni mantener la regla en dos sitios.
+  const avance = (entradas, lang, ids = [], nombres = []) =>
     (i, fase, extra = {}) => {
       const parche = { ...extra }
       if (extra.a) {
-        const nueva = addOferta(desdeAuditoria(extra.a, lang, esUrl(entradas[i]) ? entradas[i].trim() : null))
+        const nueva = addOferta(nuevaOferta(extra.a, lang, esUrl(entradas[i]) ? entradas[i].trim() : null))
         ids[i] = nueva.id
         nombres[i] = `${extra.a.empresa} · ${lang.toUpperCase()}`
-        estados[i] = nueva.estado
         parche.id = nueva.id
       }
-      // Mismo automatismo que en el editor: el CV adelanta la candidatura. El
-      // estado de partida siempre es "guardada" aquí —la acaba de crear
-      // desdeAuditoria—, pero se pasa por conCV igual para no tener dos reglas.
       if (ids[i] && extra.cv) {
-        updateOferta(ids[i], { variante: nombres[i], cv: extra.cv, estado: conCV(estados[i]) })
+        suceso(ids[i], 'cv', null, { variante: nombres[i], cv: extra.cv })
       }
       if (ids[i] && extra.carta) updateOferta(ids[i], { carta: extra.carta })
       setCola((c) => c.map((t, n) => (n === i ? { ...t, fase, ...parche } : t)))
@@ -112,12 +98,41 @@ const Studio = () => {
     const entradas = []; entradas[i] = t.entrada
     const ids = []; ids[i] = t.id
     const nombres = []; nombres[i] = t.a && `${t.a.empresa} · ${String(t.lang).toUpperCase()}`
-    const estados = []; estados[i] = ofertas.find((o) => o.id === t.id)?.estado
-    const alFase = avance(entradas, t.lang, ids, nombres, estados)
+    const alFase = avance(entradas, t.lang, ids, nombres)
 
     setCola((c) => c.map((f, n) => (n === i ? { ...f, error: null } : f)))
     return enLote([t.entrada], t.lang, (_, fase, extra) => alFase(i, fase, extra), 1,
       (entrada, lang, onFase) => preparar(entrada, lang, onFase, { a: t.a, cv: t.cv }))
+  }
+
+  // Todo lo que el editor puede provocar, junto. Cada una es una línea contra el
+  // store, y a qué estado lleva cada suceso lo decide SUCESOS: por eso esto ya no
+  // puede contradecirse con lo que hace el lote, que era el fallo de tener nueve
+  // callbacks sueltos escribiendo `estado` cada uno por su cuenta.
+  const acciones = {
+    // Sin oferta previa (desde el feed o desde "Adaptar a una oferta") la
+    // auditoría no se guardaba en ningún sitio y se perdía al volver.
+    auditada: (a, lang, url) => {
+      if (!actual) return setActual(addOferta(nuevaOferta(a, lang, url)))
+      updateOferta(actual.id, {
+        auditoria: a, lang, empresa: a.empresa, puesto: a.rol,
+        ...(url ? { url } : {}), // no pisar una URL guardada con null
+      })
+    },
+    // El CV se guarda con la oferta en cuanto existe, no al pulsar "Guardar
+    // variante": sin él el tracker no tiene nada que mandar al portal.
+    cv: (variante, cv) => actual && suceso(actual.id, 'cv', null, { variante, cv }),
+    carta: (carta) => actual && updateOferta(actual.id, { carta }),
+    aplicada: () => actual && suceso(actual.id, 'aplicada'),
+    descartada: () => {
+      if (actual) suceso(actual.id, 'marcada', 'descartada')
+      setView('ofertas')
+    },
+    // Guardar y salir, que es lo que hace el botón de la barra.
+    guardar: (variante, cv) => {
+      if (actual) suceso(actual.id, 'cv', null, { variante, ...(cv ? { cv } : {}) })
+      setView('ofertas')
+    },
   }
 
   return (
@@ -138,6 +153,7 @@ const Studio = () => {
           ofertas={ofertas}
           onNav={setView}
           onEditar={abrirEditor}
+          onEstado={(id, estado) => suceso(id, 'marcada', estado)}
           onVerOfertas={(filtro) => { setFiltroOfertas(filtro); setView('ofertas') }}
         />
       )}
@@ -169,7 +185,7 @@ const Studio = () => {
           filtroInicial={filtroOfertas}
           onEditar={abrirEditor}
           onAplicar={(o) => abrirEditor(o, null, true)}
-          onEstado={(id, estado) => updateOferta(id, { estado })}
+          onEstado={(id, estado) => suceso(id, 'marcada', estado)}
           onBorrar={(id) => window.confirm('¿Eliminar esta oferta?') && removeOferta(id)}
           // El confirm lo pone la tabla, que es quien sabe cuántas y de qué tipo.
           onBorrarVarias={removeOfertas}
@@ -190,6 +206,14 @@ const Studio = () => {
 
       {view === 'perfil' && <Perfil perfil={perfil} setPerfil={setPerfil} />}
 
+      {view === 'salarios' && <Salarios ofertas={ofertas} onEditar={abrirEditor} />}
+
+      {view === 'mapa' && (
+        <Suspense fallback={<div className="p-8 text-sm" style={{ color: 'var(--s-muted)' }}>Cargando el lienzo…</div>}>
+          <Mapa />
+        </Suspense>
+      )}
+
       {view === 'editor' && (
         <Editor
           oferta={actual}
@@ -197,56 +221,10 @@ const Studio = () => {
           perfil={perfil}
           autoAplicar={autoAplicar}
           onBack={() => setView(cola.length ? 'cola' : actual ? 'ofertas' : 'bento')}
-          // El CV adaptado se guarda con la oferta, no solo su nombre: sin
-          // esto, reabrirla desde el tracker volvía a pagar la adaptación y no
-          // había nada que mandar al portal.
-          onGuardar={(nombre, cv) => {
-            if (actual) updateOferta(actual.id, { variante: nombre, ...(cv ? { cv } : {}) })
-            setView('ofertas')
-          }}
-          // Lo mismo que onGuardar pero SIN navegar: se dispara solo, en cuanto
-          // el CV existe. Antes el CV solo se guardaba si pulsabas "Guardar
-          // variante", y sin él el tracker no tenía nada que mandar al portal:
-          // por eso el botón "Aplicar" no aparecía nunca.
-          // Y el estado avanza solo: en cuanto existe el CV, la candidatura pasa
-          // a "Preparada". conCV() se encarga de que una ya enviada no retroceda.
-          //
-          // El estado se lee del store, NO de `actual`: `actual` es la foto de
-          // cuando abriste el editor, y si has pulsado Aplicar en esta misma
-          // sesión ahí sigue poniendo "guardada". Regenerar el CV después la
-          // habría devuelto a "preparada" — justo la regresión que conCV existe
-          // para evitar.
-          onCV={(nombre, cv) => actual && updateOferta(actual.id, {
-            variante: nombre,
-            cv,
-            estado: conCV(ofertas.find((o) => o.id === actual.id)?.estado ?? actual.estado),
-          })}
-          // Pulsar "Aplicar" no es enviar —la extensión no toca ese botón—,
-          // pero es lo que vas a hacer a continuación. El desplegable del
-          // tracker lo corrige en un clic si te arrepientes.
-          onAplicado={() => actual && updateOferta(actual.id, { estado: 'enviada' })}
-          // Sin oferta previa (desde el feed o desde "Adaptar a una oferta") la
-          // auditoría no se guardaba en ningún sitio y se perdía al volver:
-          // aquí se crea la oferta, igual que hace el modal de nueva oferta.
-          onAuditada={(a, lang, url) => {
-            if (actual) {
-              updateOferta(actual.id, {
-                auditoria: a, lang, empresa: a.empresa, puesto: a.rol,
-                ...(url ? { url } : {}), // no pisar una URL guardada con null
-              })
-            } else setActual(addOferta(desdeAuditoria(a, lang, url)))
-          }}
-          // La carta se guarda con la oferta, igual que la auditoría: volver a
-          // abrirla no debe costar otra llamada al modelo.
-          onCarta={(carta) => actual && updateOferta(actual.id, { carta })}
-          // Descartar desde la auditoría. Siempre hay oferta que marcar: para
-          // llegar aquí ha habido una auditoría, y onAuditada ya la creó.
-          onDescartar={() => {
-            if (actual) updateOferta(actual.id, { estado: 'descartada' })
-            setView('ofertas')
-          }}
+          acciones={acciones}
         />
       )}
+
     </div>
   )
 }

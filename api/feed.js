@@ -435,6 +435,45 @@ export function salarioDe(texto) {
   return cifras.length ? Math.max(...cifras) : null
 }
 
+// Lo que la oferta publica DE VERDAD, para la auditoría. salarioDe() sirve para
+// el filtro del feed —¿llega al mínimo?— y por eso devuelve el máximo de
+// cualquier cifra con € o "k" del texto entero: "10k usuarios" incluido. Usar eso
+// como techo de lo que puedes pedir es lo que te bajaba la petición sin decir por
+// qué. Aquí solo hay rango si hay DOS cifras plausibles como sueldo anual, que es
+// como se publica una banda.
+const ANUAL = (n) => n >= 15000 && n <= 300000
+
+// "45.000 - 60.000 €" y "50k a 70k": la forma normal de publicar una banda, y la
+// que SALARIO no ve entera porque solo la segunda cifra lleva el símbolo. El
+// marcador se exige al final, que es donde va.
+const RANGO = /(\d{2,3})(?:[.,](\d{3}))?\s*(?:k\b)?\s*(?:-|–|—|\/|\ba\b|\bto\b)\s*(\d{2,3})(?:[.,](\d{3}))?\s*(?:k\b|€|eur(?:os?)?\b)/i
+
+// Miles escritos como "45.000" o como "45k": las dos acaban en el mismo número.
+const cifra = (entero, miles) => (miles ? Number(entero + miles)
+  : Number(entero) < 500 ? Number(entero) * 1000 : Number(entero))
+
+export function rangoSalarial(texto) {
+  const r = String(texto).match(RANGO)
+  if (r) {
+    const min = cifra(r[1], r[2])
+    const max = cifra(r[3], r[4])
+    if (ANUAL(min) && ANUAL(max) && min < max) return { min, max }
+  }
+
+  // Y si no viene como rango, dos cifras sueltas que sí puedan ser un sueldo
+  // anual ("€50,000 … €70,000"). Con una sola no se inventa una banda: podría ser
+  // "10k usuarios", y usarla de techo es lo que bajaba la petición a escondidas.
+  const cifras = []
+  for (const m of String(texto).matchAll(SALARIO)) {
+    if (m[1]) cifras.push(Number(m[1]) * 1000)
+    else if (m[2]) cifras.push(Number(m[2] + m[3]))
+    else if (m[4]) cifras.push(Number(m[4] + m[5]))
+    else if (m[6]) cifras.push(Number(m[6]) < 500 ? Number(m[6]) * 1000 : Number(m[6]))
+  }
+  const buenas = [...new Set(cifras.filter(ANUAL))].sort((a, b) => a - b)
+  return buenas.length >= 2 ? { min: buenas[0], max: buenas[buenas.length - 1] } : null
+}
+
 const MODALIDAD = {
   remoto: /\b(remote|remoto|teletrabajo|work from home|100% remote)\b/i,
   hibrido: /\b(hybrid|híbrid|hibrid)\w*\b/i,

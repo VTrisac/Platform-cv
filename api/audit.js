@@ -13,7 +13,7 @@ import { gate } from '../src/acceso.js'
 import { fetchOffer } from '../src/scrape.js'
 // La misma regex que ya usa el feed para la columna "salario": si la oferta
 // publica cifra, no hay nada que estimar.
-import { salarioDe } from './feed.js'
+import { salarioDe, rangoSalarial } from './feed.js'
 import { dataES, dataEN } from '../src/data.js'
 
 export const maxDuration = 300
@@ -179,43 +179,65 @@ export function recomendar({ imprescindibles, bloqueantes }) {
   return 'aplicar'
 }
 
-// Cuánto pedir. La BANDA la estima el modelo —es conocimiento de mercado, no una
-// decisión—, pero el PUNTO dentro de ella lo calcula esto, por el mismo motivo por
+// Cuánto pedir. La BANDA sale de la oferta si la publica —dato real— y del
+// modelo si no; el PUNTO dentro de ella lo calcula esto, por el mismo motivo por
 // el que recomendar() no se le pregunta: los números ya contienen la respuesta y
 // el modelo se contradice a sí mismo cuando se le deja decidir.
 //
 // Devuelve null cuando no hay nada honesto que decir. Una cifra inventada aquí no
 // se queda en la pantalla: te la llevas a la negociación.
-export function pedirSalario(a, encaje, publicado = null) {
+//
+// La curva era más baja (0,8 / 0,55 / 0,3, y 0,5 con bloqueante) y pedía poco:
+// cumplir el 80 % de lo imprescindible te dejaba en el tercio bajo de la banda,
+// que no es lo que hace un recruiter contigo. Cumplir cuatro de cada cinco
+// requisitos es un buen candidato, y un buen candidato pide arriba y negocia
+// hacia abajo.
+export function pedirSalario(a, encaje, publicado = null, rango = null) {
   const min = Number(a?.bandaMin)
   const max = Number(a?.bandaMax)
-  // Cordura sobre la banda. Sin esto, un modelo que devuelve la banda en euros
+  // Cordura sobre la banda del modelo. Sin esto, uno que la devuelve en euros
   // MENSUALES (pasa) te pinta "pide 3.500 €/año".
-  const banda = Number.isFinite(min) && Number.isFinite(max)
+  const estimada = Number.isFinite(min) && Number.isFinite(max)
     && min < max && min >= 15000 && max <= 300000
+
+  // Si la oferta publica una banda, MANDA ella: es lo que están dispuestos a
+  // pagar, no una estimación de mercado. Antes se usaba solo como tope.
+  const banda = rango ?? (estimada ? { min, max } : null)
   if (!banda && publicado == null) return null
 
-  // 100% de imprescindibles -> tercio alto. Por debajo del 75% -> tercio bajo:
-  // pedir el techo con medio requisito sin cubrir es como te descartan en la
-  // primera llamada. Con un bloqueante, nunca por encima del punto medio.
+  // 100 % de imprescindibles -> arriba del todo. Por debajo del 60 % el tercio
+  // bajo: pedir el techo con la mitad de los requisitos sin cubrir es como te
+  // descartan en la primera llamada.
   const { imprescindibles: imp, bloqueantes } = encaje
-  let punto = imp === null ? 0.5 : imp >= 100 ? 0.8 : imp >= 75 ? 0.55 : 0.3
-  if (bloqueantes.length) punto = Math.min(punto, 0.5)
+  let punto = imp === null ? 0.6 : imp >= 100 ? 0.85 : imp >= 80 ? 0.7 : imp >= 60 ? 0.5 : 0.3
+  // Con un bloqueante, nunca arriba: pero 0,6 y no 0,5, porque un requisito que
+  // falta no te convierte en un candidato del montón.
+  if (bloqueantes.length) punto = Math.min(punto, 0.6)
 
   const redondear = (n) => Math.round(n / 1000) * 1000
-  // La cifra publicada es un TECHO, no la respuesta. Devolverla tal cual —que es
-  // lo primero que se hizo— se saltaba el ajuste por encaje: en una oferta que
-  // publica 55.000-70.000 y que tienes al 83% con un bloqueante, te decía "pide
-  // 70.000". Ahora el punto sigue mandando y lo publicado solo lo tapa: pedir por
-  // encima de lo que la oferta dice pagar no te sube el sueldo, te descarta.
-  // (salarioDe() devuelve el techo del rango, no el suelo: por eso es un tope.)
-  const dentro = banda ? redondear(min + (max - min) * punto) : null
+  const dentro = (p) => (banda ? redondear(banda.min + (banda.max - banda.min) * p) : null)
+
+  // Una cifra suelta del texto solo tapa si es plausible como sueldo de esta
+  // oferta: por debajo del suelo de la banda no es el sueldo —es un descuento,
+  // un "10k usuarios" o el presupuesto de otra cosa— y bajarte la petición por
+  // ella, sin decirlo, es lo que hacía que una banda de 50-80 acabara en 53.
+  const tope = rango ? null : (publicado != null && (!banda || publicado >= banda.min) ? publicado : null)
+  const pedir = dentro(punto) == null ? tope : Math.min(dentro(punto), tope ?? Infinity)
+
   return {
-    min: banda ? redondear(min) : null,
-    max: banda ? redondear(max) : null,
+    min: banda ? redondear(banda.min) : null,
+    max: banda ? redondear(banda.max) : null,
     punto,
-    pedir: dentro == null ? publicado : Math.min(dentro, publicado ?? Infinity),
+    pedir,
+    // Dónde te levantas de la mesa. Pedir sin saber tu mínimo es la mitad de la
+    // información, y es la mitad que se usa cuando llaman a negociar. Un quinto
+    // de banda por debajo, y con tope inferior: el suelo NUNCA puede acabar por
+    // encima de lo que pides, que es lo que pasaba con un mínimo fijo del 35 %
+    // cuando el punto caía al 30 %.
+    suelo: dentro(Math.max(0.2, punto - 0.2)),
     publicado,
+    // De dónde sale la banda, que cambia cuánto te la puedes creer.
+    publica: !!rango,
     base: String(a?.baseSalarial ?? '').trim() || null,
   }
 }
@@ -274,7 +296,7 @@ export default async function handler(req, res) {
     res.status(200).json({
       ...resto,
       encaje,
-      salario: pedirSalario(a, encaje, salarioDe(oferta)),
+      salario: pedirSalario(a, encaje, salarioDe(oferta), rangoSalarial(oferta)),
       veredicto: limpiarVeredicto(a.veredicto, encaje),
       recomendacion: recomendar(encaje),
       // El texto del requisito, no un booleano: si te descarta una oferta,

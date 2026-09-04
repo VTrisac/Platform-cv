@@ -1,23 +1,29 @@
-// Llama a un endpoint pidiendo la contraseña la primera vez y recordándola.
-// Compartido por el modal de nueva oferta y el editor: el flujo del 401 estaba
-// duplicado y era cuestión de tiempo que divergieran.
-export async function apiPost(path, body, retryKey) {
-  const key = retryKey ?? localStorage.getItem('tailorKey') ?? ''
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-tailor-key': key },
-    body: JSON.stringify(body),
-  })
+// El baile del 401, una sola vez: pide la contraseña, la recuerda y repite la
+// llamada. `hacer(key)` es lo único que cambia entre los dos llamantes —uno
+// espera JSON y el otro un binario—, así que lo demás no tiene por qué estar
+// escrito dos veces. Lo estuvo, y es exactamente cómo divergió TailorPanel.
+async function conClave(hacer) {
+  const res = await hacer(localStorage.getItem('tailorKey') ?? '')
+  if (res.status !== 401) return res
+  const pedida = window.prompt('Contraseña de la app:')
+  if (!pedida) throw new Error('Hace falta la contraseña.')
+  localStorage.setItem('tailorKey', pedida)
+  return hacer(pedida)
+}
+
+const pedir = (path, key, body) => fetch(path, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', 'x-tailor-key': key },
+  body: JSON.stringify(body),
+})
+
+export async function apiPost(path, body) {
+  const res = await conClave((key) => pedir(path, key, body))
   // .catch: cuando la función se pasa del techo de tiempo, Vercel devuelve una
   // página de error en HTML, no JSON, y el res.json() pelado reventaba con un
   // "Unexpected token '<'" en vez de decir qué había pasado.
   const json = await res.json().catch(() => ({}))
-  if (res.status === 401) {
-    const asked = window.prompt('Contraseña de la app:')
-    if (!asked) throw new Error('Hace falta la contraseña.')
-    localStorage.setItem('tailorKey', asked)
-    return apiPost(path, body, asked)
-  }
+  if (res.status === 401) throw new Error(json.error ?? 'Contraseña incorrecta.')
   if (!res.ok) throw new Error(json.error ?? (res.status === 504
     ? 'La llamada ha tardado demasiado y el servidor la ha cortado. Vuelve a probar.'
     : `Error ${res.status}`))
@@ -37,24 +43,13 @@ export const buscarFeed = (preset) => apiPost('/api/feed', preset ?? {})
 export const criteriosPorDefecto = () => apiPost('/api/feed', { soloPreset: true })
 
 // Manda el HTML del CV ya renderizado a que Chromium lo imprima limpio y
-// devuelve el PDF. No usa apiPost porque la respuesta es binaria, no JSON, pero
-// repite el mismo baile del 401.
+// devuelve el PDF. No pasa por apiPost porque la respuesta es binaria, pero el
+// 401 sí es el mismo y sale de conClave().
 //
 // Devuelve el blob y no la descarga porque hay dos usos: bajarlo al disco y
 // adjuntarlo al formulario del portal.
-export async function pdfBlob({ html, styles, css, filename }, retryKey) {
-  const key = retryKey ?? localStorage.getItem('tailorKey') ?? ''
-  const res = await fetch('/api/pdf', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-tailor-key': key },
-    body: JSON.stringify({ html, styles, css, filename }),
-  })
-  if (res.status === 401) {
-    const asked = window.prompt('Contraseña de la app:')
-    if (!asked) throw new Error('Hace falta la contraseña.')
-    localStorage.setItem('tailorKey', asked)
-    return pdfBlob({ html, styles, css, filename }, asked)
-  }
+export async function pdfBlob({ html, styles, css, filename }) {
+  const res = await conClave((key) => pedir('/api/pdf', key, { html, styles, css, filename }))
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? `Error ${res.status}`)
   return res.blob()
 }

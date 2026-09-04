@@ -3,6 +3,10 @@
 Auditoría del **03-09-2026**, leyendo el código. El mapa visual está en
 `arquitectura.excalidraw` (se abre en excalidraw.com y se edita).
 
+El mapa del **flujo** vive dentro de la app, en la pestaña «Mapa»: sale de
+`src/studio/flujo.js`, se edita con el ratón y se guarda en tu navegador. Este
+documento y el `.excalidraw` dibujan capas y ficheros; aquel, el recorrido.
+
 ## Las cuatro capas
 
 | Capa | Líneas | Qué es |
@@ -26,20 +30,29 @@ cambia en silencio qué PDF genera `npm run pdf`.
 
 ## El Studio
 
-`Studio.jsx` es un router de siete vistas con `useState`, sin librería. Reparte a
-`Bento` (resumen), `Feed`, `Criterios`, `Ofertas` (tracker), `Cola`, `Perfil` y
-`Editor`.
+`Studio.jsx` es un router de nueve vistas con `useState`, sin librería. Reparte a
+`Bento` (el tablero), `Feed`, `Criterios`, `Ofertas` (tracker), `Salarios`,
+`Cola`, `Perfil`, `Mapa` y `Editor`.
 
 Todo el estado vive en **`store.js` → `localStorage['cvStudio.v1']`**: ofertas,
 feed cacheado por día, preset de criterios y perfil. Es la única fuente de
 verdad del cliente, y el único fichero que hay que tocar para llevarlo a una BD.
+(El mapa del flujo va aparte, en `cvStudio.mapa`: son ~100 KB de dibujo y
+meterlos en el blob haría que marcar una oferta como enviada los reserializara.)
+
+**`store.js` es también dueño del recorrido.** `SUCESOS` tiene las cuatro reglas
+—`auditada`, `cv`, `aplicada`, `marcada`— y `suceso()` es el único camino para
+cambiar de estado; `updateOferta()` ya no escribe `estado`. Antes esas reglas
+vivían repartidas en cinco puntos de `Studio.jsx` y se contradijeron: regenerar
+el CV de una oferta enviada la devolvía a «preparada».
 
 `studio/api.js` es la frontera con el servidor: `apiPost()` centraliza el baile
 del 401, traduce el 504 y guarda la contraseña. También vive ahí la File System
 Access API (elegir carpeta de descargas) y el `postMessage` con la extensión.
 
-**`lote.js:preparar()` es la única implementación del flujo** auditar → adaptar →
-carta. La usan la Cola (N ofertas, `A_LA_VEZ = 2`) y el Editor (una). Estuvo
+**`lote.js:preparar()` es la ÚNICA implementación del flujo** auditar → adaptar →
+carta. La usan la Cola (N ofertas, `A_LA_VEZ = 2`) y el Editor: entera, o un paso
+suelto con `hasta` —"Adaptar" sin carta, "Generar carta" sin readaptar—. Estuvo
 escrita dos veces y arreglar la reanudación costó hacerlo dos veces; no la
 vuelvas a duplicar para pintar algo distinto: pásalo por `onFase`.
 
@@ -79,14 +92,20 @@ Están medidas, y romperlas no falla a la vista:
 - **La extensión nunca pulsa «enviar»**, y `scripts/apply-test.js` lo verifica.
 - **`recomendar()` y `pedirSalario()` se calculan en código.** Preguntárselo al
   modelo daba "descartar" con el 100% de los imprescindibles cumplidos.
+- **La banda que publica la oferta MANDA sobre la que estima el modelo**
+  (`rangoSalarial()` en `api/feed.js`), y una cifra suelta solo hace de techo si
+  es ≥ el suelo de la banda. `salarioDe()` devuelve el máximo de cualquier cifra
+  con € o «k» del texto —vale para el filtro del feed, no para decidir cuánto
+  pides—: usarlo de tope a ciegas convertía una banda de 50-80k en «pide 53.000».
 
 ## Deudas conocidas
 
 - `localStorage` = un navegador. Multi-dispositivo pide BD y autenticación de
   verdad (hoy es una contraseña compartida en una cabecera).
 - La Cola vive en memoria: al recargar desaparece (las ofertas quedan guardadas).
-- `Editor.jsx` sigue teniendo 546 líneas y nueve callbacks, porque el estado vive
-  en `Studio`. Es lo siguiente que conviene partir.
+- `Editor.jsx` sigue teniendo ~500 líneas. Los nueve callbacks ya son un solo
+  objeto `acciones`, pero el paso 3 —edición y previsualización— da para su
+  propio fichero.
 - ~230 estilos inline `var(--s-*)` repartidos por nueve pantallas. `studio/ui.jsx`
   ya unifica `Card` y `campo`; el resto espera a saber qué pantallas sobreviven.
 - El AI Gateway está configurado pero **Vercel no lo sirve sin una tarjeta

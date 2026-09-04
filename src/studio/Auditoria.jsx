@@ -26,9 +26,9 @@ const Barra = ({ label, pct }) => (
 
 const euros = (n) => `${Number(n).toLocaleString('es-ES')} €`
 
-// Lo que puedes pedir. La banda es de mercado y la estima el modelo; el punto
-// dentro de ella lo calcula pedirSalario() en api/audit.js a partir de tu % de
-// imprescindibles, que es el mismo número de la barra de arriba.
+// Lo que puedes pedir. La banda sale de la oferta si la publica, y del modelo si
+// no; el punto dentro de ella lo calcula pedirSalario() en api/audit.js a partir
+// de tu % de imprescindibles, que es el mismo número de la barra de arriba.
 //
 // Se dice que es una estimación y se dice sobre qué. Un número sin eso al lado se
 // convierte en un dato en tu cabeza a los dos días.
@@ -40,8 +40,17 @@ const Salario = ({ s }) => {
         <span className="text-xs font-semibold" style={{ color: 'var(--s-muted)', letterSpacing: '0.3px' }}>
           LO QUE PUEDES PEDIR
         </span>
-        <span className="text-[26px] font-semibold leading-none" style={{ fontFamily: 'var(--s-display)', color: 'var(--s-text)' }}>
-          {euros(s.pedir)}
+        <span className="flex items-baseline gap-2">
+          <span className="text-[26px] font-semibold leading-none" style={{ fontFamily: 'var(--s-display)', color: 'var(--s-text)' }}>
+            {euros(s.pedir)}
+          </span>
+          {/* Tu mínimo, al lado y no escondido: es la mitad que se usa cuando
+              llaman a negociar, y sin él "pide 71.000" no es una posición. */}
+          {s.suelo != null && s.suelo < s.pedir && (
+            <span className="text-xs" style={{ color: 'var(--s-muted)' }}>
+              suelo {euros(s.suelo)}
+            </span>
+          )}
         </span>
       </div>
 
@@ -58,7 +67,7 @@ const Salario = ({ s }) => {
           </div>
           <div className="flex justify-between text-xs" style={{ color: 'var(--s-muted)' }}>
             <span>{euros(s.min)}</span>
-            <span>banda de mercado</span>
+            <span>{s.publica ? 'banda que publica la oferta' : 'banda de mercado'}</span>
             <span>{euros(s.max)}</span>
           </div>
         </>
@@ -67,11 +76,13 @@ const Salario = ({ s }) => {
       <p className="text-xs flex gap-1.5" style={{ color: 'var(--s-muted)' }}>
         <Info size={13} className="shrink-0 mt-0.5" />
         <span>
-          {s.publicado
-            ? <><b>La oferta publica {euros(s.publicado)}</b>: eso no es una estimación, es lo que dice. </>
-            : <>Estimación, no un dato. </>}
+          {s.publica
+            ? <><b>La banda es la que publica la oferta</b>, no una estimación: se pide dentro de ella. </>
+            : s.publicado
+              ? <><b>La oferta menciona {euros(s.publicado)}</b> y se usa como techo. </>
+              : <>Estimación de mercado, no un dato. </>}
           {s.base}
-          {banda && !s.publicado && ' El punto sale de tu % de imprescindibles, no del modelo.'}
+          {banda && ' El punto sale de tu % de imprescindibles, no del modelo.'}
         </span>
       </p>
     </div>

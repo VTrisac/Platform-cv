@@ -15,7 +15,7 @@ import { apiPost, auditar } from './api.js'
 // en ~4 minutos en vez de ~8.
 // ponytail: si algún día sobra cuota, se sube el número y ya. No hace falta cola
 // de prioridades ni reintentos: un fallo se enseña en su fila y lo relanzas tú.
-export const A_LA_VEZ = 2
+const A_LA_VEZ = 2
 
 export const esUrl = (s) => /^https?:\/\//i.test(String(s).trim())
 
@@ -50,7 +50,11 @@ export const FASES = [
 // `previo` es lo que esa oferta ya tiene pagado de un intento anterior: se
 // reanuda por donde se quedó en vez de volver a gastar las tres llamadas. Antes
 // una fila que fallaba en la carta repetía auditoría y adaptación enteras.
-export async function preparar(entrada, lang, onFase, previo = {}) {
+// `hasta` corta la secuencia antes de la carta. Existe para que el editor pueda
+// ejecutar UN paso suelto —"Adaptar" sin carta, "Generar carta" sin readaptar—
+// sin volver a escribir aquí las llamadas: tenerlas dos veces es lo que hizo que
+// arreglar la reanudación costara hacerlo dos veces.
+export async function preparar(entrada, lang, onFase, previo = {}, hasta = 'carta') {
   let { a, cv } = previo
 
   if (!a) {
@@ -77,8 +81,11 @@ export async function preparar(entrada, lang, onFase, previo = {}) {
     // la Cola los ignora. Viajan aquí para que esta siga siendo la ÚNICA
     // implementación del flujo: si el editor tuviera la suya para poder
     // enseñarlos, volveríamos a tener dos que mantener en paralelo.
-    onFase('carta', { cv, meta: j })
+    onFase(hasta === 'adaptar' ? 'listo' : 'carta', { cv, meta: j })
   }
+  // La carta es otra llamada al modelo y no toda oferta la merece: quien solo
+  // quería el CV se baja aquí.
+  if (hasta === 'adaptar') return
 
   const c = await apiPost('/api/cover', { text: a.texto, lang })
   onFase('listo', { carta: c.carta, cartaInv: c.inventions ?? [] })

@@ -9,10 +9,11 @@ import handler, { applyPatch, findInventions,
 import { strip, jobPosting } from '../src/scrape.js'
 import { vias, verifyPassword } from '../src/acceso.js'
 import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles, normalizar, pedirSalario } from '../api/audit.js'
+import { rangoSalarial } from '../api/feed.js'
 import feed from '../api/feed.js'
 import { findFigures, textoCarta } from '../api/cover.js'
 import { partir, enLote, preparar } from '../src/studio/lote.js'
-import { agrupar, esSemilla, contar, conCV, SIGUIENTE, ESTADOS, aplicarPatch,
+import { agrupar, contar, SUCESOS, salarios, mediana, SIGUIENTE, ESTADOS, aplicarPatch,
   desdeCuando, diasDesde, migrar, hoy } from '../src/studio/store.js'
 import { hashPassword } from './set-password.js'
 import { dataEN } from '../src/data.js'
@@ -204,23 +205,60 @@ a.equal(pedirSalario({ bandaMin: 3500, bandaMax: 4500 }, lleno), null, 'banda me
 a.equal(pedirSalario({ bandaMin: 50000, bandaMax: 900000 }, lleno), null, 'techo absurdo: no se pinta')
 a.equal(pedirSalario({}, lleno), null, 'sin banda y sin cifra publicada, no hay nada que decir')
 
-a.equal(pedirSalario(banda, lleno).pedir, 66000, 'cumpliéndolo todo se pide el tercio alto')
+// La curva, medida sobre una banda de 50-70k (20k de recorrido). Era más baja
+// —0,8 / 0,55 / 0,3— y dejaba pidiendo el tercio bajo a quien cumple cuatro de
+// cada cinco requisitos, que es justo un buen candidato.
+a.equal(pedirSalario(banda, lleno).pedir, 67000, 'cumpliéndolo todo se pide arriba del todo')
+a.equal(pedirSalario(banda, { imprescindibles: 80, bloqueantes: [] }).pedir, 64000,
+  'al 80% se piden dos tercios largos de la banda, no el tercio bajo')
+a.equal(pedirSalario(banda, flojo).pedir, 60000, 'al 60% se pide el punto medio')
+a.equal(pedirSalario(banda, { imprescindibles: 40, bloqueantes: [] }).pedir, 56000,
+  'por debajo del 60% sí baja al tercio bajo')
 a.ok(pedirSalario(banda, flojo).pedir < pedirSalario(banda, lleno).pedir,
   'con menos encaje se pide menos')
-a.ok(pedirSalario(banda, roto).pedir <= 60000, 'con un bloqueante, nunca por encima del punto medio')
+a.equal(pedirSalario(banda, roto).pedir, 62000, 'con un bloqueante, techo en 0,6 de la banda')
 a.equal(pedirSalario(banda, lleno).base, 'Mercado Barcelona, producto')
+
+// El suelo es la mitad de la información que se usa al negociar, y NUNCA puede
+// salir por encima de lo que pides: con un mínimo fijo del 35% pasaba en cuanto
+// el punto caía al 30%.
+for (const e of [lleno, flojo, roto, { imprescindibles: 20, bloqueantes: ['x'] }]) {
+  const s = pedirSalario(banda, e)
+  a.ok(s.suelo <= s.pedir, `el suelo (${s.suelo}) nunca por encima de lo que pides (${s.pedir})`)
+}
 
 // Lo que la oferta publica es un TECHO, no la respuesta: si se devuelve tal cual
 // se salta el ajuste por encaje y acaba diciendo "pide el máximo" en una oferta
 // que cumples a medias. Medido con una oferta real de 55.000-70.000 al 83% con un
 // bloqueante: decía 70.000.
-a.equal(pedirSalario(banda, lleno, 80000).pedir, 66000,
+a.equal(pedirSalario(banda, lleno, 80000).pedir, 67000,
   'un techo por encima de la banda no cambia nada: manda el punto')
 a.equal(pedirSalario(banda, lleno, 60000).pedir, 60000, 'un techo por debajo del punto sí tapa')
-a.equal(pedirSalario(banda, roto, 70000).pedir, 60000, 'con bloqueante no se pide el techo publicado')
+a.equal(pedirSalario(banda, roto, 70000).pedir, 62000, 'con bloqueante no se pide el techo publicado')
 a.equal(pedirSalario({ bandaMin: 3500, bandaMax: 4500 }, lleno, 60000).pedir, 60000,
   'con la banda descartada, la cifra publicada es lo único que hay')
 
+// Y una cifra suelta que NO es un sueldo ya no baja la petición. Era el fallo que
+// convertía una banda de 50-80 en "pide 53.000" sin decir por qué.
+a.equal(pedirSalario(banda, lleno, 12000).pedir, 67000,
+  'una cifra por debajo del suelo de la banda no es el sueldo: se ignora')
+
+// Si la oferta publica una banda, manda ella y no la estimación del modelo.
+const publicada = pedirSalario(banda, lleno, 90000, { min: 60000, max: 90000 })
+a.equal(publicada.min, 60000, 'la banda publicada sustituye a la estimada')
+a.equal(publicada.pedir, 86000, 'y el punto se calcula dentro de ella')
+a.equal(publicada.publica, true, 'se marca que no es una estimación')
+
+// rangoSalarial: solo hay banda publicada si hay DOS cifras plausibles. Con una
+// sola —o con "10k usuarios"— no se inventa un rango.
+a.deepEqual(rangoSalarial('Salario: 45.000 - 60.000 € brutos'), { min: 45000, max: 60000 })
+a.deepEqual(rangoSalarial('35.000-42.000 euros'), { min: 35000, max: 42000 }, 'euros escrito entero')
+a.deepEqual(rangoSalarial('Banda de 50k a 70k'), { min: 50000, max: 70000 }, 'la k solo al final')
+a.deepEqual(rangoSalarial('Range: €50,000 to €70,000 per year'), { min: 50000, max: 70000 })
+a.equal(rangoSalarial('Ofrecemos 55k y un equipo de 10 personas'), null,
+  'una sola cifra no es una banda')
+a.equal(rangoSalarial('Servimos a 10k usuarios y 200k peticiones'), null,
+  'cifras que no son sueldos anuales no forman banda')
 
 // El veredicto degenerado que se vio en producción: cientos de "si" seguidos.
 const bucle = 'si no parcial no ' + 'si '.repeat(200)
@@ -333,11 +371,9 @@ for (const [de, hacia] of Object.entries(SIGUIENTE)) {
 
 // Generar el CV adelanta, pero solo desde el principio. La segunda es LA
 // regresión que importa: sin ella, regenerar el PDF de una oferta ya enviada la
-// devolvía a "preparada" y desaparecía del seguimiento.
-a.equal(conCV('guardada'), 'preparada')
-a.equal(conCV('enviada'), 'enviada', 'una enviada no retrocede por regenerar el CV')
-a.equal(conCV('entrevista'), 'entrevista')
-a.equal(conCV('descartada'), 'descartada', 'ni resucita una descartada')
+// devolvía a "preparada" y desaparecía del seguimiento. La regla vive ahora en
+// SUCESOS.cv y se prueba entera más abajo; aquí queda el caso que la motivó.
+a.equal(SUCESOS.cv({ estado: 'descartada' }), 'descartada', 'ni resucita una descartada')
 
 // --- la fecha de cada cambio ----------------------------------------------------
 {
@@ -389,8 +425,6 @@ a.deepEqual(migrar([
   const baja = { encaje: { imprescindibles: 40, bloqueantes: ['Rails'] } }
   const h = (estado, dia) => [{ estado, dia }]
   const tablero = [
-    { id: 'seed-0', empresa: 'Demo', estado: 'enviada' },
-    { id: 'seed-1', empresa: 'Demo', estado: 'guardada' },
     { id: 'a', estado: 'guardada', auditoria: alta },
     { id: 'b', estado: 'guardada', auditoria: baja },
     { id: 'c', estado: 'guardada' },
@@ -405,9 +439,9 @@ a.deepEqual(migrar([
   const g = agrupar(tablero)
   const ids = (xs) => xs.map((o) => o.id).sort()
 
-  a.deepEqual(ids(g.vivas), ['f', 'g', 'seed-0'], 'vivas = enviadas + entrevistas')
-  a.deepEqual(ids(g.porRevisar), ['a', 'b', 'c', 'd', 'e', 'seed-1'], 'lo que queda por hacer')
-  a.deepEqual(ids(g.sinAuditar), ['c', 'seed-1'], 'pegada y nada más')
+  a.deepEqual(ids(g.vivas), ['f', 'g'], 'vivas = enviadas + entrevistas')
+  a.deepEqual(ids(g.porRevisar), ['a', 'b', 'c', 'd', 'e'], 'lo que queda por hacer')
+  a.deepEqual(ids(g.sinAuditar), ['c'], 'pegada y nada más')
   a.deepEqual(ids(g.soloAuditadas), ['a', 'b'], 'auditada y sin CV')
   a.deepEqual(ids(g.preparadas), ['d', 'e'], 'con CV, sin mandar')
   a.deepEqual(ids(g.listas), ['e'], 'lista = preparada Y con enlace, lo que exige el botón Aplicar')
@@ -415,7 +449,10 @@ a.deepEqual(migrar([
   a.deepEqual(ids(g.contratado), ['h'])
   a.deepEqual(ids(g.rechazadas), ['i'])
   a.deepEqual(ids(g.descartadas), ['j'])
-  a.deepEqual(ids(g.semilla), ['seed-0', 'seed-1'], 'la demo se reconoce por su id')
+  // La cuarta columna del tablero: las dos que están fuera, juntas pero cada una
+  // con su estado. Fundirlas taparía si el problema está en tu criterio al elegir
+  // o en lo que mandas.
+  a.deepEqual(ids(g.archivadas), ['i', 'j'], 'archivadas = descartadas + rechazadas')
 
   // Los dos números que se piden en el Resumen, contra la tabla.
   a.equal(g.enviadas.length, contar(tablero).enviada)
@@ -424,12 +461,60 @@ a.deepEqual(migrar([
   // Una ya enviada no vuelve a la cola de "aplicar" aunque tenga enlace y CV.
   a.ok(!ids(g.listas).includes('f'))
   // La que lleva más tiempo callada, primero; la que no tiene historia, al final.
-  a.deepEqual(g.sinRespuesta.map((o) => o.id), ['f', 'seed-0'])
+  a.deepEqual(g.sinRespuesta.map((o) => o.id), ['f'])
 
-  a.equal(esSemilla({ id: 'seed-9' }), true)
-  a.equal(esSemilla({ id: crypto.randomUUID() }), false, 'una oferta real nunca es semilla')
   a.deepEqual(agrupar([]).vivas, [], 'un tablero vacío no revienta')
-  a.equal(contar(tablero).guardada, 4, 'contar() sigue contando estados, sin cambios')
+  a.equal(contar(tablero).guardada, 3, 'contar() sigue contando estados, sin cambios')
+}
+
+// --- la máquina de estados ------------------------------------------------------
+// SUCESOS es el ÚNICO sitio que decide a qué estado va una oferta. Antes estas
+// reglas vivían repartidas en cinco puntos de Studio.jsx y ya se contradijeron:
+// regenerar el CV de una enviada la devolvía a "preparada".
+{
+  a.equal(SUCESOS.auditada(null, { recomendacion: 'descartar' }), 'descartada')
+  a.equal(SUCESOS.auditada(null, { recomendacion: 'aplicar' }), 'guardada')
+  a.equal(SUCESOS.auditada(null, { recomendacion: 'aplicar_con_reservas' }), 'guardada',
+    'con reservas NO nace descartada: decides tú')
+
+  a.equal(SUCESOS.cv({ estado: 'guardada' }), 'preparada', 'tener CV adelanta')
+  a.equal(SUCESOS.cv({ estado: 'enviada' }), 'enviada', 'pero una enviada NUNCA retrocede')
+  a.equal(SUCESOS.cv({ estado: 'entrevista' }), 'entrevista')
+  a.equal(SUCESOS.aplicada({ estado: 'preparada' }), 'enviada')
+
+  a.equal(SUCESOS.marcada({ estado: 'enviada' }, 'descartada'), 'descartada', 'a mano manda')
+  a.equal(SUCESOS.marcada({ estado: 'enviada' }, 'inventado'), 'enviada',
+    'un estado que no existe se ignora en vez de dejarla en un limbo')
+
+  // Y la fecha solo se sella cuando el estado CAMBIA de verdad: si no, "hace N
+  // días" mediría la última vez que tocaste la fila.
+  const o = { id: '1', estado: 'guardada', historia: [{ estado: 'guardada', dia: '2026-01-01' }] }
+  a.equal(aplicarPatch(o, { estado: SUCESOS.cv(o) }, '2026-02-02').historia.length, 2)
+  a.equal(aplicarPatch(o, { estado: SUCESOS.marcada(o, 'guardada') }, '2026-02-02').historia.length, 1,
+    'repetir estado no sella')
+}
+
+// --- el historial del dinero ----------------------------------------------------
+{
+  const con = (id, dia, pedir, imp) => ({
+    id, empresa: id, puesto: 'AI', estado: 'guardada',
+    historia: [{ estado: 'guardada', dia }],
+    auditoria: { encaje: { imprescindibles: imp, bloqueantes: [] }, salario: { pedir, min: 50000, max: 80000 } },
+  })
+  const { filas, mediana: m } = salarios([
+    con('a', '2026-08-01', 60000, 70),
+    con('b', '2026-09-01', 70000, 90),
+    { id: 'c', estado: 'guardada', auditoria: { encaje: {} } }, // auditada sin banda
+    { id: 'd', estado: 'guardada' },                            // sin auditar
+  ])
+  a.deepEqual(filas.map((f) => f.id), ['b', 'a'], 'la más reciente primero')
+  a.equal(filas[0].encaje, 90, 'el encaje viaja con la fila')
+  a.equal(m, 65000, 'la mediana de dos es su punto medio')
+  a.equal(salarios([]).mediana, null, 'sin ofertas no se inventa una mediana')
+
+  // Mediana y no media: una oferta de 120.000 no puede desplazar lo que crees que pides.
+  a.equal(mediana([50000, 60000, 120000]), 60000)
+  a.equal(mediana([]), null)
 }
 
 // La carta no siempre viene como string: minimax-m3 la devolvió partida en
@@ -512,6 +597,19 @@ a.equal(textoCarta(null), '')
   await preparar('texto', 'es', on, { a: { ...audit, recomendacion: 'descartar' } })
   a.equal(llamadas.length, 0)
   a.deepEqual(fases.at(-1), ['parado', []])
+
+  // `hasta` es lo que permite al editor ejecutar UN paso sin volver a escribir
+  // aquí las llamadas. Adaptar sin carta: la carta es otra llamada al modelo y
+  // no toda oferta la merece.
+  llamadas.length = 0; fases.length = 0
+  await preparar('texto', 'es', on, { a: audit }, 'adaptar')
+  a.deepEqual(llamadas.map((u) => u.split('/').pop()), ['tailor'], 'adaptar no escribe la carta')
+  a.equal(fases.at(-1)[0], 'listo', 'y termina, no se queda colgado en "carta"')
+
+  // Y la carta sola, sin readaptar el CV que ya está pagado.
+  llamadas.length = 0
+  await preparar('texto', 'es', on, { a: audit, cv: { title: 'CV' } }, 'carta')
+  a.deepEqual(llamadas.map((u) => u.split('/').pop()), ['cover'])
 }
 
 console.log(`ok — ${dropped.length} inventos bloqueados (${dropped.join(', ')}); puerta cerrada en prod`)

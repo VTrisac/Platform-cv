@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Search, ExternalLink, Sparkles, FileText, Send, Trash2, X, ChevronRight } from 'lucide-react'
-import { ESTADOS, SIGUIENTE, desdeCuando, diasDesde, esSemilla } from './store'
+import { ESTADOS, SIGUIENTE, contar, desdeCuando, diasDesde } from './store'
 
 // Pantalla "Ofertas — Tracker" del diseño: cabecera con recuento, buscador,
 // filtros por estado y tabla. Las columnas replican los anchos del mockup
 // (210 / fill / 130 / 170 / 100 / 90).
-const Chip = ({ estado }) => {
-  const e = ESTADOS[estado] ?? ESTADOS.guardada
-  return (
-    <span className="px-2.5 py-1 rounded-full text-xs font-semibold" style={{ background: e.bg, color: e.fg }}>
-      {e.label}
-    </span>
-  )
-}
+// Lo que sigue en juego. Descartada y rechazada NO están: en cuanto marcas una
+// sale de la tabla, que es lo que pediste — la lista de trabajo es lo que puedes
+// mover, y arrastrar veinte muertas por debajo la vuelve inútil. Siguen a un clic
+// en el chip «Archivadas» y en la cuarta columna del tablero.
+const VIVAS = ['guardada', 'preparada', 'enviada', 'entrevista', 'contratado']
+const ARCHIVO = 'archivadas'
+
+// Los dos saltos que se dan a mano todo el rato: «ya la preparé» y «ya la mandé».
+// El desplegable de los siete sigue estando, pero esto es un clic en vez de tres.
+const RAPIDOS = ['preparada', 'enviada']
 
 const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVarias, filtroInicial = null }) => {
   const [q, setQ] = useState('')
@@ -24,10 +26,13 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
   // el filtro solo se aplicaba la primera vez que se monta la pantalla.
   useEffect(() => setFiltro(filtroInicial), [filtroInicial])
 
+  const archivadas = ofertas.filter((o) => !VIVAS.includes(o.estado))
+  const enFiltro = (o) => (filtro === ARCHIVO ? !VIVAS.includes(o.estado)
+    : filtro ? o.estado === filtro
+      : VIVAS.includes(o.estado))
+
   const visibles = ofertas.filter(
-    (o) =>
-      (!filtro || o.estado === filtro) &&
-      `${o.empresa} ${o.puesto}`.toLowerCase().includes(q.toLowerCase())
+    (o) => enFiltro(o) && `${o.empresa} ${o.puesto}`.toLowerCase().includes(q.toLowerCase())
   )
 
   // Seleccionar todas son LAS VISIBLES, no las 44: si has filtrado por
@@ -50,11 +55,10 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
     setSeleccion(new Set())
   }
 
-  const descartadas = ofertas.filter((o) => o.estado === 'descartada')
-  const semilla = ofertas.filter(esSemilla)
-
+  const c = contar(ofertas)
+  // La "s" solo cuando toca: "1 guardadas" en la cabecera es lo primero que se lee.
   const resumen = Object.entries(ESTADOS)
-    .map(([k, v]) => `${ofertas.filter((o) => o.estado === k).length} ${v.label.toLowerCase()}s`)
+    .map(([k, v]) => `${c[k]} ${v.label.toLowerCase()}${c[k] === 1 ? '' : 's'}`)
     .join(' · ')
 
   return (
@@ -82,7 +86,7 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
           />
         </div>
         <div className="flex items-center gap-2">
-          {[null, ...Object.keys(ESTADOS)].map((k) => (
+          {[null, ...VIVAS, ARCHIVO].map((k) => (
             <button
               key={k ?? 'todas'}
               onClick={() => setFiltro(k)}
@@ -93,16 +97,16 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
                 borderColor: filtro === k ? 'var(--s-accent)' : 'var(--s-border)',
               }}
             >
-              {k ? ESTADOS[k].label : 'Todas'}
+              {k === ARCHIVO ? `Archivadas (${archivadas.length})` : k ? ESTADOS[k].label : 'En juego'}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Solo aparece con algo seleccionado, y los atajos solo si hay qué
-          borrar: una barra de acciones siempre visible es ruido las 40 veces que
-          entras a mirar y no a limpiar. */}
-      {(seleccion.size > 0 || descartadas.length > 0 || semilla.length > 0) && (
+      {/* Solo aparece con algo seleccionado, y el atajo solo si hay qué borrar:
+          una barra de acciones siempre visible es ruido las 40 veces que entras a
+          mirar y no a limpiar. */}
+      {(seleccion.size > 0 || archivadas.length > 0) && (
         <div
           className="flex items-center gap-3 flex-wrap px-4 py-2.5 rounded-[14px] border"
           style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)' }}
@@ -127,32 +131,20 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
             </>
           ) : (
             <span className="text-xs" style={{ color: 'var(--s-muted)' }}>
-              Marca filas para borrarlas en bloque, o usa un atajo:
+              Marca filas para borrarlas en bloque, o vacía el archivo:
             </span>
           )}
 
           <span className="flex-1" />
 
-          {descartadas.length > 0 && (
+          {archivadas.length > 0 && (
             <button
-              onClick={() => borrar(descartadas.map((o) => o.id), 'ofertas descartadas')}
+              onClick={() => borrar(archivadas.map((o) => o.id), 'ofertas archivadas (descartadas y rechazadas)')}
               className="text-xs font-semibold underline"
               style={{ color: 'var(--s-muted)' }}
-              title={descartadas.slice(0, 5).map((o) => o.empresa).join(', ')}
+              title={archivadas.slice(0, 5).map((o) => o.empresa).join(', ')}
             >
-              Borrar las {descartadas.length} descartadas
-            </button>
-          )}
-          {/* La semilla de `load()`: nunca la creaste tú y cuatro de ellas cuentan
-              como candidaturas enviadas en la portada. */}
-          {semilla.length > 0 && (
-            <button
-              onClick={() => borrar(semilla.map((o) => o.id), 'ofertas de la demo inicial')}
-              className="text-xs font-semibold underline"
-              style={{ color: 'var(--s-muted)' }}
-              title={semilla.map((o) => o.empresa).join(', ')}
-            >
-              Quitar las {semilla.length} de demo
+              Borrar las {archivadas.length} archivadas
             </button>
           )}
         </div>
@@ -180,7 +172,7 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
           <span className="w-[188px]">EMPRESA</span>
           <span className="flex-1">PUESTO</span>
           <span className="w-[90px]">ENCAJE</span>
-          <span className="w-[210px]">ESTADO</span>
+          <span className="w-[250px]">ESTADO</span>
           <span className="w-[170px]">VARIANTE</span>
           <span className="w-[100px]">FECHA</span>
           <span className="w-[180px] text-right">ACCIONES</span>
@@ -234,8 +226,8 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
                 <span className="text-xs" style={{ color: 'var(--s-muted)' }}>—</span>
               )}
             </span>
-            <span className="w-[210px] flex flex-col gap-1">
-              <span className="flex items-center gap-1.5">
+            <span className="w-[250px] flex flex-col gap-1">
+              <span className="flex items-center gap-1.5 flex-wrap">
                 {/* Chip del diseño, pero editable: cambiar de estado es la acción
                     que más se repite y no merece abrir otra pantalla. Sigue
                     ofreciendo los siete, incluido volver atrás: equivocarse al
@@ -253,9 +245,24 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
                     </option>
                   ))}
                 </select>
-                {/* El paso obvio, de un clic. Solo si hay siguiente: los tres
-                    finales no llevan a ningún sitio. */}
-                {SIGUIENTE[o.estado] && (
+                {/* Marcarla a mano, de un clic, sin abrir el desplegable: es lo
+                    que más se repite —«esta ya la preparé», «esta ya la mandé»— y
+                    hasta ahora exigía tres clics o pasar por el editor. El estado
+                    en el que ya está no se ofrece. */}
+                {RAPIDOS.filter((e) => e !== o.estado).map((e) => (
+                  <button
+                    key={e}
+                    onClick={() => onEstado(o.id, e)}
+                    title={`Marcar como ${ESTADOS[e].label.toLowerCase()}`}
+                    className="px-2 py-1 rounded-full text-[11px] font-semibold border shrink-0"
+                    style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)', color: 'var(--s-muted)' }}
+                  >
+                    {ESTADOS[e].label}
+                  </button>
+                ))}
+                {/* Y el paso siguiente del recorrido, cuando no es ninguno de los
+                    dos de arriba: entrevista y contratado. */}
+                {SIGUIENTE[o.estado] && !RAPIDOS.includes(SIGUIENTE[o.estado]) && (
                   <button
                     onClick={() => onEstado(o.id, SIGUIENTE[o.estado])}
                     title={`Pasar a ${ESTADOS[SIGUIENTE[o.estado]].label}`}

@@ -8,6 +8,32 @@ import { useEffect, useState } from 'react'
 // cambiar esto por un endpoint. Hasta entonces, una dependencia menos.
 const KEY = 'cvStudio.v1'
 
+// El mapa del flujo (studio/Mapa.jsx) va en SU PROPIA clave, no dentro del blob
+// de arriba: useStudio reserializa el estado entero en cada cambio, y el dibujo
+// son unos 100 KB. Sin esto, marcar una oferta como enviada pagaría el mapa.
+// Aquí y no en Mapa.jsx para que siga siendo verdad que este es el ÚNICO fichero
+// que toca localStorage, que es lo que hace posible la migración a una BD.
+const KEY_MAPA = 'cvStudio.mapa'
+
+export const leerMapa = () => {
+  try {
+    const raw = localStorage.getItem(KEY_MAPA)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null // dibujo corrupto: se vuelve al del código
+  }
+}
+
+// null lo borra: restablecer el mapa es guardar "nada", no otra función.
+export const guardarMapa = (elementos) => {
+  try {
+    if (elementos) localStorage.setItem(KEY_MAPA, JSON.stringify(elementos))
+    else localStorage.removeItem(KEY_MAPA)
+  } catch {
+    // Cuota llena o modo privado: se pierde al recargar, no rompe nada.
+  }
+}
+
 // El orden IMPORTA: es el que pinta las barras del pipeline y los chips de
 // filtro, y el que hace que el tablero se lea como un recorrido y no como una
 // lista de etiquetas sueltas.
@@ -45,28 +71,37 @@ export const SIGUIENTE = {
   entrevista: 'contratado',
 }
 
-// Generar el CV adelanta la candidatura, pero SOLO desde el principio. Sin esta
-// guarda, reabrir una oferta ya enviada y regenerar el PDF la haría retroceder a
-// "preparada" y te desaparecería del seguimiento — que es justo lo contrario de
-// lo que se pide al automatismo.
-export const conCV = (estado) => (estado === 'guardada' ? 'preparada' : estado)
+// Los cuatro sucesos que mueven una candidatura, y las ÚNICAS reglas que deciden
+// su estado. Antes esto vivía repartido en cinco sitios de Studio.jsx, y ya se
+// contradijo una vez: regenerar el CV de una oferta enviada la devolvía a
+// "preparada" y te desaparecía del seguimiento.
+//
+// Aparte de useStudio a propósito, para poder probarlas sin React.
+export const SUCESOS = {
+  // Nace descartada si la auditoría lo dice. El inglés ya no descarta (28-08).
+  auditada: (o, a) => (a.recomendacion === 'descartar' ? 'descartada' : 'guardada'),
+  // Tener CV adelanta, pero SOLO desde el principio: una enviada no retrocede.
+  cv: (o) => (o.estado === 'guardada' ? 'preparada' : o.estado),
+  // Pulsar "Aplicar" no es enviar —la extensión no toca ese botón—, pero es lo
+  // que vas a hacer a continuación. El tablero lo corrige en un clic.
+  aplicada: () => 'enviada',
+  // Tú, a mano, desde el tablero o la tabla. Un estado que no existe se ignora
+  // en vez de dejar la oferta en un limbo que ninguna pantalla sabe pintar.
+  marcada: (o, estado) => (ESTADOS[estado] ? estado : o.estado),
+}
 
-// Semilla: tus ofertas reales de ofertas/, que son las del diseño. La carpeta
-// no viaja al despliegue (.vercelignore), así que se copian aquí.
-const SEED = [
-  { empresa: 'Factorial', puesto: 'Staff AI Engineer', estado: 'enviada', variante: 'Factorial · EN', fecha: '14 jul' },
-  { empresa: 'Landbot', puesto: 'AI Engineer (Agentic)', estado: 'enviada', variante: 'Landbot · EN', fecha: '15 jul' },
-  { empresa: 'Schneider Electric', puesto: 'AI/ML Engineer', estado: 'guardada', variante: null, fecha: '16 jul' },
-  { empresa: 'ERNI', puesto: 'Senior Fullstack AI/LLM', estado: 'enviada', variante: 'ERNI · ES', fecha: '15 jul' },
-  { empresa: 'EcoVadis', puesto: 'Senior AI/ML Engineer', estado: 'rechazada', variante: 'EcoVadis · EN', fecha: '14 jul' },
-  { empresa: 'LHH · Brezo Arnedo', puesto: 'AI Engineer', estado: 'entrevista', variante: 'LHH · ES', fecha: '21 jul' },
-  { empresa: 'THEKER', puesto: 'Backend / IA', estado: 'guardada', variante: null, fecha: '22 jul' },
-  { empresa: 'haddock', puesto: 'AI Engineer', estado: 'enviada', variante: 'haddock · EN', fecha: '23 jul' },
-  { empresa: 'Preply', puesto: 'Senior Fullstack', estado: 'rechazada', variante: 'Preply · EN', fecha: '14 jul' },
-  { empresa: 'Derby Hotels', puesto: 'IA Developer', estado: 'descartada', variante: null, fecha: '14 jul' },
-  { empresa: 'Clarivate', puesto: 'Software Engineer', estado: 'descartada', variante: null, fecha: '15 jul' },
-  { empresa: 'TheFork', puesto: 'Backend Engineer', estado: 'guardada', variante: null, fecha: '15 jul' },
-]
+// La forma de una oferta la decide el dominio, no la pantalla: esto era
+// desdeAuditoria() dentro de Studio.jsx.
+export const nuevaOferta = (a, lang, url = null) => ({
+  empresa: a.empresa,
+  puesto: a.rol,
+  estado: SUCESOS.auditada(null, a),
+  fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+  variante: null,
+  auditoria: a,
+  url, // el enlace para postular; null si pegaste el texto a mano
+  lang,
+})
 
 export const hoy = () => new Date().toISOString().slice(0, 10)
 
@@ -98,11 +133,19 @@ export function diasDesde(dia) {
   return Math.max(0, Math.floor((new Date(`${hoy()}T00:00:00`) - d) / 864e5))
 }
 
-// Las ofertas de antes de que existiera "preparada": si tienen CV, ya no son
-// "guardada". Sin esto se quedan en un estado que no se corresponde con lo que
-// llevan dentro, y los contadores del Resumen no cuadran con la tabla.
+// Lo que hay que arreglar de lo ya guardado, al cargar.
+//
+// Las doce filas de demo que sembraba load() se van solas: nunca las creaste tú,
+// cuatro contaban como candidaturas enviadas en la portada, y mantenerlas costaba
+// un botón en Ofertas y un aviso en el Resumen para deshacer algo que no hacía
+// falta hacer.
+//
+// Y las ofertas de antes de que existiera "preparada": si tienen CV, ya no son
+// "guardada", o los contadores no cuadran con la tabla.
 export const migrar = (ofertas) =>
-  ofertas.map((o) => (o.estado === 'guardada' && o.cv ? { ...o, estado: 'preparada' } : o))
+  ofertas
+    .filter((o) => !String(o.id).startsWith('seed-'))
+    .map((o) => (o.estado === 'guardada' && o.cv ? { ...o, estado: 'preparada' } : o))
 
 const load = () => {
   try {
@@ -112,9 +155,9 @@ const load = () => {
       return { ...s, ofertas: migrar(s.ofertas ?? []) }
     }
   } catch {
-    // JSON corrupto: mejor volver a la semilla que dejar la app en blanco.
+    // JSON corrupto: se empieza de cero antes que dejar la app sin arrancar.
   }
-  return { ofertas: SEED.map((o, i) => ({ id: `seed-${i}`, ...o })) }
+  return { ofertas: [] }
 }
 
 // Hook único; toda la app comparte el mismo objeto y se persiste en cada cambio.
@@ -179,10 +222,21 @@ export function useStudio() {
       setState((s) => ({ ...s, ofertas: [nueva, ...s.ofertas] }))
       return nueva
     },
-    // Todos los cambios de estado pasan por aquí, así que el sello de la fecha va
-    // aquí y no hay forma de saltárselo.
+    // Los datos de una oferta (auditoría, CV, carta, variante). NO lleva estado:
+    // para eso está suceso(), y así no hay dos caminos que puedan discrepar.
     updateOferta: (id, patch) =>
       setState((s) => ({ ...s, ofertas: s.ofertas.map((o) => (o.id === id ? aplicarPatch(o, patch) : o)) })),
+    // El ÚNICO camino para cambiar de estado: SUCESOS decide el destino y
+    // aplicarPatch sella la fecha, así que no hay forma de saltarse ninguna de
+    // las dos cosas. `dato` es lo que pida el suceso (la auditoría, o el estado
+    // que has elegido a mano) y `patch` lo que se guarda en el mismo viaje.
+    suceso: (id, tipo, dato, patch = {}) =>
+      setState((s) => ({
+        ...s,
+        ofertas: s.ofertas.map((o) => (o.id === id
+          ? aplicarPatch(o, { ...patch, estado: SUCESOS[tipo](o, dato) })
+          : o)),
+      })),
     removeOferta: (id) => setState((s) => ({ ...s, ofertas: s.ofertas.filter((o) => o.id !== id) })),
     // Varias de golpe. Borrar 22 descartadas de una en una, confirmando cada una,
     // no lo hace nadie: se quedan ahí y el tablero deja de significar algo.
@@ -196,23 +250,18 @@ export function useStudio() {
 export const contar = (ofertas) =>
   Object.keys(ESTADOS).reduce((acc, k) => ({ ...acc, [k]: ofertas.filter((o) => o.estado === k).length }), {})
 
-// Las de la semilla de demo, que nunca has tocado tú. Se reconocen por el id que
-// les pone load(); ninguna oferta real lo lleva.
-export const esSemilla = (o) => String(o.id).startsWith('seed-')
-
-// Lo que el Resumen necesita, contado sobre lo que YA está guardado.
+// Lo que necesita el tablero, contado sobre lo que YA está guardado.
 //
 // ponytail: no hay etapa derivada ni estado nuevo. `estado` sigue siendo tuyo y
-// manda. Esto solo mira qué campos existen, porque `estado` no puede distinguir
-// una oferta que solo has auditado de una con el CV ya adaptado — las dos son
-// "guardada", y esa es justo la pregunta que no se podía responder mirando la
-// portada.
+// manda; esto solo reparte. Vive aquí y no en Bento para poder probarlo sin React.
 export function agrupar(ofertas) {
   const de = (e) => ofertas.filter((o) => o.estado === e)
   const guardadas = de('guardada')
   const preparadas = de('preparada')
   const enviadas = de('enviada')
   const entrevistas = de('entrevista')
+  const descartadas = de('descartada')
+  const rechazadas = de('rechazada')
 
   return {
     guardadas,
@@ -220,26 +269,29 @@ export function agrupar(ofertas) {
     enviadas,
     entrevistas,
     contratado: de('contratado'),
-    rechazadas: de('rechazada'),
-    descartadas: de('descartada'),
+    rechazadas,
+    descartadas,
+
+    // Las dos "fuera" van juntas en la cuarta columna del tablero, pero NO se
+    // funden: descartada es que no llegaste a mandarla, rechazada es que te
+    // dijeron que no. Juntarlas taparía si el problema está en tu criterio al
+    // elegir o en lo que mandas. Cada una conserva su chip y su recuento.
+    archivadas: [...descartadas, ...rechazadas],
 
     // Lo que está en marcha de verdad: mandado y esperando, o ya hablando.
     vivas: [...enviadas, ...entrevistas],
-    // Lo que te queda por hacer, que es "guardada" (nada aún) + "preparada"
-    // (CV hecho, sin mandar).
+    // Lo que te queda por hacer: "guardada" (nada aún) + "preparada" (CV hecho,
+    // sin mandar).
     porRevisar: [...guardadas, ...preparadas],
 
-    // "preparada" ES tener CV, así que estos grupos ya no deducen nada de los
-    // campos: se leen del estado. Antes había que mirar `cv` porque las dos
-    // cosas vivían en "guardada".
+    // La tira de arriba del tablero: lo que todavía no ha entrado en ninguna
+    // columna. Sin ella las guardadas desaparecen de la portada.
     sinAuditar: guardadas.filter((o) => !o.auditoria),
     soloAuditadas: guardadas.filter((o) => o.auditoria),
     listas: preparadas.filter((o) => o.url),
     // A un paso: encaje alto y todavía sin adaptar. Adaptar cuesta una llamada al
     // modelo, así que la lista corta de las que la merecen vale más que el total.
-    prometedoras: guardadas.filter(
-      (o) => (o.auditoria?.encaje?.imprescindibles ?? 0) >= 75
-    ),
+    prometedoras: guardadas.filter((o) => (o.auditoria?.encaje?.imprescindibles ?? 0) >= 75),
 
     // El seguimiento de verdad: las enviadas, la que lleva más tiempo callada
     // primero. Las de antes de que se guardara la historia no tienen días y se
@@ -247,7 +299,38 @@ export function agrupar(ofertas) {
     sinRespuesta: [...enviadas].sort(
       (a, b) => (diasDesde(desdeCuando(b, 'enviada')) ?? -1) - (diasDesde(desdeCuando(a, 'enviada')) ?? -1)
     ),
-
-    semilla: ofertas.filter(esSemilla),
   }
+}
+
+// --- el dinero ---------------------------------------------------------------
+// Lo que se sugirió pedir en cada oferta auditada. El dato ya se guardaba dentro
+// de la auditoría desde el 20-08; lo que no había era dónde verlo, y una cifra
+// que no puedes volver a mirar es una cifra que no tienes.
+//
+// La fecha sale de historia[0].dia, que es ISO y ordena; `o.fecha` es el "14 jul"
+// de pintar y ordenaría alfabéticamente.
+export function salarios(ofertas) {
+  const filas = ofertas
+    .filter((o) => o.auditoria?.salario?.pedir != null)
+    .map((o) => ({
+      id: o.id,
+      dia: o.historia?.[0]?.dia ?? null,
+      empresa: o.empresa,
+      puesto: o.puesto,
+      estado: o.estado,
+      encaje: o.auditoria.encaje?.imprescindibles ?? null,
+      ...o.auditoria.salario,
+    }))
+    .sort((a, b) => String(b.dia ?? '').localeCompare(String(a.dia ?? '')))
+
+  return { filas, mediana: mediana(filas.map((f) => f.pedir)) }
+}
+
+// La mediana y no la media: una sola oferta de 120.000 te desplaza la media y te
+// hace creer que pides más de lo que pides.
+export function mediana(ns) {
+  const xs = ns.filter(Number.isFinite).sort((a, b) => a - b)
+  if (!xs.length) return null
+  const m = Math.floor(xs.length / 2)
+  return xs.length % 2 ? xs[m] : Math.round((xs[m - 1] + xs[m]) / 2)
 }

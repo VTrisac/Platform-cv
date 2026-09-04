@@ -5,7 +5,7 @@ import { conPerfil, conSalario } from '../perfil'
 import Auditoria from './Auditoria'
 import Proceso from './Proceso'
 import { FASES, preparar } from './lote'
-import { apiPost, auditar as auditarOferta, aplicar as mandarAExtension, base64, descargarPdf, hayExtension, INSTALAR, nombrePdf, olvidarCarpeta, pdfBlob } from './api'
+import { auditar as auditarOferta, aplicar as mandarAExtension, base64, descargarPdf, hayExtension, INSTALAR, nombrePdf, olvidarCarpeta, pdfBlob } from './api'
 // El catálogo vive en designs/: lo comparte con el visor de impresión, y sus
 // ids son los que entiende scripts/pdf.py.
 import { DESIGNS, components } from '../designs'
@@ -27,7 +27,7 @@ const APLICAR = [
 // Flujo en tres pasos: auditar la oferta -> decidir si hay encaje -> adaptar.
 // El orden importa: adaptar primero gastaba una llamada al modelo incluso en
 // ofertas que no valían la pena, y enterraba los gaps DESPUÉS de haber decidido.
-const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, onCV, onDescartar, onAuditada, onCarta, onAplicado }) => {
+const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, acciones }) => {
   // Si la oferta ya trae auditoría guardada, se entra directo al informe: es
   // el caso normal desde el tracker, y volver a auditar costaría otra llamada.
   const [audit, setAudit] = useState(oferta?.auditoria ?? null)
@@ -131,7 +131,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
         oferta: { empresa: audit?.empresa, puesto: audit?.rol, texto: audit?.texto },
         cv: { nombre: filename, tipo: 'application/pdf', base64: await base64(blob) },
       })
-      onAplicado?.()
+      acciones.aplicada()
     } catch (e) { setError(e.message) } finally { setLoading(null) }
   }
 
@@ -155,30 +155,23 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
       setAudit(a); setOrigen(texto.trim())
       setNombre(`${a.empresa} · ${lang.toUpperCase()}`)
       setPaso('auditoria')
-      onAuditada?.(a, lang, fuenteUrl) // se guarda con la oferta, no se vuelve a pagar
+      acciones.auditada(a, lang, fuenteUrl) // se guarda con la oferta, no se vuelve a pagar
     } catch (e) { setError(e.message) } finally { setLoading(null) }
   }
 
-  // Preparar la candidatura entera de un tirón: auditar -> si hay encaje,
-  // adaptar el CV -> escribir la carta. Deja todo listo para que el envío lo
-  // des tú. Si la auditoría recomienda descartar, se para ahí y no gasta las
-  // dos llamadas siguientes en una oferta que no vale la pena.
-  const prepararTodo = async () => {
+  // Los tres botones que llaman al modelo —"Preparar todo", "Adaptar" y "Generar
+  // carta"— son la MISMA secuencia parada en sitios distintos, así que los tres
+  // pasan por preparar(): aquí solo se pinta lo que va llegando por onFase.
+  // Tener las llamadas escritas también aquí es lo que hizo que arreglar la
+  // reanudación costase hacerlo dos veces.
+  const correr = async (previo, hasta) => {
     const entrada = texto.trim()
-    if (!entrada) return setError('Pega la URL de la oferta o su texto.')
     setError(null)
-    // Lo que ya se pagó al modelo no se vuelve a pagar. Solo si es de ESTA
-    // oferta —de ahí el centinela—, nunca de la que quedó en pantalla: cambiar
-    // el textarea no limpia `audit`, y el CV se adaptaría a la que ya no está.
-    const previo = origen === entrada ? { a: audit, cv: data } : {}
     // La auditoría en curso, fuera del closure: `audit` es el del render actual
     // y setAudit no lo actualiza a tiempo, así que la variante saldría llamada
     // "Oferta · ES" y todos los PDF se pisarían con el mismo nombre.
     let enCurso = previo.a
     try {
-      // El flujo lo lleva preparar(), el mismo que corre la Cola. Aquí solo se
-      // pinta lo que va llegando. Tenerlo escrito dos veces costó que arreglar
-      // la reanudación hubiera que hacerlo dos veces.
       await preparar(entrada, lang, (fase, extra = {}) => {
         setLoading(['listo', 'parado'].includes(fase) ? null : fase)
         if (extra.a) {
@@ -186,45 +179,36 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
           setAudit(extra.a); setOrigen(entrada)
           setNombre(`${extra.a.empresa} · ${lang.toUpperCase()}`)
           setPaso('auditoria')
-          onAuditada?.(extra.a, lang, fuenteUrl)
+          acciones.auditada(extra.a, lang, fuenteUrl)
         }
         if (extra.cv) {
           setData(extra.cv); setMeta(extra.meta); setPaso('cv')
           // Se guarda con la oferta AQUÍ, igual que la auditoría y la carta. Sin
           // esto el CV solo vivía en este componente: al volver al tracker no
           // había nada que mandar al portal y "Aplicar" no salía nunca.
-          onCV?.(`${enCurso?.empresa ?? oferta?.empresa ?? 'Oferta'} · ${lang.toUpperCase()}`, extra.cv)
+          acciones.cv(`${enCurso?.empresa ?? oferta?.empresa ?? 'Oferta'} · ${lang.toUpperCase()}`, extra.cv)
         }
         if (extra.carta) {
-          setCarta(extra.carta); setCartaInv(extra.cartaInv ?? []); onCarta?.(extra.carta)
+          setCarta(extra.carta); setCartaInv(extra.cartaInv ?? []); acciones.carta(extra.carta)
         }
-      }, previo)
+      }, previo, hasta)
     } catch (e) { setError(e.message) } finally { setLoading(null) }
   }
 
-  const adaptar = async () => {
-    setLoading('adaptar'); setError(null)
-    try {
-      // Se reenvía el texto que ya scrapeó la auditoría: ni se baja dos veces
-      // ni se arriesga a que el portal devuelva algo distinto.
-      const j = await apiPost('/api/tailor', { text: audit.texto, lang })
-      setData(j.data); setMeta(j); setPaso('cv')
-      setNombre(variante())
-      onCV?.(variante(), j.data)
-    } catch (e) { setError(e.message); setPaso('auditoria') } finally { setLoading(null) }
+  // De cero: audita, y si hay encaje adapta y escribe la carta.
+  const prepararTodo = () => {
+    if (!texto.trim()) return setError('Pega la URL de la oferta o su texto.')
+    // Lo que ya se pagó al modelo no se vuelve a pagar. Solo si es de ESTA
+    // oferta —de ahí el centinela—, nunca de la que quedó en pantalla: cambiar
+    // el textarea no limpia `audit`, y el CV se adaptaría a la que ya no está.
+    return correr(origen === texto.trim() ? { a: audit, cv: data } : {}, 'carta')
   }
 
-  // Llamada aparte de la adaptación: no toda oferta merece carta y adaptar ya
-  // tarda ~35 s. Se reenvía el mismo texto que scrapeó la auditoría.
-  const generarCarta = async () => {
-    setLoading('carta'); setError(null)
-    try {
-      const j = await apiPost('/api/cover', { text: audit.texto, lang })
-      setCarta(j.carta)
-      setCartaInv(j.inventions ?? [])
-      onCarta?.(j.carta)
-    } catch (e) { setError(e.message) } finally { setLoading(null) }
-  }
+  // Un paso suelto desde el informe: se reenvía la auditoría que ya está pagada,
+  // y con ella el texto que scrapeó, así que ni se baja dos veces ni se arriesga
+  // a que el portal devuelva algo distinto.
+  const adaptar = () => correr({ a: audit }, 'adaptar')
+  const generarCarta = () => correr({ a: audit, cv: data }, 'carta')
 
   return (
     <div className="flex flex-col min-h-0 flex-1">
@@ -269,7 +253,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
               {loading === 'pdf' ? 'Generando…' : 'Descargar PDF'}
             </button>
             <button
-              onClick={() => onGuardar(nombre, data)}
+              onClick={() => acciones.guardar(nombre, data)}
               className="flex items-center gap-2 px-3.5 py-2.5 rounded-[10px] text-[13px] font-semibold border"
               style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)' }}
             >
@@ -356,7 +340,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
             <Auditoria
               a={audit}
               onAdaptar={adaptar}
-              onDescartar={() => { onDescartar?.(audit); onBack() }}
+              onDescartar={acciones.descartada}
             />
             {loading === 'adaptar' && (
               <div className="mt-4 max-w-[420px]">
@@ -453,7 +437,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, onGuardar, on
                   <>
                     <textarea
                       value={carta}
-                      onChange={(e) => { setCarta(e.target.value); onCarta?.(e.target.value) }}
+                      onChange={(e) => { setCarta(e.target.value); acciones.carta(e.target.value) }}
                       rows={12}
                       style={{ ...field, resize: 'vertical' }}
                     />
