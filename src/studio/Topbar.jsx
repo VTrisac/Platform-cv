@@ -1,4 +1,4 @@
-import { FileText, Plus } from 'lucide-react'
+import { FileText, Moon, Plus, Sun } from 'lucide-react'
 
 // Topbar del diseño: marca, navegación de 3 secciones, acción primaria y avatar.
 // Se repite idéntica en las tres pantallas, así que vive aquí una sola vez.
@@ -16,7 +16,7 @@ const NAV = [
 // La Cola solo existe mientras hay un lote en marcha o recién terminado, así que
 // su pestaña aparece y desaparece: una pestaña permanente que casi siempre está
 // vacía es ruido.
-const Topbar = ({ view, onNav, onNueva, cola = 0 }) => (
+const Topbar = ({ view, onNav, onNueva, cola = 0, tema, onTema }) => (
   <header
     className="h-16 px-8 flex items-center justify-between border-b shrink-0"
     style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)' }}
@@ -50,6 +50,18 @@ const Topbar = ({ view, onNav, onNueva, cola = 0 }) => (
     </nav>
 
     <div className="flex items-center gap-4">
+      {/* Icono y nada más: el botón dice a qué vas a cambiar, no en qué estás
+          —eso ya lo ves mirando la pantalla—, y por eso en claro enseña la luna. */}
+      <button
+        onClick={onTema}
+        title={tema === 'oscuro' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        aria-label={tema === 'oscuro' ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
+        aria-pressed={tema === 'oscuro'}
+        className="w-9 h-9 rounded-[10px] flex items-center justify-center border"
+        style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)', color: 'var(--s-muted)' }}
+      >
+        {tema === 'oscuro' ? <Sun size={16} /> : <Moon size={16} />}
+      </button>
       <button
         onClick={onNueva}
         className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold"

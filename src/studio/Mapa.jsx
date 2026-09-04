@@ -21,7 +21,7 @@ const dibujar = () => leerMapa() ?? convertToExcalidrawElements(esqueleto(), { r
 // siempre lo que dijera flujo.js.
 const huella = (els) => `${els.length}:${els.reduce((n, e) => n + e.version, 0)}`
 
-const Mapa = () => {
+const Mapa = ({ tema }) => {
   // Cambiar la versión remonta el lienzo: initialData solo se lee al montar.
   const [version, setVersion] = useState(0)
   const [editado, setEditado] = useState(() => !!leerMapa())
@@ -97,6 +97,11 @@ const Mapa = () => {
       <div className="lienzo flex-1 min-h-0">
         <Excalidraw
           key={version}
+          // Excalidraw no lee los tokens de la app: tiene su propio tema, y en
+          // oscuro INVIERTE el lienzo. Por eso el fondo se queda en blanco pase
+          // lo que pase: dárselo ya oscuro lo invertía a claro, que es justo lo
+          // contrario de lo que se pedía.
+          theme={tema === 'oscuro' ? 'dark' : 'light'}
           initialData={{ elements: elementos, appState: { viewBackgroundColor: '#ffffff' } }}
           excalidrawAPI={setApi}
           onChange={cambio}

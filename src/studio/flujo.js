@@ -90,7 +90,6 @@ const NODOS = [
 const ENLACES = [
   ['feed', 'editor', 'Auditar'],
   ['nueva', 'partir'],
-  ['editor', 'preparar'],
   ['partir', 'preparar', '1'],
   ['partir', 'lote', 'N'],
   ['lote', 'preparar'],
@@ -99,7 +98,7 @@ const ENLACES = [
   ['preparar', 'descartar'],
   ['descartar', 'store', 'sí'],
   ['preparar', 'apijs'],
-  ['editor', 'preparar', 'un paso suelto: hasta'],
+  ['editor', 'preparar', 'entero, o un paso suelto (hasta)'],
   ['apijs', 'audit'],
   ['apijs', 'tailor'],
   ['apijs', 'cover'],
@@ -187,12 +186,15 @@ export function esqueleto() {
       label: { text: n.texto, ...LETRA },
     })),
 
-    ...ENLACES.map(([de, a, etiqueta]) => {
+    ...ENLACES.map(([de, a, etiqueta], i) => {
       const [p0, p1] = extremos(porId[de], porId[a])
       const w = p1.x - p0.x
       const h = p1.y - p0.y
       return {
-        type: 'arrow', id: `f-${de}-${a}`, x: p0.x, y: p0.y, width: w, height: h,
+        // El índice va en el id: dos flechas entre las mismas dos cajas son
+        // legítimas y con el id sacado solo del par se pisaban, que es lo que
+        // Excalidraw canta como «Duplicate id».
+        type: 'arrow', id: `f${i}-${de}-${a}`, x: p0.x, y: p0.y, width: w, height: h,
         // Los puntos van explícitos además del start/end: así la flecha está
         // bien puesta aunque el enganche decida otra cosa. El start/end es lo
         // que hace que te siga cuando arrastras la caja.

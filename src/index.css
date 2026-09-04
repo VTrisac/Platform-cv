@@ -85,6 +85,49 @@
 /* Menos en el CV, que es texto corrido y no una tabla. */
 .studio .print-a4 { font-variant-numeric: normal; }
 
+/* --- MODO OSCURO ------------------------------------------------------------
+   Solo los tokens de la app (--s-*). El :root de arriba NO se toca y no es un
+   descuido: esos son los colores que los diseños del CV meten en el PDF, así que
+   un modo oscuro que llegue ahí te imprime un currículum negro. Por el mismo
+   motivo el papel de la vista previa sigue siendo blanco en el editor.
+
+   Mismo criterio de contraste que en claro, medido par a par (mínimo 4,5:1):
+     texto/fondo 14,9  ·  apagado/superficie 7,1  ·  acento como texto 5,9
+     texto sobre el acento 6,5  ·  cada estado sobre su relleno, 6,5 o más
+   El acento sube de tono —#8F5D14 sobre grafito no se lee— y `sobre-acento` deja
+   de ser blanco para ser el fondo: sobre ámbar claro, el texto va oscuro. */
+:root[data-tema='oscuro'] .studio {
+  --s-bg: #14181D;
+  --s-surface: #1B2128;
+  --s-hueco: #252D36;
+  --s-border: #323B47;
+  --s-border-fuerte: #414C5B;
+  --s-text: #E7EBF0;
+  --s-muted: #A3ACB8;
+
+  --s-accent: #D08F32;
+  --s-accent-dark: #E0A44A;
+  --s-sobre-acento: #14181D;
+
+  --s-espera: #9EB9EB;    --s-espera-f: #1E2940;
+  --s-atencion: #E3AE58;  --s-atencion-f: #332711;
+  --s-perdida: #F0918A;   --s-perdida-f: #3A1F1D;
+  --s-ganada: #68CFA1;    --s-ganada-f: #123326;
+
+  /* Sobre un fondo oscuro una sombra suave no se ve: lo que separa las
+     superficies aquí es que la tarjeta sea MÁS CLARA que el fondo, y la sombra
+     solo asienta. Por eso es más negra y más corta que en claro. */
+  --s-shadow: 0 6px 18px rgba(0, 0, 0, .38);
+  --s-shadow-alta: 0 14px 34px rgba(0, 0, 0, .5);
+}
+
+/* El <html> también, o el primer frame —antes de que React monte .studio— es un
+   destello blanco a pantalla completa. El script de index.html pone data-tema
+   antes de pintar precisamente para que esta regla llegue a tiempo. */
+:root[data-tema='oscuro'] {
+  background: #14181D;
+}
+
 /* --- lo que faltaba entero: los estados de interacción -----------------
    Medido antes de escribir esto: 1 hover, 0 active y 0 focus en once
    ficheros. Va aquí y por selector de elemento a propósito — los componentes
@@ -112,12 +155,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .studio button:not(:disabled):active { transform: none; }
-}
-
-.theme-transition,
-.theme-transition * {
-  transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease,
-    box-shadow 200ms ease;
 }
 
 /* --- procesos largos ---------------------------------------------------------
@@ -192,6 +229,9 @@
     display: none !important;
   }
 
+  /* El html entra aquí además del body: en oscuro lleva fondo propio y sin esto
+     el PDF sale con un marco grafito alrededor del folio. */
+  html,
   body {
     background-color: white !important;
   }

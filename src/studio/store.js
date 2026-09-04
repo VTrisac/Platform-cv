@@ -25,6 +25,30 @@ export const leerMapa = () => {
 }
 
 // null lo borra: restablecer el mapa es guardar "nada", no otra función.
+// El tema. Va en su propia clave y no dentro del blob por lo mismo que el mapa,
+// más una razón que manda: index.html tiene que leerlo con un script en línea
+// ANTES de pintar, o el fondo claro asoma un frame. Ese script lee esta misma
+// clave; si la cambias, cámbiala en los dos sitios.
+//
+// null = todavía no has elegido y manda el sistema (prefers-color-scheme).
+const KEY_TEMA = 'cvStudio.tema'
+
+export const leerTema = () => {
+  try {
+    return localStorage.getItem(KEY_TEMA)
+  } catch {
+    return null
+  }
+}
+
+export const guardarTema = (tema) => {
+  try {
+    localStorage.setItem(KEY_TEMA, tema)
+  } catch {
+    // Modo privado: el tema dura lo que la pestaña. No rompe nada.
+  }
+}
+
 export const guardarMapa = (elementos) => {
   try {
     if (elementos) localStorage.setItem(KEY_MAPA, JSON.stringify(elementos))

@@ -10,6 +10,22 @@
       href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <meta name="color-scheme" content="light dark" />
+    <script>
+      // El tema, ANTES de pintar. Si esto se hiciera al montar React, el fondo
+      // claro asomaría un frame entero y se ve. Sin bundle a propósito: cualquier
+      // otro sitio llega tarde.
+      //
+      // Sin nada guardado manda el sistema; en cuanto pulsas el botón, mandas tú.
+      // La clave es la misma que lee store.js (cvStudio.tema).
+      try {
+        var t = localStorage.getItem('cvStudio.tema')
+        document.documentElement.dataset.tema =
+          t || (matchMedia('(prefers-color-scheme: dark)').matches ? 'oscuro' : 'claro')
+      } catch (e) {
+        document.documentElement.dataset.tema = 'claro'
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

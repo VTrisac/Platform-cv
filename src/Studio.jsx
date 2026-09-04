@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import Topbar from './studio/Topbar'
 import Bento from './studio/Bento'
 import Feed from './studio/Feed'
@@ -15,7 +15,7 @@ import Salarios from './studio/Salarios'
 // arriba lo pagaría todo el que abre la app.
 const Mapa = lazy(() => import('./studio/Mapa'))
 import { enLote, esUrl, preparar } from './studio/lote'
-import { nuevaOferta, useStudio } from './studio/store'
+import { guardarTema, leerTema, nuevaOferta, useStudio } from './studio/store'
 
 // `feed.keywords` son las 36 tecnologías del CV enteras: RAG, JWT, n8n,
 // Industrial Automation, Tailwind CSS… Ofrecerlas TODAS como "lenguajes
@@ -28,6 +28,32 @@ const LENGUAJES = ['Python', 'Java', 'JavaScript', 'TypeScript', 'SQL', 'HTML5',
 const Studio = () => {
   const { ofertas, feed, setFeed, base, setBase, preset, setPreset, perfil, setPerfil,
     addOferta, updateOferta, suceso, removeOferta, removeOfertas } = useStudio()
+  // El tema ya lo ha puesto el script de index.html antes de pintar; aquí solo se
+  // lee de dónde lo dejó, para que el icono del botón coincida con lo que se ve.
+  // Guardarlo es lo que convierte "lo que dice el sistema" en "lo que has elegido".
+  const [tema, setTema] = useState(() => document.documentElement.dataset.tema ?? 'claro')
+  const cambiarTema = () => {
+    const nuevo = tema === 'oscuro' ? 'claro' : 'oscuro'
+    document.documentElement.dataset.tema = nuevo
+    guardarTema(nuevo)
+    setTema(nuevo)
+  }
+
+  // Mientras no elijas, manda el sistema — y sigue mandando: si cambia a media
+  // sesión (el modo automático al anochecer), la app cambia con él. En cuanto
+  // pulsas el botón, leerTema() devuelve algo y esto se calla para siempre.
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const seguir = () => {
+      if (leerTema()) return
+      const nuevo = mq.matches ? 'oscuro' : 'claro'
+      document.documentElement.dataset.tema = nuevo
+      setTema(nuevo)
+    }
+    mq.addEventListener('change', seguir)
+    return () => mq.removeEventListener('change', seguir)
+  }, [])
+
   const [view, setView] = useState('bento')
   const [actual, setActual] = useState(null)
   const [urlInicial, setUrlInicial] = useState(null)
@@ -143,6 +169,8 @@ const Studio = () => {
           onNav={(v) => { if (v === 'ofertas') setFiltroOfertas(null); setView(v) }}
           onNueva={() => setModal(true)}
           cola={cola.length}
+          tema={tema}
+          onTema={cambiarTema}
         />
       </div>
 
@@ -210,7 +238,7 @@ const Studio = () => {
 
       {view === 'mapa' && (
         <Suspense fallback={<div className="p-8 text-sm" style={{ color: 'var(--s-muted)' }}>Cargando el lienzo…</div>}>
-          <Mapa />
+          <Mapa tema={tema} />
         </Suspense>
       )}
 
