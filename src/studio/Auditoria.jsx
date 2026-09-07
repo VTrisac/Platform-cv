@@ -175,12 +175,19 @@ const Auditoria = ({ a, onAdaptar, onDescartar }) => {
 
         <p className="text-sm leading-relaxed" style={{ color: 'var(--s-muted)' }}>{a.veredicto}</p>
 
+        {/* Un aviso, NO un bloqueo. La redacción anterior acababa en «adaptar el
+            CV no los va a resolver» justo encima del botón, y se leía como que
+            la app se negaba: medido el 07-09-2026 sobre una oferta de
+            Engineering Director, 17 minutos sin llegar a pulsarlo. Es verdad que
+            adaptar no los cubre —eso no cambia— pero la decisión de presentarte
+            igualmente es tuya, así que hay que decir las dos cosas. */}
         {a.encaje.bloqueantes.length > 0 && (
           <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: 'var(--s-perdida-f)', color: 'var(--s-perdida)' }}>
             <TriangleAlert size={14} className="shrink-0 mt-0.5" />
             <span>
-              <b>Bloqueantes:</b> {a.encaje.bloqueantes.join(' · ')}. Son imprescindibles que no cumples;
-              adaptar el CV no los va a resolver.
+              <b>Bloqueantes:</b> {a.encaje.bloqueantes.join(' · ')}. Son imprescindibles que no cumples, y
+              adaptar el CV no los va a cubrir: no están en tu experiencia. Pero puedes adaptarlo igual
+              si quieres presentarte — el botón de abajo no te lo impide.
             </span>
           </div>
         )}
@@ -191,7 +198,11 @@ const Auditoria = ({ a, onAdaptar, onDescartar }) => {
             className="flex items-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold"
             style={{ background: 'var(--s-accent)', color: 'var(--s-sobre-acento)' }}
           >
-            <Sparkles size={15} /> Tengo encaje — adaptar CV
+            {/* Con bloqueantes el botón dice lo que de verdad estás haciendo:
+                saltarte la recomendación a sabiendas. «Tengo encaje» ahí sería
+                mentira, y es lo que hacía dudar de si el botón iba a funcionar. */}
+            <Sparkles size={15} />
+            {a.encaje.bloqueantes.length ? 'Adaptar el CV de todas formas' : 'Tengo encaje — adaptar CV'}
           </button>
           <button
             onClick={onDescartar}
