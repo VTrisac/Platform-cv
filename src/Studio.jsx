@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Topbar from './studio/Topbar'
 import Bento from './studio/Bento'
 import Feed from './studio/Feed'
@@ -9,11 +9,6 @@ import NuevaOferta from './studio/NuevaOferta'
 import Perfil from './studio/Perfil'
 import Cola from './studio/Cola'
 import Salarios from './studio/Salarios'
-
-// El mapa del flujo se lleva dentro el paquete de Excalidraw, 2,6 MB. Con lazy()
-// sale en su propio chunk y solo lo descarga quien abre la pestaña; importado
-// arriba lo pagaría todo el que abre la app.
-const Mapa = lazy(() => import('./studio/Mapa'))
 import { enLote, esUrl, preparar } from './studio/lote'
 import { guardarTema, leerTema, nuevaOferta, useStudio } from './studio/store'
 
@@ -23,7 +18,7 @@ import { guardarTema, leerTema, nuevaOferta, useStudio } from './studio/store'
 // que veías era un "falta lenguaje" sin más. Se ofrecen solo lenguajes de verdad.
 const LENGUAJES = ['Python', 'Java', 'JavaScript', 'TypeScript', 'SQL', 'HTML5', 'CSS3']
 
-// Shell de CV Studio. ponytail: sin react-router — cuatro vistas y un estado.
+// Shell de CV Studio. ponytail: sin react-router — ocho vistas y un estado.
 // Una dependencia de routing para esto sería peso muerto.
 const Studio = () => {
   const { ofertas, feed, setFeed, base, setBase, preset, setPreset, perfil, setPerfil,
@@ -235,12 +230,6 @@ const Studio = () => {
       {view === 'perfil' && <Perfil perfil={perfil} setPerfil={setPerfil} />}
 
       {view === 'salarios' && <Salarios ofertas={ofertas} onEditar={abrirEditor} />}
-
-      {view === 'mapa' && (
-        <Suspense fallback={<div className="p-8 text-sm" style={{ color: 'var(--s-muted)' }}>Cargando el lienzo…</div>}>
-          <Mapa tema={tema} />
-        </Suspense>
-      )}
 
       {view === 'editor' && (
         <Editor

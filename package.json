@@ -16,7 +16,6 @@
     "test": "node scripts/tailor-test.js && node scripts/ats.js --selftest && node scripts/feed.js --selftest && node scripts/set-password.js --selftest && node scripts/apply-test.js"
   },
   "dependencies": {
-    "@excalidraw/excalidraw": "^0.18.1",
     "@sparticuz/chromium": "^149.0.0",
     "lucide-react": "^0.468.0",
     "openai": "^7.4.0",

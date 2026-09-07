@@ -10,7 +10,6 @@ const NAV = [
   { id: 'salarios', label: 'Salarios' },
   { id: 'editor', label: 'Variantes' },
   { id: 'perfil', label: 'Perfil' },
-  { id: 'mapa', label: 'Mapa' },
 ]
 
 // La Cola solo existe mientras hay un lote en marcha o recién terminado, así que

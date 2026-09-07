@@ -396,19 +396,3 @@
     padding-right: 4px !important;
   }
 }
-
-/* El lienzo del Mapa. Excalidraw trae su propio `height: 100%`, y ese porcentaje
-   se resuelve contra la altura DECLARADA del padre; la del contenedor sale de
-   flex-grow, que no es una declaración, así que computa a cero. Sus canvas van
-   en absolute, no lo levantan, y la pantalla sale en blanco sin un solo error en
-   consola. La cura es quitarle el porcentaje y dejar que lo estire el flex del
-   padre: medido, 0 px -> 666 px. */
-.lienzo {
-  display: flex;
-}
-
-.lienzo > .excalidraw {
-  height: auto;
-  flex: 1;
-  min-height: 0;
-}

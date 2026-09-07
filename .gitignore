@@ -25,3 +25,6 @@ node-compile-cache/
 # skills-lock.json SÍ se versiona a propósito: son 4 KB con el origen y el hash
 # de cada skill instalada, y es lo que permite recuperar exactamente este juego
 # sin guardar los 7,4 MB.
+
+# macOS
+.DS_Store
