@@ -196,7 +196,14 @@ export function applyPatch(cv, patch) {
 // `written` es el texto a vigilar, lo junta quien llama: en /api/tailor son los
 // campos reescritos del CV; en /api/cover, la carta entera.
 export function findInventions(cv, gaps, written) {
-  const STOP = new Set(['No', 'Not', 'No explicit', 'The', 'A', 'An', 'Factorial', 'I'])
+  // Las cabeceras de frase van fuera. La lista era solo inglesa y con lang 'es'
+  // no filtraba nada: los gaps empiezan por "Dominio de Spark…", "Experiencia con
+  // dbt…", y el editor avisaba «menciona Dominio, que no está en tu CV». Un aviso
+  // rojo que casi siempre miente es peor que no tenerlo — dejas de leerlo el día
+  // que dice la verdad. Observado en la primera pasada real del 07-09-2026.
+  const STOP = new Set(['No', 'Not', 'No explicit', 'The', 'A', 'An', 'Factorial', 'I',
+    'Dominio', 'Experiencia', 'Conocimiento', 'Conocimientos', 'Nociones', 'Exposición',
+    'Gobierno', 'Grado', 'Nivel', 'Certificación', 'Titulación', 'Años', 'Capacidad'])
   // Frases en Mayúscula Inicial y siglas: "Spec-Driven Development", "MCP".
   const terms = new Set()
   for (const g of gaps ?? []) {

@@ -80,7 +80,13 @@ export const SUCESOS = {
   // como valorable en normalizar() y no puede llegar hasta aquí.
   auditada: (o, a) => (a.recomendacion === 'descartar' ? 'descartada' : 'guardada'),
   // Tener CV adelanta, pero SOLO desde el principio: una enviada no retrocede.
-  cv: (o) => (o.estado === 'guardada' ? 'preparada' : o.estado),
+  //
+  // `descartada` también vuelve: adaptarle el CV es un acto deliberado —te has
+  // saltado la recomendación a sabiendas, pulsando «Tengo encaje»— y dejarla
+  // archivada te esconde la oferta que acabas de pagar, porque `descartada` está
+  // fuera de VIVAS en el tracker. `rechazada` NO vuelve: esa no la decides tú, y
+  // un CV nuevo no deshace un «no».
+  cv: (o) => (['guardada', 'descartada'].includes(o.estado) ? 'preparada' : o.estado),
   // Pulsar "Aplicar" no es enviar —la extensión no toca ese botón—, pero es lo
   // que vas a hacer a continuación. El tablero lo corrige en un clic.
   aplicada: () => 'enviada',
@@ -307,13 +313,17 @@ export function agrupar(ofertas) {
     // A un paso: encaje alto y todavía sin adaptar. Adaptar cuesta una llamada al
     // modelo, así que la lista corta de las que la merecen vale más que el total.
     //
-    // Se lee la RECOMENDACIÓN ya calculada, no el porcentaje otra vez. Aquí había
-    // un `>= 75` escrito a mano, el mismo umbral que recomendar() en el servidor:
+    // El criterio es CERO BLOQUEANTES: nada te falta del todo. Aquí había un
+    // `>= 75` escrito a mano, el mismo umbral que recomendar() en el servidor —
     // dos sitios decidiendo lo mismo, y al subir uno a 80 el tablero seguía
-    // ofreciendo ofertas que el informe ya no recomendaba. Además el porcentaje
-    // suelto ignora los bloqueantes, así que una con el 90 % y un imprescindible
-    // sin cubrir salía como «merece la pena».
-    prometedoras: guardadas.filter((o) => o.auditoria?.recomendacion === 'aplicar'),
+    // ofreciendo lo que el informe ya no recomendaba—, y después un
+    // `recomendacion === 'aplicar'` que dejaba fuera al 70 % limpio, que es una
+    // candidata de verdad. Con `!== 'descartar'` sería peor: una `guardada` con
+    // auditoría NUNCA la tiene —si la tuviera habría nacido `descartada`—, así
+    // que la tira habría sido el mismo conjunto exacto que `soloAuditadas`, que
+    // es el tile de al lado. Los bloqueantes son lo único que dice algo distinto,
+    // y no repiten el umbral del 80: ese vive en recomendar() y en ningún sitio más.
+    prometedoras: guardadas.filter((o) => o.auditoria && !o.auditoria.encaje?.bloqueantes?.length),
 
     // El seguimiento de verdad: las enviadas, la que lleva más tiempo callada
     // primero. Las de antes de que se guardara la historia no tienen días y se

@@ -65,12 +65,18 @@ export async function preparar(entrada, lang, onFase, previo = {}, hasta = 'cart
     // 'parado' y no 'listo' a propósito: 'listo' pinta los tres pasos como hechos,
     // y en una descartada el CV no se ha adaptado ni la carta se ha escrito.
     onFase(a.recomendacion === 'descartar' ? 'parado' : 'adaptar', { a })
+    // El freno vive AQUÍ y solo aquí, dentro de la rama que acaba de auditar: la
+    // cadena automática —la Cola y «Preparar todo»— no gasta 40 s de modelo en
+    // una oferta mala. Cuando la auditoría viene DADA, quien llama ya ha
+    // decidido: el botón que trae hasta aquí dice «Tengo encaje». Suelto fuera
+    // del if, ese botón no hacía absolutamente nada —ni CV, ni error, ni
+    // spinner— y la auditoría dejaba de ser un consejo para ser una puerta.
+    if (a.recomendacion === 'descartar') return
   } else {
     // El `{ a }` NO se reenvía al reanudar: es lo que crea la oferta en el
     // tracker, y volver a mandarlo la duplicaría.
-    onFase(a.recomendacion === 'descartar' ? 'parado' : cv ? 'carta' : 'adaptar')
+    onFase(cv ? 'carta' : 'adaptar')
   }
-  if (a.recomendacion === 'descartar') return
 
   if (!cv) {
     // El texto que ya scrapeó la auditoría, no la URL: ni se baja dos veces ni se

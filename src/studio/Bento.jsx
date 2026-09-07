@@ -225,7 +225,7 @@ const Bento = ({ ofertas, onNav, onEditar, onEstado, onVerOfertas }) => {
           />
           <Grupo
             n={g.prometedoras.length} titulo="Merecen la pena"
-            hint="La auditoría recomienda aplicar, y siguen sin adaptar."
+            hint="Ningún imprescindible sin cubrir, y siguen sin adaptar."
             onClick={() => onVerOfertas('guardada')}
             destacado
           />

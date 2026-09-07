@@ -64,9 +64,16 @@ escrita dos veces y arreglar la reanudación costó hacerlo dos veces.
    imprescindibles, los bloqueantes, un veredicto, una recomendación y cuánto
    pedir. El texto scrapeado vuelve dentro de la respuesta para que el paso
    siguiente no lo baje otra vez.
-4. **Decides tú.** «Tengo encaje — adaptar CV» o «Descartar oferta». Si la
-   recomendación es `descartar`, la oferta nace descartada y `preparar()` se
-   para ahí sin gastar la adaptación.
+4. **Decides tú, y tu decisión manda.** «Tengo encaje — adaptar CV» o
+   «Descartar oferta». Si la recomendación es `descartar`, la oferta nace
+   descartada y la **cadena automática** —«Preparar todo» y la Cola— se para ahí
+   sin gastar la adaptación. Pero **el botón sí adapta**: existe para
+   contradecir a la auditoría, que es un consejo y no una puerta. El freno vive
+   dentro de la rama que acaba de auditar (`lote.js`); suelto fuera de ella, ese
+   botón no hacía nada de nada —ni CV, ni error, ni spinner—. Adaptar el CV
+   además **devuelve la oferta a «preparada»**: si te has saltado la
+   recomendación a sabiendas y has pagado la adaptación, dejarla archivada te
+   esconde la oferta que acabas de preparar.
 5. **Se adapta** (`/api/tailor`) y, si la quieres, **se escribe la carta**
    (`/api/cover`). A los dos les viaja la auditoría, no solo el texto: ver §6.
 6. **El PDF** (`/api/pdf`): se manda el HTML del CV que estás viendo a un
@@ -82,7 +89,8 @@ lo pagado no se pierde.
 ### Los siete estados
 
 `guardada → preparada → enviada → entrevista → contratado`, más `rechazada` y
-`descartada` fuera del camino. Las dos últimas no se funden a propósito:
+`descartada` fuera del camino. De `descartada` se vuelve adaptándole el CV; de
+`rechazada` no: esa no la decides tú, y un CV nuevo no deshace un «no». Las dos últimas no se funden a propósito:
 *descartada* es que no llegaste a mandarla, *rechazada* es que te dijeron que no,
 y juntarlas taparía si el problema está en tu criterio al elegir o en lo que
 mandas.
@@ -96,7 +104,7 @@ tablero.
 
 | Pantalla | Qué decides ahí |
 |---|---|
-| **Resumen** (`Bento`) | Dónde está cada candidatura: cuatro columnas con las tarjetas dentro y el estado cambiable en la propia tarjeta. Arriba, lo que aún no ha entrado en ninguna: sin auditar, solo auditadas, las que merecen la pena (las que la auditoría recomienda aplicar) y las listas para aplicar. |
+| **Resumen** (`Bento`) | Dónde está cada candidatura: cuatro columnas con las tarjetas dentro y el estado cambiable en la propia tarjeta. Arriba, lo que aún no ha entrado en ninguna: sin auditar, solo auditadas, las que merecen la pena (ningún imprescindible al descubierto) y las listas para aplicar. |
 | **Feed** | Las ofertas que hay ahora en tus fuentes, ordenadas. Cada una con su nota, su stack y sus avisos. Se recalcula como mucho una vez al día. |
 | **Criterios** | Qué buscar y dónde. Ver §4. |
 | **Ofertas** | El tracker: buscador, filtros por estado, salto rápido de estado y borrado múltiple. Las descartadas y rechazadas salen de la tabla y viven tras el chip «Archivadas». |

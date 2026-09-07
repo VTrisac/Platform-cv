@@ -339,6 +339,14 @@ a.equal((await call(feed, { VERCEL: '1' })).code, 500, 'feed en prod sin secreto
 a.equal((await call(feed, HPW)).code, 401, 'feed en prod sin contraseña: 401')
 a.equal((await call(feed, HPW, { 'x-tailor-key': 'mala' })).code, 401, 'feed con contraseña incorrecta: 401')
 
+// Las cabeceras de frase en español no son invenciones. El editor avisaba
+// «menciona Dominio, que no está en tu CV» porque el gap empieza por esa palabra
+// en mayúscula; un aviso rojo que casi siempre miente deja de leerse.
+a.deepEqual(findInventions(dataEN, ['Dominio de Spark no acreditado.'], 'Dominio de Python.'), [],
+  'una palabra corriente en mayúscula por ir al principio no es una invención')
+a.deepEqual(findInventions(dataEN, ['Dominio de Spark no acreditado.'], 'Dominio de Spark en producción.'),
+  ['Spark'], 'pero el término real se sigue cazando')
+
 // --- el brief que va del auditor al adaptador --------------------------------
 // Sin esto /api/tailor recibía el texto crudo y volvía a deducir de cero qué
 // cubre el CV: sus `gaps` contradecían al informe que acabas de leer.
@@ -441,11 +449,11 @@ for (const [de, hacia] of Object.entries(SIGUIENTE)) {
   a.ok(ESTADOS[de] && ESTADOS[hacia], `SIGUIENTE apunta a estados que existen: ${de} -> ${hacia}`)
 }
 
-// Generar el CV adelanta, pero solo desde el principio. La segunda es LA
-// regresión que importa: sin ella, regenerar el PDF de una oferta ya enviada la
-// devolvía a "preparada" y desaparecía del seguimiento. La regla vive ahora en
-// SUCESOS.cv y se prueba entera más abajo; aquí queda el caso que la motivó.
-a.equal(SUCESOS.cv({ estado: 'descartada' }), 'descartada', 'ni resucita una descartada')
+// Generar el CV adelanta, pero no desde cualquier sitio. LA regresión que
+// importa: regenerar el PDF de una oferta ya enviada la devolvía a "preparada" y
+// desaparecía del seguimiento. La regla vive en SUCESOS.cv y se prueba entera más
+// abajo; aquí queda el caso que la motivó.
+a.equal(SUCESOS.cv({ estado: 'enviada' }), 'enviada', 'una enviada no retrocede por regenerar el CV')
 
 // --- la fecha de cada cambio ----------------------------------------------------
 {
@@ -498,6 +506,10 @@ a.deepEqual(migrar([
   // Encaje ALTO pero con un imprescindible sin cubrir. Con el `>= 75` a mano que
   // había aquí salía como «merece la pena»; leyendo la recomendación, no.
   const conBloqueante = { recomendacion: 'aplicar_con_reservas', encaje: { imprescindibles: 90, bloqueantes: ['Rails'] } }
+  // Encaje mediano pero LIMPIO: nada te falta del todo. Con el
+  // `recomendacion === 'aplicar'` que estuvo aquí un rato se caía de la tira, y
+  // es exactamente la candidata que quieres mirar.
+  const limpia = { recomendacion: 'aplicar_con_reservas', encaje: { imprescindibles: 70, bloqueantes: [] } }
   const h = (estado, dia) => [{ estado, dia }]
   const tablero = [
     { id: 'a', estado: 'guardada', auditoria: alta },
@@ -511,21 +523,26 @@ a.deepEqual(migrar([
     { id: 'i', estado: 'rechazada', auditoria: baja },
     { id: 'j', estado: 'descartada', auditoria: baja },
     { id: 'k', estado: 'guardada', auditoria: conBloqueante },
+    { id: 'l', estado: 'guardada', auditoria: limpia },
   ]
   const g = agrupar(tablero)
   const ids = (xs) => xs.map((o) => o.id).sort()
 
   a.deepEqual(ids(g.vivas), ['f', 'g'], 'vivas = enviadas + entrevistas')
-  a.deepEqual(ids(g.porRevisar), ['a', 'b', 'c', 'd', 'e', 'k'], 'lo que queda por hacer')
+  a.deepEqual(ids(g.porRevisar), ['a', 'b', 'c', 'd', 'e', 'k', 'l'], 'lo que queda por hacer')
   a.deepEqual(ids(g.sinAuditar), ['c'], 'pegada y nada más')
-  a.deepEqual(ids(g.soloAuditadas), ['a', 'b', 'k'], 'auditada y sin CV')
+  a.deepEqual(ids(g.soloAuditadas), ['a', 'b', 'k', 'l'], 'auditada y sin CV')
   a.deepEqual(ids(g.preparadas), ['d', 'e'], 'con CV, sin mandar')
   a.deepEqual(ids(g.listas), ['e'], 'lista = preparada Y con enlace, lo que exige el botón Aplicar')
-  // Lee la recomendación ya calculada, no un `>= 75` escrito otra vez aquí: el
-  // umbral vive en recomendar() y en un solo sitio. Por eso 'k' —90 % pero con un
-  // bloqueante— tampoco entra: adaptar el CV no resuelve un imprescindible.
-  a.deepEqual(ids(g.prometedoras), ['a'],
-    'solo las que la auditoría recomienda aplicar; ni la de encaje bajo ni la del bloqueante')
+  // El criterio es CERO BLOQUEANTES, no un umbral repetido aquí: ese vive en
+  // recomendar() y en un solo sitio. 'k' —90 % con un bloqueante— se cae, porque
+  // adaptar el CV no resuelve un imprescindible que no cumples; 'l' —70 % limpio—
+  // entra, porque es una candidata de verdad.
+  a.deepEqual(ids(g.prometedoras), ['a', 'l'],
+    'sin ningún imprescindible al descubierto; ni la del bloqueante ni la sin auditar')
+  // Y la tira sigue diciendo algo DISTINTO de su vecina, que es lo que justifica
+  // que sean dos tiles: con un `!== descartar` habrían sido el mismo conjunto.
+  a.notDeepEqual(ids(g.prometedoras), ids(g.soloAuditadas), 'no es un duplicado de «Solo auditadas»')
   a.deepEqual(ids(g.contratado), ['h'])
   a.deepEqual(ids(g.rechazadas), ['i'])
   a.deepEqual(ids(g.descartadas), ['j'])
@@ -544,7 +561,7 @@ a.deepEqual(migrar([
   a.deepEqual(g.sinRespuesta.map((o) => o.id), ['f'])
 
   a.deepEqual(agrupar([]).vivas, [], 'un tablero vacío no revienta')
-  a.equal(contar(tablero).guardada, 4, 'contar() sigue contando estados, sin cambios')
+  a.equal(contar(tablero).guardada, 5, 'contar() sigue contando estados, sin cambios')
 }
 
 // --- la máquina de estados ------------------------------------------------------
@@ -560,6 +577,11 @@ a.deepEqual(migrar([
   a.equal(SUCESOS.cv({ estado: 'guardada' }), 'preparada', 'tener CV adelanta')
   a.equal(SUCESOS.cv({ estado: 'enviada' }), 'enviada', 'pero una enviada NUNCA retrocede')
   a.equal(SUCESOS.cv({ estado: 'entrevista' }), 'entrevista')
+  // Te saltaste la recomendación pulsando «Tengo encaje» y pagaste la adaptación:
+  // dejarla archivada te esconde la oferta que acabas de preparar.
+  a.equal(SUCESOS.cv({ estado: 'descartada' }), 'preparada', 'adaptar rehabilita una descartada')
+  // Un «no» de la empresa no lo deshace un CV nuevo.
+  a.equal(SUCESOS.cv({ estado: 'rechazada' }), 'rechazada', 'pero una rechazada no resucita')
   a.equal(SUCESOS.aplicada({ estado: 'preparada' }), 'enviada')
 
   a.equal(SUCESOS.marcada({ estado: 'enviada' }, 'descartada'), 'descartada', 'a mano manda')
@@ -644,13 +666,14 @@ a.equal(textoCarta(null), '')
   globalThis.localStorage ??= { getItem: () => 'clave', setItem() {} }
   const llamadas = []
   const audit = { recomendacion: 'aplicar', empresa: 'Acme', texto: 'OFERTA' }
-  globalThis.fetch = async (url) => {
+  const normal = async (url) => {
     llamadas.push(String(url))
     const cuerpo = String(url).includes('audit') ? audit
       : String(url).includes('tailor') ? { data: { title: 'CV' } }
         : { carta: 'Estimados…' }
     return { ok: true, status: 200, json: async () => cuerpo }
   }
+  globalThis.fetch = normal
 
   const fases = []
   const on = (fase, extra) => fases.push([fase, Object.keys(extra ?? {})])
@@ -672,11 +695,26 @@ a.equal(textoCarta(null), '')
   await preparar('texto', 'es', on, { a: audit, cv: { title: 'CV' } })
   a.deepEqual(llamadas.map((u) => u.split('/').pop()), ['cover'])
 
-  // Una descartada sigue parándose, tenga lo que tenga guardado.
+  // --- el freno del descarte, que tiene DOS lados -----------------------------
+  // Auditada aquí mismo y descartada: se para. Es el ahorro de la Cola y de
+  // «Preparar todo», y tiene que seguir en pie.
   llamadas.length = 0; fases.length = 0
-  await preparar('texto', 'es', on, { a: { ...audit, recomendacion: 'descartar' } })
-  a.equal(llamadas.length, 0)
-  a.deepEqual(fases.at(-1), ['parado', []])
+  globalThis.fetch = async (url) => {
+    llamadas.push(String(url))
+    return { ok: true, status: 200, json: async () => ({ ...audit, recomendacion: 'descartar' }) }
+  }
+  await preparar('texto', 'es', on)
+  a.deepEqual(llamadas.map((u) => u.split('/').pop()), ['audit'], 'la cadena automática no gasta la adaptación')
+  a.deepEqual(fases.at(-1), ['parado', ['a']])
+  globalThis.fetch = normal
+
+  // Pero con la auditoría EN LA MANO, adapta: ese es el botón «Tengo encaje —
+  // adaptar CV», que existe para contradecir a la auditoría. Suelto fuera del
+  // if, el botón no hacía nada de nada: ni CV, ni error, ni spinner.
+  llamadas.length = 0; fases.length = 0
+  await preparar('texto', 'es', on, { a: { ...audit, recomendacion: 'descartar' } }, 'adaptar')
+  a.deepEqual(llamadas.map((u) => u.split('/').pop()), ['tailor'], 'tu decisión manda sobre la recomendación')
+  a.equal(fases.at(-1)[0], 'listo')
 
   // `hasta` es lo que permite al editor ejecutar UN paso sin volver a escribir
   // aquí las llamadas. Adaptar sin carta: la carta es otra llamada al modelo y
