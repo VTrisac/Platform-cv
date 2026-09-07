@@ -123,6 +123,17 @@ const Auditoria = ({ a, onAdaptar, onDescartar }) => {
               <span className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-sm font-medium">{r.texto}</span>
                 <span className="text-xs" style={{ color: 'var(--s-muted)' }}>{r.evidencia}</span>
+                {/* La frase de la OFERTA que lo exige, no del CV. Solo sale si
+                    normalizar() la encontró de verdad en el texto: una cita que
+                    no está en la oferta llega aquí vacía y no se pinta. */}
+                {r.cita && (
+                  <span
+                    className="text-xs italic mt-1 pl-2"
+                    style={{ color: 'var(--s-muted)', borderLeft: '2px solid var(--s-border)' }}
+                  >
+                    «{r.cita}»
+                  </span>
+                )}
               </span>
             </div>
           )
@@ -163,18 +174,6 @@ const Auditoria = ({ a, onAdaptar, onDescartar }) => {
         {a.salario && <Salario s={a.salario} />}
 
         <p className="text-sm leading-relaxed" style={{ color: 'var(--s-muted)' }}>{a.veredicto}</p>
-
-        {/* Un dato, no un bloqueo. Hasta el 28-08-2026 esto descartaba la oferta
-            sola; ahora solo dice qué frase lo exige y decides tú. De ahí el
-            ámbar en vez del rojo: no ha pasado nada, es información. */}
-        {a.ingles && (
-          <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: 'var(--s-atencion-f)', color: 'var(--s-atencion)' }}>
-            <Info size={14} className="shrink-0 mt-0.5" />
-            <span>
-              <b>Pide inglés como imprescindible:</b> «{a.ingles}».
-            </span>
-          </div>
-        )}
 
         {a.encaje.bloqueantes.length > 0 && (
           <div className="flex gap-2 p-3 rounded-xl text-xs" style={{ background: 'var(--s-perdida-f)', color: 'var(--s-perdida)' }}>

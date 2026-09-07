@@ -8,27 +8,10 @@ import { useEffect, useState } from 'react'
 // cambiar esto por un endpoint. Hasta entonces, una dependencia menos.
 const KEY = 'cvStudio.v1'
 
-// El mapa del flujo (studio/Mapa.jsx) va en SU PROPIA clave, no dentro del blob
-// de arriba: useStudio reserializa el estado entero en cada cambio, y el dibujo
-// son unos 100 KB. Sin esto, marcar una oferta como enviada pagaría el mapa.
-// Aquí y no en Mapa.jsx para que siga siendo verdad que este es el ÚNICO fichero
-// que toca localStorage, que es lo que hace posible la migración a una BD.
-const KEY_MAPA = 'cvStudio.mapa'
-
-export const leerMapa = () => {
-  try {
-    const raw = localStorage.getItem(KEY_MAPA)
-    return raw ? JSON.parse(raw) : null
-  } catch {
-    return null // dibujo corrupto: se vuelve al del código
-  }
-}
-
-// null lo borra: restablecer el mapa es guardar "nada", no otra función.
-// El tema. Va en su propia clave y no dentro del blob por lo mismo que el mapa,
-// más una razón que manda: index.html tiene que leerlo con un script en línea
-// ANTES de pintar, o el fondo claro asoma un frame. Ese script lee esta misma
-// clave; si la cambias, cámbiala en los dos sitios.
+// El tema va en su propia clave y no dentro del blob de arriba: index.html
+// tiene que leerlo con un script en línea ANTES de pintar, o el fondo claro
+// asoma un frame. Ese script lee esta misma clave; si la cambias, cámbiala en
+// los dos sitios.
 //
 // null = todavía no has elegido y manda el sistema (prefers-color-scheme).
 const KEY_TEMA = 'cvStudio.tema'
@@ -46,15 +29,6 @@ export const guardarTema = (tema) => {
     localStorage.setItem(KEY_TEMA, tema)
   } catch {
     // Modo privado: el tema dura lo que la pestaña. No rompe nada.
-  }
-}
-
-export const guardarMapa = (elementos) => {
-  try {
-    if (elementos) localStorage.setItem(KEY_MAPA, JSON.stringify(elementos))
-    else localStorage.removeItem(KEY_MAPA)
-  } catch {
-    // Cuota llena o modo privado: se pierde al recargar, no rompe nada.
   }
 }
 
@@ -102,7 +76,8 @@ export const SIGUIENTE = {
 //
 // Aparte de useStudio a propósito, para poder probarlas sin React.
 export const SUCESOS = {
-  // Nace descartada si la auditoría lo dice. El inglés ya no descarta (28-08).
+  // Nace descartada solo si la auditoría lo dice. El idioma no cuenta: entra
+  // como valorable en normalizar() y no puede llegar hasta aquí.
   auditada: (o, a) => (a.recomendacion === 'descartar' ? 'descartada' : 'guardada'),
   // Tener CV adelanta, pero SOLO desde el principio: una enviada no retrocede.
   cv: (o) => (o.estado === 'guardada' ? 'preparada' : o.estado),
@@ -149,6 +124,22 @@ export function aplicarPatch(o, patch, dia = hoy()) {
 // días" sobre un dato que no existe es peor que no decir nada.
 export const desdeCuando = (o, estado) =>
   [...(o.historia ?? [])].reverse().find((h) => h.estado === estado)?.dia ?? null
+
+// Por qué está fuera. NO es un campo nuevo: todo esto ya se guardaba con la
+// oferta, solo faltaba leerlo. Si la auditoría recomendó descartar, fue ella;
+// si no, fuiste tú desde el informe o desde la tabla. Y los números dicen con
+// qué motivo, que es lo que quieres saber antes de fiarte del filtro.
+//
+// ponytail: derivado, no persistido. Un campo `motivo` sería un dato más que
+// mantener sincronizado y una migración para las ofertas que ya tienes.
+export function porQueDescartada(o) {
+  if (o?.estado !== 'descartada') return null
+  const a = o.auditoria
+  if (a?.recomendacion !== 'descartar') return 'La descartaste tú'
+  const { imprescindibles: imp, bloqueantes = [] } = a.encaje ?? {}
+  if (bloqueantes.length >= 2) return `La auditoría: ${bloqueantes.length} bloqueantes — ${bloqueantes.join('; ')}`
+  return `La auditoría: ${imp}% de los imprescindibles`
+}
 
 export function diasDesde(dia) {
   if (!dia) return null
@@ -315,7 +306,14 @@ export function agrupar(ofertas) {
     listas: preparadas.filter((o) => o.url),
     // A un paso: encaje alto y todavía sin adaptar. Adaptar cuesta una llamada al
     // modelo, así que la lista corta de las que la merecen vale más que el total.
-    prometedoras: guardadas.filter((o) => (o.auditoria?.encaje?.imprescindibles ?? 0) >= 75),
+    //
+    // Se lee la RECOMENDACIÓN ya calculada, no el porcentaje otra vez. Aquí había
+    // un `>= 75` escrito a mano, el mismo umbral que recomendar() en el servidor:
+    // dos sitios decidiendo lo mismo, y al subir uno a 80 el tablero seguía
+    // ofreciendo ofertas que el informe ya no recomendaba. Además el porcentaje
+    // suelto ignora los bloqueantes, así que una con el 90 % y un imprescindible
+    // sin cubrir salía como «merece la pena».
+    prometedoras: guardadas.filter((o) => o.auditoria?.recomendacion === 'aplicar'),
 
     // El seguimiento de verdad: las enviadas, la que lleva más tiempo callada
     // primero. Las de antes de que se guardara la historia no tienen días y se

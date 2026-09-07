@@ -8,7 +8,7 @@
 // `texto` es la oferta ya scrapeada: el paso 3 la reenvía a /api/tailor tal
 // cual, así no se baja dos veces ni se arriesga a que el portal cambie entre
 // una llamada y la otra.
-import { pedirJSON, PRESUPUESTO } from './tailor.js'
+import { pedirJSON, PRESUPUESTO, resumenCV } from './tailor.js'
 import { gate } from '../src/acceso.js'
 import { fetchOffer } from '../src/scrape.js'
 // La misma regex que ya usa el feed para la columna "salario": si la oferta
@@ -59,8 +59,16 @@ const schema = {
             type: 'string',
             description: 'Qué del CV lo respalda, citando empresa o tecnología concreta. Si el encaje es "no", di qué falta.',
           },
+          // Lo único que ata el requisito a la oferta. `evidencia` dice qué del
+          // CV lo cubre; sin esto no hay forma de comprobar que el requisito
+          // existe de verdad y no se lo ha inventado el modelo. Se verifica
+          // contra el texto en normalizar(), así que aquí solo se pide.
+          cita: {
+            type: 'string',
+            description: 'El fragmento LITERAL de la oferta que exige esto: cópialo y pégalo tal cual, sin traducir, resumir ni reescribir. SE COMPRUEBA contra el texto de la oferta y se descarta si no coincide palabra por palabra, así que una paráfrasis se pierde. Si no puedes copiarlo exacto, deja la cadena vacía.',
+          },
         },
-        required: ['texto', 'tipo', 'encaje', 'evidencia'],
+        required: ['texto', 'tipo', 'encaje', 'evidencia', 'cita'],
         additionalProperties: false,
       },
     },
@@ -154,26 +162,15 @@ export function limpiarVeredicto(v, encaje) {
   ].join(' ')
 }
 
-// "No quiero ofertas donde el inglés sea imprescindible" no se puede resolver
-// con palabras clave: "English" aparece en casi toda oferta técnica, la mitad de
-// las veces como "English is a plus". La diferencia entre eso y "English C1
-// required" es criterio, y la auditoría ya lo ha aplicado al clasificar cada
-// requisito como imprescindible o valorable. Aquí solo se lee esa clasificación.
-//
-// Bloquea cuando el inglés es imprescindible, se cumpla o no: es lo que pediste.
-// Si algún día prefieres que solo bloquee cuando NO lo cumples, es añadir
-// `&& r.encaje !== 'si'`.
-export function bloqueaIngles(requisitos = []) {
-  const IDIOMA = /\b(ingl[ée]s|english)\b/i
-  return requisitos.find((r) => r.tipo === 'imprescindible' && IDIOMA.test(r.texto))?.texto ?? null
-}
-
 // La recomendación se calcula, no se le pregunta al modelo: devolvía
 // "descartar" con el 100% de los imprescindibles cumplidos.
 export function recomendar({ imprescindibles, bloqueantes }) {
   if (bloqueantes.length >= 2) return 'descartar'
   if (imprescindibles !== null && imprescindibles < 50) return 'descartar'
-  if (bloqueantes.length === 1 || (imprescindibles !== null && imprescindibles < 75)) {
+  // El 80 es el "8/10" del plan de flujo: pasa a adaptación lo que cubre al menos
+  // cuatro de cada cinco imprescindibles y no falla ninguno. Era 75. No es una
+  // escala nueva — es el mismo número, con el corte donde estaba el 8.
+  if (bloqueantes.length === 1 || (imprescindibles !== null && imprescindibles < 80)) {
     return 'aplicar_con_reservas'
   }
   return 'aplicar'
@@ -254,20 +251,9 @@ export default async function handler(req, res) {
     if (!oferta) return res.status(400).json({ error: 'Pasa la URL de la oferta o su texto.' })
 
     const cv = lang === 'es' ? dataES : dataEN
-    // Se le manda el CV entero: para auditar necesita ver estudios, idiomas y
-    // certificaciones, no solo lo que se puede reescribir.
-    const resumen = {
-      titulo: cv.title,
-      perfil: cv.profile,
-      experiencia: cv.experience.map((e) => ({
-        empresa: e.project, puesto: e.role, fechas: e.dates, descripcion: e.description,
-        logros: e.achievements, tecnologias: e.tech,
-      })),
-      skills: cv.skills,
-      estudios: cv.education.map((e) => `${e.degree} — ${e.center} (${e.dates})`),
-      idiomas: cv.languages,
-      certificaciones: cv.certifications.map((c) => c.name),
-    }
+    // El CV entero: para auditar necesita ver estudios, idiomas y certificaciones,
+    // no solo lo que se puede reescribir. Compartido con /api/cover.
+    const resumen = resumenCV(cv)
 
     const { datos: a, usage } = await pedirJSON({
       system: SYSTEM,
@@ -284,10 +270,11 @@ export default async function handler(req, res) {
         + `IDIOMA OBLIGATORIO DE SALIDA: ${lang === 'es' ? 'ESPAÑOL' : 'INGLÉS'}. `
         + `Escribe en ${lang === 'es' ? 'español' : 'inglés'} el texto de cada requisito, la evidencia y el veredicto, `
         + `aunque la oferta esté en otro idioma: tradúcelos, no los copies literales. `
-        + `Los nombres de tecnologías, empresas y puestos no se traducen.`,
+        + `Los nombres de tecnologías, empresas y puestos no se traducen. `
+        + `La "cita" TAMPOCO: va copiada literal de la oferta, en el idioma en que esté escrita.`,
     })
 
-    a.requisitos = normalizar(a.requisitos)
+    a.requisitos = normalizar(a.requisitos, oferta)
     const encaje = puntuar(a.requisitos)
     // Fuera de la respuesta: los tres campos crudos se resumen en `salario` y
     // esto se guarda entero con la oferta en localStorage.
@@ -299,9 +286,6 @@ export default async function handler(req, res) {
       salario: pedirSalario(a, encaje, salarioDe(oferta), rangoSalarial(oferta)),
       veredicto: limpiarVeredicto(a.veredicto, encaje),
       recomendacion: recomendar(encaje),
-      // El texto del requisito, no un booleano: si te descarta una oferta,
-      // quieres leer exactamente qué exigía antes de fiarte del filtro.
-      ingles: bloqueaIngles(a.requisitos),
       texto: oferta, // para el paso 3, sin volver a scrapear
       usage: { input: usage?.prompt_tokens, output: usage?.completion_tokens },
     })
@@ -310,23 +294,60 @@ export default async function handler(req, res) {
   }
 }
 
+const IDIOMA = /\b(ingl[ée]s|english)\b/i
+
 // Los enums (`tipo`, `encaje`) los garantizaba la decodificación restringida.
 // Ahora los garantiza esto. Importa más de lo que parece: puntuar() haría NaN
 // con un encaje desconocido y la pantalla de auditoría reventaría al buscar su
 // icono. Ante la duda, "parcial" e "imprescindible": la lectura prudente, que
 // es la que pide el prompt.
-export function normalizar(requisitos) {
+export function normalizar(requisitos, oferta = '') {
   // Sin tildes: el modelo escribe en español y devuelve "Sí" tanto como "si".
   const uno = (v, validos, porDefecto) => {
     const s = String(v ?? '').trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
     return validos.find((x) => x === s || s.startsWith(x)) ?? porDefecto
+  }
+  // Una cita que no está en la oferta es una cita inventada, y es exactamente lo
+  // que ese campo existe para evitar. Se COMPRUEBA contra el texto en vez de
+  // pedirse por favor: mismo criterio que applyPatch con tech — la garantía es
+  // código, no prompt. Si no aparece se queda vacía, que es honesto; pintarla
+  // sería peor que no tenerla, porque la lees como si fuera de la oferta.
+  //
+  // Se comparan solo letras y números: el modelo recopia el fragmento con otros
+  // saltos de línea, y la oferta scrapeada trae viñetas, asteriscos de negrita y
+  // barras. Medido sobre la oferta de Chery: sin esto, "Grado universitario o
+  // superior" NO casaba con "**Grado universitario o superior**". Lo que sigue
+  // exigiéndose es la SECUENCIA DE PALABRAS, que es la garantía que importa: una
+  // paráfrasis que quita o añade una palabra sigue cayéndose, y son la mayoría.
+  //
+  // La cadena vacía se descarta aparte: está contenida en cualquier texto y
+  // colaría siempre.
+  //
+  // Medido el 07-09-2026 sobre la oferta de Chery: comparando espacios y
+  // mayúsculas solamente, 4 de 10 citas sobrevivían; ignorando también el markup,
+  // y diciéndole en la `description` que la cita SE COMPRUEBA, 12 de 12. Cero
+  // citas falsas en las dos pasadas.
+  const aplanar = (s) => String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+  const plano = aplanar(oferta)
+  const literal = (c) => {
+    const q = String(c ?? '').replace(/\s+/g, ' ').trim()
+    const clave = aplanar(q)
+    return clave && plano.includes(clave) ? q : ''
   }
   return (Array.isArray(requisitos) ? requisitos : [])
     .filter((r) => r && String(r.texto ?? '').trim())
     .map((r) => ({
       texto: String(r.texto).trim(),
       evidencia: String(r.evidencia ?? '').trim(),
-      tipo: uno(r.tipo, ['imprescindible', 'valorable'], 'imprescindible'),
+      cita: literal(r.cita),
+      // El idioma NUNCA es imprescindible, lo diga la oferta o lo diga el modelo.
+      // Aquí y no en un filtro aparte porque este es el embudo por el que pasan
+      // todos los requisitos antes de puntuar(), recomendar() y pedirSalario():
+      // un "English C1 required" clasificado como imprescindible bajaba el % de
+      // encaje, entraba en bloqueantes y hacía que la oferta naciera descartada
+      // sin llegar a adaptar el CV. Sigue viéndose en la lista de valorables:
+      // saber que lo piden es útil, frenar la candidatura por ello no.
+      tipo: IDIOMA.test(r.texto) ? 'valorable' : uno(r.tipo, ['imprescindible', 'valorable'], 'imprescindible'),
       encaje: uno(r.encaje, ['si', 'parcial', 'no'], 'parcial'),
     }))
 }

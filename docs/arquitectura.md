@@ -1,11 +1,10 @@
 # CV Studio — cómo está hecho
 
-Auditoría del **03-09-2026**, leyendo el código. El mapa visual está en
+Auditoría del **03-09-2026**, revisada el **07-09-2026**, leyendo el código. El diagrama de capas está en
 `arquitectura.excalidraw` (se abre en excalidraw.com y se edita).
 
-El mapa del **flujo** vive dentro de la app, en la pestaña «Mapa»: sale de
-`src/studio/flujo.js`, se edita con el ratón y se guarda en tu navegador. Este
-documento y el `.excalidraw` dibujan capas y ficheros; aquel, el recorrido.
+Esto cuenta **cómo está hecho**: capas y ficheros. El recorrido de una oferta de
+principio a fin —cómo se usa— está en [`funcionamiento.md`](funcionamiento.md).
 
 ## Las cuatro capas
 
@@ -30,15 +29,15 @@ cambia en silencio qué PDF genera `npm run pdf`.
 
 ## El Studio
 
-`Studio.jsx` es un router de nueve vistas con `useState`, sin librería. Reparte a
+`Studio.jsx` es un router de ocho vistas con `useState`, sin librería. Reparte a
 `Bento` (el tablero), `Feed`, `Criterios`, `Ofertas` (tracker), `Salarios`,
-`Cola`, `Perfil`, `Mapa` y `Editor`.
+`Cola`, `Perfil` y `Editor`.
 
 Todo el estado vive en **`store.js` → `localStorage['cvStudio.v1']`**: ofertas,
 feed cacheado por día, preset de criterios y perfil. Es la única fuente de
 verdad del cliente, y el único fichero que hay que tocar para llevarlo a una BD.
-(El mapa del flujo va aparte, en `cvStudio.mapa`: son ~100 KB de dibujo y
-meterlos en el blob haría que marcar una oferta como enviada los reserializara.)
+(El tema va aparte, en `cvStudio.tema`: `index.html` tiene que leerlo con un
+script en línea antes de pintar, o el fondo claro asoma un frame.)
 
 **`store.js` es también dueño del recorrido.** `SUCESOS` tiene las cuatro reglas
 —`auditada`, `cv`, `aplicada`, `marcada`— y `suceso()` es el único camino para
@@ -92,6 +91,18 @@ Están medidas, y romperlas no falla a la vista:
 - **La extensión nunca pulsa «enviar»**, y `scripts/apply-test.js` lo verifica.
 - **`recomendar()` y `pedirSalario()` se calculan en código.** Preguntárselo al
   modelo daba "descartar" con el 100% de los imprescindibles cumplidos.
+- **El umbral para adaptar vive en `recomendar()` y en ningún sitio más** (≥80%
+  de imprescindibles y cero bloqueantes). El tablero lee la recomendación
+  guardada; cuando tenía su propio `>= 75` los dos discreparon en cuanto se tocó
+  uno, y el porcentaje suelto además ignora los bloqueantes.
+- **La auditoría MANDA sobre el adaptador.** `brief()` (en `tailor.js`) mete en
+  el prompt de `/api/tailor` y `/api/cover` las tres listas que ya calculó
+  `/api/audit`. Sin ella los dos deducían el encaje otra vez desde el texto crudo
+  y devolvían `gaps` que contradecían al informe. Una implementación, dos
+  llamadas: no la dupliques por endpoint.
+- **La `cita` de un requisito se verifica contra la oferta**, no se pide por
+  prompt: `normalizar()` la deja vacía si no aparece en el texto. Un fragmento
+  inventado con aspecto de prueba es peor que no tener el campo.
 - **La banda que publica la oferta MANDA sobre la que estima el modelo**
   (`rangoSalarial()` en `api/feed.js`), y una cifra suelta solo hace de techo si
   es ≥ el suelo de la banda. `salarioDe()` devuelve el máximo de cualquier cifra

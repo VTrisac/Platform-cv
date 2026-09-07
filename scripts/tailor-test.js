@@ -4,17 +4,17 @@
 //
 //   node scripts/tailor-test.js
 import { strict as a } from 'node:assert'
-import handler, { applyPatch, findInventions,
+import handler, { applyPatch, findInventions, brief, resumenCV,
   reparto, pedirJSON, PRESUPUESTO } from '../api/tailor.js'
 import { strip, jobPosting } from '../src/scrape.js'
 import { vias, verifyPassword } from '../src/acceso.js'
-import { puntuar, recomendar, limpiarVeredicto, bloqueaIngles, normalizar, pedirSalario } from '../api/audit.js'
+import { puntuar, recomendar, limpiarVeredicto, normalizar, pedirSalario } from '../api/audit.js'
 import { rangoSalarial } from '../api/feed.js'
 import feed from '../api/feed.js'
 import { findFigures, textoCarta } from '../api/cover.js'
 import { partir, enLote, preparar } from '../src/studio/lote.js'
 import { agrupar, contar, SUCESOS, salarios, mediana, SIGUIENTE, ESTADOS, aplicarPatch,
-  desdeCuando, diasDesde, migrar, hoy } from '../src/studio/store.js'
+  desdeCuando, diasDesde, migrar, hoy, porQueDescartada } from '../src/studio/store.js'
 import { hashPassword } from './set-password.js'
 import { dataEN } from '../src/data.js'
 
@@ -93,6 +93,29 @@ a.equal(sucios[1].encaje, 'parcial', 'un encaje desconocido cae en "parcial", no
 a.ok(Number.isInteger(puntuar(sucios).imprescindibles), 'puntuar da un número, no NaN')
 a.deepEqual(normalizar(undefined), [], 'sin requisitos no revienta')
 
+// --- la cita tiene que estar EN la oferta ------------------------------------
+// El campo existe para poder comprobar que el requisito no se lo inventó el
+// modelo. Una cita inventada lo convertiría en lo contrario: una invención con
+// aspecto de prueba. Se verifica contra el texto, como applyPatch con tech.
+const OFERTA = '- Buscamos un ingeniero.\n- **Se  requiere**\n  Python 3 y experiencia en Kubernetes.'
+const citas = normalizar([
+  { texto: 'Python', tipo: 'imprescindible', encaje: 'si', evidencia: 'WeAi', cita: 'Se requiere Python 3' },
+  { texto: 'Rails', tipo: 'imprescindible', encaje: 'no', evidencia: '', cita: '10 años de Ruby on Rails' },
+  { texto: 'Kubernetes', tipo: 'imprescindible', encaje: 'si', evidencia: 'EASO', cita: '' },
+  { texto: 'Docker', tipo: 'valorable', encaje: 'si', evidencia: 'Kauai' },
+], OFERTA)
+a.equal(citas[0].cita, 'Se requiere Python 3',
+  'una cita real sobrevive a los saltos de línea y a los asteriscos de la oferta')
+// La garantía que sigue en pie: quitar o añadir una palabra la tumba. Es lo que
+// separa "copió el fragmento" de "lo reescribió a su manera", que es lo normal.
+a.equal(normalizar([{ texto: 'x', cita: 'Se requiere Python y Kubernetes' }], OFERTA)[0].cita, '',
+  'una paráfrasis que se salta las palabras de en medio no cuela')
+a.equal(citas[1].cita, '', 'una cita que no está en la oferta no se pinta')
+a.equal(citas[2].cita, '', 'la cadena vacía no cuela por estar contenida en todo')
+a.equal(citas[3].cita, '', 'sin cita, cadena vacía y no undefined')
+a.equal(normalizar([{ texto: 'x', cita: 'lo que sea' }])[0].cita, '',
+  'sin oferta contra la que comprobar, no hay cita que valga')
+
 // --- ofertas que solo existen en un <script> --------------------------------
 // Ashby y compañía sirven React puro: sin esto el scrape moría con un "pide
 // login" que era mentira.
@@ -163,23 +186,23 @@ a.equal(puntuar([]).imprescindibles, null, 'sin requisitos no se inventa un porc
 a.equal(puntuar([{ texto: 'x', tipo: 'valorable', encaje: 'si', evidencia: '' }]).imprescindibles, null,
   'solo valorables: no hay nota de imprescindibles, no un 0 engañoso')
 
-// --- inglés imprescindible --------------------------------------------------
-// La distinción que ninguna palabra clave puede hacer: "English" sale en las dos
-// frases, pero solo una es un requisito que te descarta la oferta.
-a.equal(bloqueaIngles([
-  { texto: 'Fluent English for daily communication', tipo: 'imprescindible', encaje: 'parcial', evidencia: '' },
-]), 'Fluent English for daily communication', 'inglés exigido: bloquea')
-a.equal(bloqueaIngles([
-  { texto: 'English is a plus', tipo: 'valorable', encaje: 'si', evidencia: '' },
-]), null, 'inglés valorable: no bloquea')
-a.equal(bloqueaIngles([
-  { texto: 'Inglés técnico imprescindible', tipo: 'imprescindible', encaje: 'si', evidencia: 'Inglés (Técnico)' },
-]), 'Inglés técnico imprescindible', 'bloquea aunque lo cumplas: es lo pedido')
-a.equal(bloqueaIngles([
-  { texto: 'English-speaking team', tipo: 'imprescindible', encaje: 'si', evidencia: '' },
-]), 'English-speaking team', 'también en inglés, el CV puede estar en EN')
-a.equal(bloqueaIngles([{ texto: 'Python', tipo: 'imprescindible', encaje: 'si', evidencia: '' }]), null)
-a.equal(bloqueaIngles([]), null, 'sin requisitos no revienta')
+// --- el idioma no frena nada -------------------------------------------------
+// Buscando cualquier trabajo, un requisito de inglés no puede tumbar una oferta.
+// Se degrada a valorable en normalizar(), que es por donde pasan TODOS antes de
+// puntuar() y recomendar(): así el % de imprescindibles no lo ve y no puede
+// acabar en bloqueantes ni en un "descartar".
+const idioma = normalizar([
+  { texto: 'Fluent English C1 required', tipo: 'imprescindible', encaje: 'no', evidencia: '' },
+  { texto: 'Inglés técnico imprescindible', tipo: 'imprescindible', encaje: 'parcial', evidencia: '' },
+  { texto: 'Python', tipo: 'imprescindible', encaje: 'si', evidencia: 'WeAi' },
+])
+a.equal(idioma[0].tipo, 'valorable', 'el inglés exigido entra como valorable')
+a.equal(idioma[1].tipo, 'valorable', 'y en español igual')
+a.equal(idioma[2].tipo, 'imprescindible', 'lo demás no se toca')
+const conIdioma = puntuar(idioma)
+a.deepEqual(conIdioma.bloqueantes, [], 'el idioma no puede ser bloqueante')
+a.equal(conIdioma.imprescindibles, 100, 'ni baja el % de imprescindibles')
+a.equal(recomendar(conIdioma), 'aplicar', 'ni provoca un descarte')
 
 // La recomendación se calcula aquí porque el modelo la daba incoherente
 // (devolvió "descartar" con el 100% de los imprescindibles cumplidos).
@@ -191,6 +214,11 @@ a.equal(recomendar({ imprescindibles: 95, bloqueantes: ['Rails', 'Go'] }), 'desc
 a.equal(recomendar({ imprescindibles: 40, bloqueantes: [] }), 'descartar')
 a.equal(recomendar({ imprescindibles: 70, bloqueantes: [] }), 'aplicar_con_reservas')
 a.equal(recomendar({ imprescindibles: null, bloqueantes: [] }), 'aplicar', 'sin imprescindibles no bloquea')
+// El corte del "8/10": cuatro de cada cinco imprescindibles y ningún bloqueante.
+// Era 75. Está aquí clavado para que subirlo o bajarlo sea una decisión y no un
+// descuido: es lo que separa gastar una adaptación de no gastarla.
+a.equal(recomendar({ imprescindibles: 79, bloqueantes: [] }), 'aplicar_con_reservas', 'por debajo del 8/10')
+a.equal(recomendar({ imprescindibles: 80, bloqueantes: [] }), 'aplicar', 'el 8/10 justo pasa')
 
 // --- la banda salarial -------------------------------------------------------
 // La banda la estima el modelo y se equivoca de formas concretas: la devuelve
@@ -311,6 +339,50 @@ a.equal((await call(feed, { VERCEL: '1' })).code, 500, 'feed en prod sin secreto
 a.equal((await call(feed, HPW)).code, 401, 'feed en prod sin contraseña: 401')
 a.equal((await call(feed, HPW, { 'x-tailor-key': 'mala' })).code, 401, 'feed con contraseña incorrecta: 401')
 
+// --- el brief que va del auditor al adaptador --------------------------------
+// Sin esto /api/tailor recibía el texto crudo y volvía a deducir de cero qué
+// cubre el CV: sus `gaps` contradecían al informe que acabas de leer.
+a.equal(brief([]), '', 'sin auditoría el prompt es exactamente el de antes')
+a.equal(brief(), '', 'y sin argumento tampoco revienta')
+{
+  const b = brief([
+    { texto: 'Python', encaje: 'si' },
+    { texto: 'LangGraph', encaje: 'parcial' },
+    { texto: 'Ruby on Rails', encaje: 'no' },
+  ])
+  a.ok(b.includes('Python') && b.includes('LangGraph') && b.includes('Ruby on Rails'),
+    'los tres requisitos llegan al prompt')
+  // Lo que importa no es que aparezcan, es DÓNDE: un "no cubierto" en la sección
+  // de destacar es justo la invención que este cambio existe para evitar.
+  const [destacar, resto] = b.split('PARCIAL')
+  a.ok(destacar.includes('Python'), 'lo cubierto va en la sección de destacar')
+  a.ok(!destacar.includes('Ruby on Rails'), 'lo NO cubierto no va en la de destacar')
+  a.ok(resto.includes('Ruby on Rails') && resto.includes('NO se menciona'),
+    'lo no cubierto va con la prohibición de mencionarlo')
+}
+// El CV que el modelo puede LEER: entero, con estudios y certificaciones, que no
+// se reescriben pero sí se evalúan. Lo comparten audit y cover; estaba duplicado.
+{
+  const r = resumenCV(dataEN)
+  a.equal(r.experiencia.length, dataEN.experience.length)
+  a.ok(r.certificaciones.length > 0, 'la carta también ve las certificaciones')
+  a.equal(r.experiencia[0].empresa, dataEN.experience[0].project)
+}
+
+// --- por qué está descartada ---------------------------------------------------
+// Derivado de lo que ya se guarda, sin campo nuevo ni migración.
+a.equal(porQueDescartada({ estado: 'enviada' }), null, 'solo habla de las descartadas')
+a.equal(porQueDescartada({ estado: 'descartada' }), 'La descartaste tú', 'sin auditoría, fuiste tú')
+a.equal(
+  porQueDescartada({ estado: 'descartada', auditoria: { recomendacion: 'aplicar', encaje: { imprescindibles: 90, bloqueantes: [] } } }),
+  'La descartaste tú', 'la auditoría decía que aplicaras: la cerraste tú')
+a.match(
+  porQueDescartada({ estado: 'descartada', auditoria: { recomendacion: 'descartar', encaje: { imprescindibles: 95, bloqueantes: ['Rails', 'Go'] } } }),
+  /2 bloqueantes.*Rails; Go/, 'dos bloqueantes, con cuáles')
+a.match(
+  porQueDescartada({ estado: 'descartada', auditoria: { recomendacion: 'descartar', encaje: { imprescindibles: 40, bloqueantes: [] } } }),
+  /40%/, 'poco encaje, con el número')
+
 // --- el lote -----------------------------------------------------------------
 // Partir lo pegado: o son enlaces (uno por línea) o son ofertas en texto
 // separadas por una línea en blanco. Con una sola entrada el flujo de siempre
@@ -421,8 +493,11 @@ a.deepEqual(migrar([
 // leen del estado. "preparada" ES tener CV.
 {
   const cv = { profile: 'x' }
-  const alta = { encaje: { imprescindibles: 90, bloqueantes: [] } }
-  const baja = { encaje: { imprescindibles: 40, bloqueantes: ['Rails'] } }
+  const alta = { recomendacion: 'aplicar', encaje: { imprescindibles: 90, bloqueantes: [] } }
+  const baja = { recomendacion: 'descartar', encaje: { imprescindibles: 40, bloqueantes: ['Rails'] } }
+  // Encaje ALTO pero con un imprescindible sin cubrir. Con el `>= 75` a mano que
+  // había aquí salía como «merece la pena»; leyendo la recomendación, no.
+  const conBloqueante = { recomendacion: 'aplicar_con_reservas', encaje: { imprescindibles: 90, bloqueantes: ['Rails'] } }
   const h = (estado, dia) => [{ estado, dia }]
   const tablero = [
     { id: 'a', estado: 'guardada', auditoria: alta },
@@ -435,17 +510,22 @@ a.deepEqual(migrar([
     { id: 'h', estado: 'contratado', auditoria: alta, cv },
     { id: 'i', estado: 'rechazada', auditoria: baja },
     { id: 'j', estado: 'descartada', auditoria: baja },
+    { id: 'k', estado: 'guardada', auditoria: conBloqueante },
   ]
   const g = agrupar(tablero)
   const ids = (xs) => xs.map((o) => o.id).sort()
 
   a.deepEqual(ids(g.vivas), ['f', 'g'], 'vivas = enviadas + entrevistas')
-  a.deepEqual(ids(g.porRevisar), ['a', 'b', 'c', 'd', 'e'], 'lo que queda por hacer')
+  a.deepEqual(ids(g.porRevisar), ['a', 'b', 'c', 'd', 'e', 'k'], 'lo que queda por hacer')
   a.deepEqual(ids(g.sinAuditar), ['c'], 'pegada y nada más')
-  a.deepEqual(ids(g.soloAuditadas), ['a', 'b'], 'auditada y sin CV')
+  a.deepEqual(ids(g.soloAuditadas), ['a', 'b', 'k'], 'auditada y sin CV')
   a.deepEqual(ids(g.preparadas), ['d', 'e'], 'con CV, sin mandar')
   a.deepEqual(ids(g.listas), ['e'], 'lista = preparada Y con enlace, lo que exige el botón Aplicar')
-  a.deepEqual(ids(g.prometedoras), ['a'], 'encaje alto y sin adaptar; la de encaje bajo no entra')
+  // Lee la recomendación ya calculada, no un `>= 75` escrito otra vez aquí: el
+  // umbral vive en recomendar() y en un solo sitio. Por eso 'k' —90 % pero con un
+  // bloqueante— tampoco entra: adaptar el CV no resuelve un imprescindible.
+  a.deepEqual(ids(g.prometedoras), ['a'],
+    'solo las que la auditoría recomienda aplicar; ni la de encaje bajo ni la del bloqueante')
   a.deepEqual(ids(g.contratado), ['h'])
   a.deepEqual(ids(g.rechazadas), ['i'])
   a.deepEqual(ids(g.descartadas), ['j'])
@@ -464,7 +544,7 @@ a.deepEqual(migrar([
   a.deepEqual(g.sinRespuesta.map((o) => o.id), ['f'])
 
   a.deepEqual(agrupar([]).vivas, [], 'un tablero vacío no revienta')
-  a.equal(contar(tablero).guardada, 3, 'contar() sigue contando estados, sin cambios')
+  a.equal(contar(tablero).guardada, 4, 'contar() sigue contando estados, sin cambios')
 }
 
 // --- la máquina de estados ------------------------------------------------------

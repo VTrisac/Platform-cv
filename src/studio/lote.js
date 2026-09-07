@@ -75,7 +75,10 @@ export async function preparar(entrada, lang, onFase, previo = {}, hasta = 'cart
   if (!cv) {
     // El texto que ya scrapeó la auditoría, no la URL: ni se baja dos veces ni se
     // arriesga a que el portal devuelva otra cosa entre una llamada y la otra.
-    const j = await apiPost('/api/tailor', { text: a.texto, lang })
+    // Los requisitos ya auditados viajan con el texto: sin ellos el adaptador
+    // vuelve a deducir de cero qué cubre el CV y contradice al informe que
+    // acabas de leer. Es el dato que ya está pagado en `a`.
+    const j = await apiPost('/api/tailor', { text: a.texto, lang, requisitos: a.requisitos })
     cv = j.data
     // `meta` y `cartaInv` solo los mira el editor —son los avisos de invención—;
     // la Cola los ignora. Viajan aquí para que esta siga siendo la ÚNICA
@@ -87,7 +90,7 @@ export async function preparar(entrada, lang, onFase, previo = {}, hasta = 'cart
   // quería el CV se baja aquí.
   if (hasta === 'adaptar') return
 
-  const c = await apiPost('/api/cover', { text: a.texto, lang })
+  const c = await apiPost('/api/cover', { text: a.texto, lang, requisitos: a.requisitos })
   onFase('listo', { carta: c.carta, cartaInv: c.inventions ?? [] })
 }
 

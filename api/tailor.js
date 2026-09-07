@@ -90,6 +90,55 @@ hechos que YA están en el CV. Si la oferta pide algo que el CV no respalda, va 
 - skills: solo reordenar dentro de cada categoría.
 - No metas métricas, años ni porcentajes que no estén ya en el CV.`
 
+// --- lo que el modelo puede LEER --------------------------------------------
+// El CV entero tal y como se le enseña para EVALUARLO: incluye estudios, idiomas
+// y certificaciones, que no se pueden reescribir pero sí evaluar. Lo usan
+// /api/audit y /api/cover. No confundir con `editable` del handler de abajo, que
+// es lo único que se le deja TOCAR.
+//
+// Estaba escrito dos veces, idéntico salvo por las certificaciones, que la carta
+// no veía sin motivo: son diez y todas de IA.
+export const resumenCV = (cv) => ({
+  titulo: cv.title,
+  perfil: cv.profile,
+  experiencia: cv.experience.map((e) => ({
+    empresa: e.project, puesto: e.role, fechas: e.dates, descripcion: e.description,
+    logros: e.achievements, tecnologias: e.tech,
+  })),
+  skills: cv.skills,
+  estudios: cv.education.map((e) => `${e.degree} — ${e.center} (${e.dates})`),
+  idiomas: cv.languages,
+  certificaciones: cv.certifications.map((c) => c.name),
+})
+
+// El encaje que YA calculó /api/audit, en un bloque para el prompt del que adapta
+// y del que escribe la carta.
+//
+// Sin esto los dos reciben el TEXTO CRUDO de la oferta y vuelven a deducir a
+// ciegas qué cubre el CV y qué no: dos modelos clasificando lo mismo por
+// separado, y el segundo sin ver el trabajo del primero, que ya está pagado. De
+// ahí salían `gaps` que contradecían al informe que acabas de leer en pantalla.
+//
+// ponytail: no es un artefacto nuevo ni una llamada más — es el dato que ya viaja
+// en `a`. Sin requisitos devuelve '' y el prompt es exactamente el de antes, así
+// que los dos endpoints siguen siendo llamables sueltos.
+//
+// Medido el 07-09-2026 sobre la oferta de Chery, la misma llamada con y sin:
+//   con brief   4 gaps, los MISMOS cuatro que la auditoría marcó "no", 0 inventions
+//   sin brief   6 gaps inventados de cero, y "ELT" declarado gap y escrito en el CV
+// Sin él además sacaba el inglés como gap, que normalizar() mantiene fuera de las
+// decisiones a propósito: el adaptador a ciegas lo reintroducía por detrás.
+export function brief(requisitos = []) {
+  const de = (e) => requisitos.filter((r) => r.encaje === e).map((r) => r.texto)
+  const [si, parcial, no] = ['si', 'parcial', 'no'].map(de)
+  if (!si.length && !parcial.length && !no.length) return ''
+  const bloque = (titulo, xs) => (xs.length ? `\n\n${titulo}\n- ${xs.join('\n- ')}` : '')
+  return '\n\n---\n\nENCAJE YA AUDITADO. No lo recalcules: úsalo.'
+    + bloque('CUBIERTO — hazlo visible, con el vocabulario de la oferta:', si)
+    + bloque('PARCIAL — descríbelo con su alcance REAL. No subas nivel, años ni responsabilidad:', parcial)
+    + bloque('NO CUBIERTO — va en "gaps" y NO se menciona:', no)
+}
+
 // --- red de seguridad -------------------------------------------------------
 // Aunque el modelo devuelva basura, de aquí no sale nada que no esté en el CV
 // maestro. Es la garantía real del "no inventes": código, no prompt.
@@ -300,7 +349,9 @@ export default async function handler(req, res) {
   const hasta = Date.now() + PRESUPUESTO
 
   try {
-    const { url, text, lang = 'en' } = req.body ?? {}
+    // `requisitos` es la auditoría ya pagada. Opcional: sin ella brief() da ''
+    // y el prompt es el de siempre.
+    const { url, text, lang = 'en', requisitos = [] } = req.body ?? {}
     const offer = text?.trim() || (url ? await fetchOffer(url) : null)
     if (!offer) return res.status(400).json({ error: 'Pasa la URL de la oferta o su texto.' })
 
@@ -321,7 +372,8 @@ export default async function handler(req, res) {
       hasta,
       // El idioma va aquí y al final, no en el system: enterrado allí lo
       // ignoraba y devolvía inglés con el CV en español (probado).
-      user: `CV actual:\n${JSON.stringify(editable, null, 2)}\n\n---\n\nOFERTA:\n${offer.slice(0, 40000)}\n\n---\n\n`
+      user: `CV actual:\n${JSON.stringify(editable, null, 2)}\n\n---\n\nOFERTA:\n${offer.slice(0, 40000)}`
+        + `${brief(requisitos)}\n\n---\n\n`
         + `IDIOMA OBLIGATORIO DE SALIDA: ${lang === 'es' ? 'ESPAÑOL' : 'INGLÉS'}. `
         + `Escribe title, profile, description y achievements en ${lang === 'es' ? 'español' : 'inglés'}, `
         + `aunque la oferta esté en otro idioma. Los nombres de tecnologías no se traducen.`,

@@ -6,7 +6,7 @@
 // contra el CV maestro —una carta es texto libre de principio a fin—, así que
 // la única red posible es findInventions: si el modelo declara un gap y luego
 // lo escribe en la carta, se contradice, y eso se avisa.
-import { pedirJSON, findInventions, PRESUPUESTO } from './tailor.js'
+import { pedirJSON, findInventions, PRESUPUESTO, resumenCV, brief } from './tailor.js'
 import { gate } from '../src/acceso.js'
 import { dataES, dataEN } from '../src/data.js'
 
@@ -82,26 +82,18 @@ export default async function handler(req, res) {
   const hasta = Date.now() + PRESUPUESTO
 
   try {
-    const { text, lang = 'es' } = req.body ?? {}
+    // Igual que /api/tailor: la auditoría ya pagada, opcional.
+    const { text, lang = 'es', requisitos = [] } = req.body ?? {}
     const oferta = text?.trim()
     if (!oferta) return res.status(400).json({ error: 'Falta el texto de la oferta.' })
 
     const cv = lang === 'es' ? dataES : dataEN
-    const resumen = {
-      titulo: cv.title,
-      perfil: cv.profile,
-      experiencia: cv.experience.map((e) => ({
-        empresa: e.project, puesto: e.role, fechas: e.dates, descripcion: e.description,
-        logros: e.achievements, tecnologias: e.tech,
-      })),
-      skills: cv.skills,
-      estudios: cv.education.map((e) => `${e.degree} — ${e.center} (${e.dates})`),
-      idiomas: cv.languages,
-    }
+    const resumen = resumenCV(cv)
 
     // El idioma al final del mensaje de usuario, no en el system: enterrado
     // allí lo ignora y copia el idioma de la oferta (probado en tailor y audit).
-    const user = `CV DEL CANDIDATO:\n${JSON.stringify(resumen, null, 2)}\n\n---\n\nOFERTA:\n${oferta.slice(0, 40000)}\n\n---\n\n`
+    const user = `CV DEL CANDIDATO:\n${JSON.stringify(resumen, null, 2)}\n\n---\n\nOFERTA:\n${oferta.slice(0, 40000)}`
+      + `${brief(requisitos)}\n\n---\n\n`
       + `IDIOMA OBLIGATORIO DE SALIDA: ${lang === 'es' ? 'ESPAÑOL' : 'INGLÉS'}. `
       + `Escribe la carta en ${lang === 'es' ? 'español' : 'inglés'} aunque la oferta esté en otro idioma. `
       + `Los nombres de tecnologías y empresas no se traducen.`

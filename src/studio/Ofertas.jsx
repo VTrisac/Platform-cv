@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Search, ExternalLink, Sparkles, FileText, Send, Trash2, X, ChevronRight } from 'lucide-react'
-import { ESTADOS, SIGUIENTE, contar, desdeCuando, diasDesde } from './store'
+import { ESTADOS, SIGUIENTE, contar, desdeCuando, diasDesde, porQueDescartada } from './store'
 
 // Pantalla "Ofertas — Tracker" del diseño: cabecera con recuento, buscador,
 // filtros por estado y tabla. Las columnas replican los anchos del mockup
@@ -238,6 +238,10 @@ const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVar
                   className="outline-none cursor-pointer appearance-none px-2.5 py-1 rounded-full text-xs font-semibold text-center"
                   style={{ background: ESTADOS[o.estado].bg, color: ESTADOS[o.estado].fg }}
                   aria-label={`Estado de ${o.empresa}`}
+                  // Por qué está descartada, encima del chip. Si te descarta una
+                  // oferta quieres saber si fue tu criterio o la auditoría, y con
+                  // qué números. Es dato derivado: ver porQueDescartada().
+                  title={porQueDescartada(o) ?? undefined}
                 >
                   {Object.entries(ESTADOS).map(([k, v]) => (
                     <option key={k} value={k} style={{ background: 'var(--s-surface)', color: 'var(--s-text)' }}>
