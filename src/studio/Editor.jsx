@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, Suspense } from 'react'
-import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, Send, ShieldCheck, Sparkles, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, Copy, FileDown, Loader2, Mail, Save, Search, Send, ShieldCheck, Sparkles, TriangleAlert, X } from 'lucide-react'
 import { dataES, dataEN } from '../data'
 import { conPerfil, conSalario } from '../perfil'
 import Auditoria from './Auditoria'
@@ -52,6 +52,7 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, acciones }) =
   const [error, setError] = useState(null)
   const [guardado, setGuardado] = useState(null)
   const previewRef = useRef(null)
+  const aborto = useRef(null)
 
   const cv = data ?? (lang === 'es' ? dataES : dataEN)
   const Preview = components[design]
@@ -81,9 +82,9 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, acciones }) =
   // El nombre de la variante, que es lo que se guarda con la oferta.
   const variante = () => `${audit?.empresa ?? oferta?.empresa ?? 'Oferta'} · ${lang.toUpperCase()}`
 
-  // La empresa y el puesto ya los sabe la auditoría: el nombre sale de ahí.
-  const nombreFichero = () =>
-    nombrePdf(audit?.empresa ?? oferta?.empresa, audit?.rol ?? oferta?.puesto, lang)
+  // El puesto ya lo sabe la auditoría: el nombre sale de ahí. La empresa ya no
+  // entra — ver nombrePdf() en api.js.
+  const nombreFichero = () => nombrePdf(audit?.rol ?? oferta?.puesto, lang)
 
   // Manda el HTML del CV que se ve a que Chromium lo imprima limpio en el
   // servidor. Sustituye a window.print(), que estampaba cabecera y pie del
@@ -167,6 +168,11 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, acciones }) =
   const correr = async (previo, hasta) => {
     const entrada = texto.trim()
     setError(null)
+    // El controlador vivo, en un ref: `cancelar` lo necesita desde el botón y no
+    // puede esperar a un re-render. Uno solo cubre los dos sitios donde se pinta
+    // el proceso, porque los dos pasan por aquí.
+    const ctrl = new AbortController()
+    aborto.current = ctrl
     // La auditoría en curso, fuera del closure: `audit` es el del render actual
     // y setAudit no lo actualiza a tiempo, así que la variante saldría llamada
     // "Oferta · ES" y todos los PDF se pisarían con el mismo nombre.
@@ -191,9 +197,23 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, acciones }) =
         if (extra.carta) {
           setCarta(extra.carta); setCartaInv(extra.cartaInv ?? []); acciones.carta(extra.carta)
         }
-      }, previo, hasta)
-    } catch (e) { setError(e.message) } finally { setLoading(null) }
+      }, previo, hasta, ctrl.signal)
+    } catch (e) {
+      // Cancelar NO es un fallo: lo has pedido tú. Pintarlo en rojo diría que
+      // algo ha salido mal cuando ha pasado exactamente lo que pediste.
+      if (e.name !== 'AbortError') setError(e.message)
+    } finally { setLoading(null); aborto.current = null }
   }
+
+  // Cortar. Con NIM una auditoría son 150-240 s, así que equivocarse de idioma o
+  // de URL costaba cuatro minutos de espera antes de poder reintentar. `texto` no
+  // se toca en correr() y al cortar durante la auditoría no llega a ejecutarse
+  // setPaso, así que te quedas en el paso 1 con la URL puesta: no hay nada que
+  // guardar.
+  //
+  // ponytail: aborta el fetch, no la función serverless — esa sigue hasta el
+  // final y la llamada al modelo ya está pagada. Lo que recuperas es la pantalla.
+  const cancelar = () => aborto.current?.abort()
 
   // De cero: audita, y si hay encaje adapta y escribe la carta.
   const prepararTodo = () => {
@@ -209,6 +229,19 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, acciones }) =
   // a que el portal devuelva algo distinto.
   const adaptar = () => correr({ a: audit }, 'adaptar')
   const generarCarta = () => correr({ a: audit, cv: data }, 'carta')
+
+  // Un botón, dos sitios. Va pegado al <Proceso> porque es lo que está corriendo:
+  // un «Cancelar» en la barra de arriba no se relaciona con la barra de progreso.
+  const Cancelar = () => (
+    <button
+      onClick={cancelar}
+      className="flex items-center gap-1.5 text-xs font-semibold w-fit"
+      style={{ color: 'var(--s-muted)' }}
+      title="Cortar y volver, con la oferta tal como la dejaste"
+    >
+      <X size={13} /> Cancelar
+    </button>
+  )
 
   return (
     <div className="flex flex-col min-h-0 flex-1">
@@ -325,7 +358,12 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, acciones }) =
               </div>
               {/* Los tres pasos con nombre, no un icono girando dos minutos:
                   auditar son ~50 s y adaptar ~35 s más. */}
-              {loading && loading !== 'pdf' && <Proceso pasos={FASES} activo={loading} />}
+              {loading && loading !== 'pdf' && (
+                <div className="flex flex-col gap-2">
+                  <Proceso pasos={FASES} activo={loading} />
+                  <Cancelar />
+                </div>
+              )}
               {error && (
                 <p className="text-xs flex gap-1.5" style={{ color: 'var(--s-perdida)' }}>
                   <TriangleAlert size={13} className="shrink-0 mt-0.5" />{error}
@@ -343,8 +381,9 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, acciones }) =
               onDescartar={acciones.descartada}
             />
             {loading === 'adaptar' && (
-              <div className="mt-4 max-w-[420px]">
+              <div className="mt-4 max-w-[420px] flex flex-col gap-2">
                 <Proceso pasos={FASES} activo="adaptar" nota="Tarda unos 35 segundos." />
+                <Cancelar />
               </div>
             )}
             {error && (

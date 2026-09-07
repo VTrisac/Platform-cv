@@ -1,3 +1,9 @@
+import { dataES } from '../data.js'
+
+// Quien firma el CV. Del maestro y no escrito a mano aquí: si algún día cambia,
+// cambia en un sitio.
+const NOMBRE = dataES.name
+
 // El baile del 401, una sola vez: pide la contraseña, la recuerda y repite la
 // llamada. `hacer(key)` es lo único que cambia entre los dos llamantes —uno
 // espera JSON y el otro un binario—, así que lo demás no tiene por qué estar
@@ -11,14 +17,19 @@ async function conClave(hacer) {
   return hacer(pedida)
 }
 
-const pedir = (path, key, body) => fetch(path, {
+// `signal` es opcional y llega hasta el fetch: es lo que permite al editor
+// cortar una auditoría de 240 s sin esperarla. AbortController es nativo, no hace
+// falta nada más. Sin señal se comporta exactamente igual que antes, que es lo
+// que necesitan la Cola y el resto de llamantes.
+const pedir = (path, key, body, signal) => fetch(path, {
   method: 'POST',
   headers: { 'content-type': 'application/json', 'x-tailor-key': key },
   body: JSON.stringify(body),
+  signal,
 })
 
-export async function apiPost(path, body) {
-  const res = await conClave((key) => pedir(path, key, body))
+export async function apiPost(path, body, signal) {
+  const res = await conClave((key) => pedir(path, key, body, signal))
   // .catch: cuando la función se pasa del techo de tiempo, Vercel devuelve una
   // página de error en HTML, no JSON, y el res.json() pelado reventaba con un
   // "Unexpected token '<'" en vez de decir qué había pasado.
@@ -31,8 +42,8 @@ export async function apiPost(path, body) {
 }
 
 // Una URL suelta se scrapea; cualquier otra cosa es el texto de la oferta.
-export const auditar = (entrada, lang) =>
-  apiPost('/api/audit', { [/^https?:\/\//i.test(entrada.trim()) ? 'url' : 'text']: entrada.trim(), lang })
+export const auditar = (entrada, lang, signal) =>
+  apiPost('/api/audit', { [/^https?:\/\//i.test(entrada.trim()) ? 'url' : 'text']: entrada.trim(), lang }, signal)
 
 // Sin preset, el servidor usa los valores de siempre.
 export const buscarFeed = (preset) => apiPost('/api/feed', preset ?? {})
@@ -55,15 +66,34 @@ export async function pdfBlob({ html, styles, css, filename }) {
 }
 
 // --- el nombre del fichero ---------------------------------------------------
-// Antes era `nombre || cv.name` dentro del editor, y `nombre` estaba vacío
-// siempre que no hubieras pulsado "Guardar variante" —o sea, casi siempre—, así
-// que TODOS los PDF salían llamándose como tú y se pisaban en la carpeta.
+// Es lo que ve el recruiter: el mismo nombre viaja al portal en el paquete de la
+// extensión. Tres piezas y nada más — tú, el puesto y el idioma.
+//
+// Antes llevaba también la empresa y el puesto ENTERO, y salían cosas como
+// `CV_Amazon_Business-Intelligence-Engineer-Data-and-Analy_EN.pdf`: 58
+// caracteres con la última palabra partida por la mitad.
 const slug = (s, max = 45) => String(s ?? '')
   .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
   .replace(/[^a-zA-Z0-9]+/g, '-').slice(0, max).replace(/^-+|-+$/g, '')
 
-export const nombrePdf = (empresa, puesto, lang) =>
-  ['CV', slug(empresa) || 'Oferta', slug(puesto), String(lang).toUpperCase()]
+// "VÍCTOR TRISAC" en un nombre de fichero grita. Capital inicial ANTES de
+// limpiar, para que el slug reciba "Víctor Trisac" y devuelva "Victor-Trisac".
+const capital = (s) => String(s ?? '').toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())
+
+// Lo que alarga el nombre es la coletilla del puesto: el modelo devuelve
+// "Business Intelligence Engineer, Data and Analytics Platform". Se corta por el
+// primer separador, que es justo donde los títulos la meten.
+//
+// El guion solo corta ENTRE ESPACIOS y la barra no corta nunca: si no,
+// "Full-Stack Developer" se quedaría en "Full" y "AI/ML Engineer" en "AI".
+const SEPARADOR = /\s*[,|(:·–—]|\s+-\s+/
+
+// ponytail: sin la empresa, dos ofertas del MISMO puesto en sitios distintos dan
+// el mismo fichero, y getFileHandle(create:true) sobrescribe sin preguntar. Se
+// acepta a cambio del nombre corto; si algún día molesta, la empresa vuelve como
+// tercera pieza entre el nombre y el puesto.
+export const nombrePdf = (puesto, lang) =>
+  [slug(capital(NOMBRE)), slug(String(puesto ?? '').split(SEPARADOR)[0], 40), String(lang).toUpperCase()]
     .filter(Boolean).join('_') + '.pdf'
 
 // --- la carpeta de destino ---------------------------------------------------

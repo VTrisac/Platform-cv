@@ -666,8 +666,13 @@ a.equal(textoCarta(null), '')
   globalThis.localStorage ??= { getItem: () => 'clave', setItem() {} }
   const llamadas = []
   const audit = { recomendacion: 'aplicar', empresa: 'Acme', texto: 'OFERTA' }
-  const normal = async (url) => {
+  const señales = []
+  const normal = async (url, init) => {
     llamadas.push(String(url))
+    señales.push(init?.signal)
+    // Un fetch de verdad rechaza si la señal ya viene abortada. El mock tiene que
+    // hacer lo mismo o el test pasaría sin que la señal sirviera de nada.
+    if (init?.signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' })
     const cuerpo = String(url).includes('audit') ? audit
       : String(url).includes('tailor') ? { data: { title: 'CV' } }
         : { carta: 'Estimados…' }
@@ -694,6 +699,27 @@ a.equal(textoCarta(null), '')
   llamadas.length = 0
   await preparar('texto', 'es', on, { a: audit, cv: { title: 'CV' } })
   a.deepEqual(llamadas.map((u) => u.split('/').pop()), ['cover'])
+
+  // --- cortar a media ---------------------------------------------------------
+  // Con NIM una auditoría son 150-240 s: sin esto, equivocarte de idioma costaba
+  // cuatro minutos de espera antes de poder reintentar. La señal tiene que llegar
+  // a las TRES llamadas, no solo a la primera.
+  llamadas.length = 0; señales.length = 0
+  const ctrl = new AbortController()
+  await preparar('texto', 'es', on, { a: audit, cv: { title: 'CV' } }, 'carta', ctrl.signal)
+  a.equal(señales.at(-1), ctrl.signal, 'la señal llega hasta el fetch de /api/cover')
+
+  llamadas.length = 0; señales.length = 0
+  await preparar('texto', 'es', on, {}, 'carta', ctrl.signal)
+  a.equal(señales.length, 3, 'las tres llamadas la reciben')
+  a.ok(señales.every((s) => s === ctrl.signal), 'y es la misma en todas')
+
+  // Ya abortada: la secuencia se rompe en la primera y no gasta las otras dos.
+  llamadas.length = 0; señales.length = 0
+  ctrl.abort()
+  await a.rejects(() => preparar('texto', 'es', on, {}, 'carta', ctrl.signal),
+    (e) => e.name === 'AbortError', 'cortar rechaza con AbortError, que el editor NO pinta en rojo')
+  a.equal(llamadas.length, 1, 'y se para en la primera, sin pagar las siguientes')
 
   // --- el freno del descarte, que tiene DOS lados -----------------------------
   // Auditada aquí mismo y descartada: se para. Es el ahorro de la Cola y de

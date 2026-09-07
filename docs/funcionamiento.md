@@ -82,6 +82,16 @@ escrita dos veces y arreglar la reanudación costó hacerlo dos veces.
    oferta) y se le pasa a la extensión de Chrome, que abre la oferta y rellena el
    formulario en tu sesión. **Nunca pulsa enviar.**
 
+**Se puede cortar.** Mientras corre el modelo hay un «Cancelar» debajo de la
+barra de pasos: un `AbortController` nativo que llega hasta el `fetch`. Con NIM
+cada llamada son 150-240 s, así que equivocarte de idioma o de URL costaba cuatro
+minutos de espera antes de poder reintentar. Al cortar durante la auditoría te
+quedas en el paso 1 **con la URL puesta** —`texto` no se toca y `setPaso` no
+llega a ejecutarse—, listo para cambiar el idioma y relanzar. Lo que ya había
+llegado se queda guardado. Lo que **no** hace: parar la función serverless, que
+sigue hasta el final; esa llamada al modelo ya está pagada. Lo que recuperas es
+la pantalla. La Cola no tiene botón de cortar todavía.
+
 La oferta se va guardando **en cuanto cada trozo existe** —la auditoría al
 llegar, luego el CV, luego la carta—, no al final: si cierras la pestaña a mitad,
 lo pagado no se pierde.
@@ -270,6 +280,16 @@ son los que entiende `scripts/pdf.py`.
 
 El PDF cae en la carpeta que elijas una vez con la File System Access API
 (guardada en IndexedDB) o, si el navegador no la soporta, en Descargas.
+
+Se llama **`Victor-Trisac_<Puesto>_ES.pdf`**: tú, el puesto y el idioma, y nada
+más. Es lo que ve el recruiter, porque el mismo nombre viaja al portal dentro del
+paquete de la extensión. El puesto se corta por el primer separador —coma, guion
+largo, paréntesis—, que es donde los títulos meten la coletilla: sin eso salían
+cosas como `CV_Amazon_Business-Intelligence-Engineer-Data-and-Analy_EN.pdf`, 58
+caracteres con la última palabra partida. El guion **pegado** no corta («Full-Stack
+Developer») y la barra tampoco («AI/ML Engineer»). Sin la empresa, dos ofertas del
+mismo puesto en sitios distintos comparten nombre y la segunda pisa a la primera:
+se acepta a cambio del nombre corto.
 
 ## 8. Aplicar: la extensión (`extension/`)
 

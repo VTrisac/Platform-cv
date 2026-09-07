@@ -54,12 +54,15 @@ export const FASES = [
 // ejecutar UN paso suelto —"Adaptar" sin carta, "Generar carta" sin readaptar—
 // sin volver a escribir aquí las llamadas: tenerlas dos veces es lo que hizo que
 // arreglar la reanudación costara hacerlo dos veces.
-export async function preparar(entrada, lang, onFase, previo = {}, hasta = 'carta') {
+// `signal` corta la secuencia a media: el editor la pasa para que puedas parar
+// una auditoría de 240 s en vez de esperarla. Opcional — sin ella, todo se
+// comporta igual que antes, que es lo que necesita enLote().
+export async function preparar(entrada, lang, onFase, previo = {}, hasta = 'carta', signal) {
   let { a, cv } = previo
 
   if (!a) {
     onFase('auditar')
-    a = await auditar(entrada, lang)
+    a = await auditar(entrada, lang, signal)
     // Si la auditoría dice que la descartes, se para ahí: gastar la adaptación y
     // la carta en una oferta que no vale la pena es justo lo que este orden evita.
     // 'parado' y no 'listo' a propósito: 'listo' pinta los tres pasos como hechos,
@@ -84,7 +87,7 @@ export async function preparar(entrada, lang, onFase, previo = {}, hasta = 'cart
     // Los requisitos ya auditados viajan con el texto: sin ellos el adaptador
     // vuelve a deducir de cero qué cubre el CV y contradice al informe que
     // acabas de leer. Es el dato que ya está pagado en `a`.
-    const j = await apiPost('/api/tailor', { text: a.texto, lang, requisitos: a.requisitos })
+    const j = await apiPost('/api/tailor', { text: a.texto, lang, requisitos: a.requisitos }, signal)
     cv = j.data
     // `meta` y `cartaInv` solo los mira el editor —son los avisos de invención—;
     // la Cola los ignora. Viajan aquí para que esta siga siendo la ÚNICA
@@ -96,7 +99,7 @@ export async function preparar(entrada, lang, onFase, previo = {}, hasta = 'cart
   // quería el CV se baja aquí.
   if (hasta === 'adaptar') return
 
-  const c = await apiPost('/api/cover', { text: a.texto, lang, requisitos: a.requisitos })
+  const c = await apiPost('/api/cover', { text: a.texto, lang, requisitos: a.requisitos }, signal)
   onFase('listo', { carta: c.carta, cartaInv: c.inventions ?? [] })
 }
 

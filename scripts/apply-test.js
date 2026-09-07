@@ -124,16 +124,30 @@ assert.equal(valorPara('password', { perfil, password: 'x' }), 'x')
 // --- el nombre del PDF que se adjunta --------------------------------------
 // Salía siempre igual (tu nombre) porque dependía de un campo que solo se
 // rellenaba al pulsar "Guardar variante". Ahora sale de la auditoría.
-assert.equal(nombrePdf('Novartis', 'Senior AI Engineer', 'en'), 'CV_Novartis_Senior-AI-Engineer_EN.pdf')
-assert.equal(nombrePdf('Factorial', 'Staff AI Engineer', 'es'), 'CV_Factorial_Staff-AI-Engineer_ES.pdf')
-assert.equal(nombrePdf('Grifols España', 'Científico de Datos', 'es'),
-  'CV_Grifols-Espana_Cientifico-de-Datos_ES.pdf', 'sin acentos ni eñes: van a un nombre de fichero')
-assert.equal(nombrePdf('Amazon', 'Business Intelligence Engineer, Data and Analytics Platform', 'en'),
-  'CV_Amazon_Business-Intelligence-Engineer-Data-and-Analy_EN.pdf', 'el puesto se corta, no se lleva la línea entera')
-assert.equal(nombrePdf(undefined, undefined, 'en'), 'CV_Oferta_EN.pdf', 'sin auditoría todavía, un nombre válido')
-assert.equal(nombrePdf('LHH · Brezo Arnedo', null, 'es'), 'CV_LHH-Brezo-Arnedo_ES.pdf')
-assert.ok(!/[^\w.-]/.test(nombrePdf('A/B · Testing', 'C:D*E', 'en')),
-  'nada que un sistema de ficheros rechace')
+// Tres piezas: tú, el puesto y el idioma. Es lo que ve el recruiter, porque el
+// mismo nombre viaja al portal dentro del paquete de la extensión.
+assert.equal(nombrePdf('Senior AI Engineer', 'en'), 'Victor-Trisac_Senior-AI-Engineer_EN.pdf')
+assert.equal(nombrePdf('Científico de Datos', 'es'), 'Victor-Trisac_Cientifico-de-Datos_ES.pdf',
+  'sin acentos ni eñes: van a un nombre de fichero')
+assert.equal(nombrePdf(undefined, 'en'), 'Victor-Trisac_EN.pdf', 'sin auditoría todavía, un nombre válido')
+assert.ok(!/[^\w.-]/.test(nombrePdf('C:D*E', 'en')), 'nada que un sistema de ficheros rechace')
+
+// El recorte por el primer separador. Es de donde venía el nombre kilométrico:
+// el modelo devuelve el puesto con su coletilla detrás de una coma o un guion
+// largo, y antes entraba entera y partida a mitad de palabra.
+assert.equal(nombrePdf('Business Intelligence Engineer, Data and Analytics Platform', 'en'),
+  'Victor-Trisac_Business-Intelligence-Engineer_EN.pdf', 'la coletilla tras la coma se cae')
+assert.equal(nombrePdf('AI Engineer – Agentic Systems & Backend', 'es'),
+  'Victor-Trisac_AI-Engineer_ES.pdf', 'el guion largo también corta')
+assert.equal(nombrePdf('Software Engineer (Backend)', 'en'),
+  'Victor-Trisac_Software-Engineer_EN.pdf', 'y el paréntesis')
+
+// Y donde NO debe cortar, que es la mitad que se rompe sola si el separador se
+// escribe a lo bruto.
+assert.equal(nombrePdf('Full-Stack Developer', 'es'), 'Victor-Trisac_Full-Stack-Developer_ES.pdf',
+  'el guion PEGADO no corta, o el puesto se quedaría en "Full"')
+assert.equal(nombrePdf('AI/ML Engineer', 'en'), 'Victor-Trisac_AI-ML-Engineer_EN.pdf',
+  'la barra no corta nunca, o se quedaría en "AI"')
 
 // --- los botones ---------------------------------------------------------------
 // Lo más peligroso de todo el autorrelleno: una etiqueta mal clasificada aquí
