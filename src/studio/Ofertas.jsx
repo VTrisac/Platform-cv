@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Search, ExternalLink, Sparkles, FileText, Send, Trash2, X, ChevronRight } from 'lucide-react'
-import { ESTADOS, SIGUIENTE, contar, desdeCuando, diasDesde, porQueDescartada } from './store'
+import { ESTADOS, RAPIDOS, SIGUIENTE, contar, desdeCuando, diasDesde, porQueDescartada } from './store'
 
 // Pantalla "Ofertas — Tracker" del diseño: cabecera con recuento, buscador,
 // filtros por estado y tabla. Las columnas replican los anchos del mockup
@@ -11,10 +11,6 @@ import { ESTADOS, SIGUIENTE, contar, desdeCuando, diasDesde, porQueDescartada } 
 // en el chip «Archivadas» y en la cuarta columna del tablero.
 const VIVAS = ['guardada', 'preparada', 'enviada', 'entrevista', 'contratado']
 const ARCHIVO = 'archivadas'
-
-// Los dos saltos que se dan a mano todo el rato: «ya la preparé» y «ya la mandé».
-// El desplegable de los siete sigue estando, pero esto es un clic en vez de tres.
-const RAPIDOS = ['preparada', 'enviada']
 
 const Ofertas = ({ ofertas, onEditar, onAplicar, onEstado, onBorrar, onBorrarVarias, filtroInicial = null }) => {
   const [q, setQ] = useState('')

@@ -10,7 +10,7 @@ import Perfil from './studio/Perfil'
 import Cola from './studio/Cola'
 import Salarios from './studio/Salarios'
 import { enLote, esUrl, preparar } from './studio/lote'
-import { guardarTema, leerTema, nuevaOferta, useStudio } from './studio/store'
+import { desdeFeed, guardarTema, leerTema, nuevaOferta, useStudio } from './studio/store'
 
 // `feed.keywords` son las 36 tecnologías del CV enteras: RAG, JWT, n8n,
 // Industrial Automation, Tailwind CSS… Ofrecerlas TODAS como "lenguajes
@@ -189,6 +189,11 @@ const Studio = () => {
           ofertas={ofertas}
           onAuditar={(url) => abrirEditor(null, url)}
           onCriterios={() => setView('criterios')}
+          // "Esta ya la mandé" / "a esta ya le hice el CV", sin pasar por el
+          // editor: si ya está en el tracker es el mismo suceso que usa la tabla;
+          // si no, nace ahí ya marcada. Lo que consigue que no vuelva a salir
+          // mañana como si fuera nueva.
+          onMarcar={(j, estado, o) => (o ? suceso(o.id, 'marcada', estado) : addOferta(desdeFeed(j, estado)))}
         />
       )}
 

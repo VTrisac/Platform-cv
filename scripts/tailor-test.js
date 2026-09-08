@@ -14,7 +14,8 @@ import feed from '../api/feed.js'
 import { findFigures, textoCarta } from '../api/cover.js'
 import { partir, enLote, preparar } from '../src/studio/lote.js'
 import { agrupar, contar, SUCESOS, salarios, mediana, SIGUIENTE, ESTADOS, aplicarPatch,
-  desdeCuando, diasDesde, migrar, hoy, porQueDescartada } from '../src/studio/store.js'
+  desdeCuando, diasDesde, migrar, hoy, porQueDescartada, clavesDe, indexar,
+  desdeFeed } from '../src/studio/store.js'
 import { hashPassword } from './set-password.js'
 import { dataEN } from '../src/data.js'
 
@@ -754,6 +755,42 @@ a.equal(textoCarta(null), '')
   llamadas.length = 0
   await preparar('texto', 'es', on, { a: audit, cv: { title: 'CV' } }, 'carta')
   a.deepEqual(llamadas.map((u) => u.split('/').pop()), ['cover'])
+}
+
+// --- lo que el feed ya ha visto -------------------------------------------------
+// El feed cruzaba con el tracker por `empresa|puesto`, y auditar guarda el rol
+// que dice el modelo, no el titular del anuncio: NUNCA casaban, así que toda
+// oferta auditada volvía a salir al día siguiente como nueva. Esto es la
+// garantía de que no vuelve a pasar.
+{
+  const url = 'https://www.linkedin.com/jobs/view/ai-engineer-at-acme-4123456789'
+  // La misma oferta, tal y como la devuelven dos búsquedas distintas.
+  a.deepEqual(
+    clavesDe({ url: `${url}?refId=abc&position=3`, empresa: 'Acme', puesto: 'x' })[0],
+    clavesDe({ url: `${url}?refId=zzz&position=17`, empresa: 'Acme', puesto: 'y' })[0],
+    'refId y position no pueden cambiar la clave'
+  )
+  a.equal(clavesDe({ url }).length, 1, 'sin empresa ni puesto no se inventa una segunda clave')
+
+  // El caso real: guardada con el rol del modelo, buscada con el titular.
+  const guardadas = indexar([{ id: '1', url, empresa: 'Acme', puesto: 'AI Engineer', estado: 'preparada' }])
+  const fila = { url: `${url}?trk=feed`, company: 'Acme', title: 'AI Engineer (Remote) · Madrid' }
+  const encontrada = clavesDe({ url: fila.url, empresa: fila.company, puesto: fila.title })
+    .map((k) => guardadas.get(k)).find(Boolean)
+  a.equal(encontrada?.id, '1', 'la misma oferta con otro titular tiene que reconocerse')
+
+  // Y las pegadas a mano, que no tienen URL, siguen encontrándose por el par.
+  const sinUrl = indexar([{ id: '2', empresa: 'Beta', puesto: 'Data Engineer' }])
+  a.equal(sinUrl.get('beta|data engineer')?.id, '2')
+
+  // Marcar desde el feed: nace enviada, sin auditoría, y con la historia sellada
+  // (aplicarPatch es quien sella; addOferta hace lo mismo en el store).
+  const nueva = desdeFeed(fila, 'enviada')
+  a.equal(nueva.estado, 'enviada')
+  a.equal(nueva.puesto, fila.title, 'el titular del anuncio, que es con lo que la volverás a ver')
+  a.equal(nueva.auditoria, undefined, 'marcar no audita: no has pagado esa llamada')
+  a.equal(aplicarPatch({ ...nueva, historia: [] }, { estado: 'entrevista' }, '2026-09-08').historia.at(-1).dia,
+    '2026-09-08', 'a partir de ahí se comporta como cualquier otra')
 }
 
 console.log(`ok — ${dropped.length} inventos bloqueados (${dropped.join(', ')}); puerta cerrada en prod`)

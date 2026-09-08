@@ -95,13 +95,58 @@ export const SUCESOS = {
   marcada: (o, estado) => (ESTADOS[estado] ? estado : o.estado),
 }
 
+// Los dos saltos que se dan a mano todo el rato: «ya la preparé» y «ya la mandé».
+// Vive aquí y no en Ofertas.jsx porque ahora lo comparten la tabla y el feed.
+export const RAPIDOS = ['preparada', 'enviada']
+
+// El «14 jul» que se pinta en el tracker. Una sola línea, pero en dos sitios: si
+// cada uno formatea a su manera, la tabla mezcla formatos según de dónde vino
+// la oferta.
+const fechaCorta = () => new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+
+// Con qué se reconoce una oferta ya guardada cuando vuelve a salir en el feed.
+//
+// La URL de LinkedIn trae refId y position y cambia entre búsquedas, así que de
+// ella se saca el id numérico —mismo criterio que claveDedup() en api/feed.js,
+// que deduplica DENTRO de una respuesta; esto cruza el feed con lo guardado—.
+// Y empresa|puesto SIGUE estando: es la única clave que tienen las pegadas a
+// mano y las guardadas antes de esto.
+//
+// Por qué hacían falta las dos: auditar desde el feed guarda `puesto: a.rol`, el
+// nombre que le pone el modelo, que no es el titular del anuncio. Cruzar solo
+// por ahí no casaba nunca y toda oferta auditada volvía a salir al día siguiente
+// como si fuera nueva.
+export const clavesDe = ({ url, empresa, puesto }) => {
+  const li = /\/jobs\/view\/(?:[^/?]*-)?(\d{6,})/.exec(url ?? '')
+  return [
+    li ? `li:${li[1]}` : url ? url.split('?')[0].toLowerCase() : null,
+    empresa && puesto ? `${empresa}|${puesto}`.toLowerCase() : null,
+  ].filter(Boolean)
+}
+
+// clave -> oferta guardada. Un Map y no un Set: la fila del feed necesita la
+// oferta entera para pintar su estado y para saber a qué id mandar el cambio.
+export const indexar = (ofertas) =>
+  new Map(ofertas.flatMap((o) => clavesDe(o).map((k) => [k, o])))
+
+// Una oferta que nace marcada desde el feed. SIN auditoría a propósito: no la
+// has pagado, solo estás diciendo que esa ya la mandaste —o que ya le hiciste el
+// CV— fuera de aquí. `j` es una fila del feed, con los nombres del feed.
+export const desdeFeed = (j, estado) => ({
+  empresa: j.company,
+  puesto: j.title,
+  url: j.url,
+  estado,
+  fecha: fechaCorta(),
+})
+
 // La forma de una oferta la decide el dominio, no la pantalla: esto era
 // desdeAuditoria() dentro de Studio.jsx.
 export const nuevaOferta = (a, lang, url = null) => ({
   empresa: a.empresa,
   puesto: a.rol,
   estado: SUCESOS.auditada(null, a),
-  fecha: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }),
+  fecha: fechaCorta(),
   variante: null,
   auditoria: a,
   url, // el enlace para postular; null si pegaste el texto a mano

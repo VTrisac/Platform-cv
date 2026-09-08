@@ -41,8 +41,11 @@ const Editor = ({ oferta, urlInicial, perfil, autoAplicar, onBack, acciones }) =
   const [lang, setLang] = useState(oferta?.lang ?? (oferta?.variante?.endsWith('ES') ? 'es' : 'en'))
   const [design, setDesign] = useState(0)
   // Del feed llega la URL ya puesta: la auditoría la scrapea igual que si la
-  // hubieras pegado tú, así que no hace falta otro camino para esto.
-  const [texto, setTexto] = useState(urlInicial ?? '')
+  // hubieras pegado tú, así que no hace falta otro camino para esto. Y desde el
+  // tracker, la que guarda la oferta: las marcadas a mano en el feed tienen URL
+  // y no tienen auditoría, así que abrirlas para prepararlas caía en un textarea
+  // vacío pidiéndote un enlace que ya estaba guardado.
+  const [texto, setTexto] = useState(urlInicial ?? oferta?.url ?? '')
   const [nombre, setNombre] = useState(oferta?.variante ?? '')
   const [data, setData] = useState(oferta?.cv ?? null)
   const [meta, setMeta] = useState(null)

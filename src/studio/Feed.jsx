@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { ExternalLink, Loader2, RefreshCw, Search, SlidersHorizontal, TriangleAlert } from 'lucide-react'
+import { ArrowDown, ExternalLink, Loader2, RefreshCw, Search, SlidersHorizontal, TriangleAlert } from 'lucide-react'
 import { buscarFeed } from './api'
+import { ESTADOS, RAPIDOS, clavesDe, indexar } from './store'
 import Proceso from './Proceso'
 
 // Pantalla "Feed": las ofertas que hay AHORA en LinkedIn y en los tableros
@@ -32,7 +33,40 @@ const Aviso = ({ children }) => (
   </span>
 )
 
-const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
+// Los órdenes que se pueden pedir desde la cabecera. `null` es el del servidor
+// —criterios cumplidos, luego nota, luego tecnologías cubiertas— y sigue siendo
+// el bueno por defecto: esto es para mirar la lista de otra manera un rato, no
+// para sustituirlo.
+const ORDEN = {
+  encaje: (a, b) => b.nota - a.nota || b.hits.length - a.hits.length,
+  // Sin salario publicado va al final y no arriba, que es lo que haría un 0.
+  salario: (a, b) => (b.salario ?? -1) - (a.salario ?? -1),
+  // `fecha` es ISO (iso() en api/feed.js), así que comparar cadenas ordena bien.
+  fecha: (a, b) => String(b.fecha ?? '').localeCompare(String(a.fecha ?? '')),
+  empresa: (a, b) => a.company.localeCompare(b.company),
+}
+
+// Una cabecera que ordena al pulsarla, y vuelve al orden del servidor si la
+// vuelves a pulsar. Las columnas que no ordenan siguen siendo un <span>: un
+// botón que no hace nada es peor que un texto.
+const Col = ({ k, ancho, orden, setOrden, children }) => (
+  <button
+    onClick={() => setOrden(orden === k ? null : k)}
+    className={`${ancho} flex items-center gap-1 text-left`}
+    style={{ color: orden === k ? 'var(--s-accent)' : 'inherit' }}
+    title={orden === k ? 'Volver al orden por tus criterios' : `Ordenar por ${k}`}
+  >
+    {children}
+    {orden === k && <ArrowDown size={12} />}
+  </button>
+)
+
+// Lo que dicen los botones de marcar EN EL FEED. Son los mismos dos estados que
+// en el tracker, pero aquí "Preparada" no se entiende: lo que estás diciendo es
+// que a esa ya le hiciste el CV.
+const MARCA = { preparada: 'CV hecho', enviada: 'Enviada' }
+
+const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios, onMarcar }) => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   // Lo recién traído vive aquí además de en la caché. El store no sella con
@@ -40,6 +74,8 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
   // null y el efecto de abajo volvería a pedirlo en bucle. Lo que se ve es esto.
   const [datos, setDatos] = useState(null)
   const [segundos, setSegundos] = useState(0)
+  // null = como lo manda el servidor. Ver ORDEN.
+  const [orden, setOrden] = useState(null)
   const vista = datos ?? feed
 
   // Un segundero mientras busca, y solo mientras busca: es lo que hace avanzar
@@ -69,15 +105,27 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vista])
 
-  // "Ya en el tracker": misma empresa y mismo puesto.
-  const vistas = new Set(ofertas.map((o) => `${o.empresa}|${o.puesto}`.toLowerCase()))
+  // Lo que ya está en el tracker, por todas sus claves. Antes esto era un Set de
+  // `empresa|puesto` y no encontraba NADA de lo auditado desde aquí: al auditar
+  // se guarda el rol que dice el modelo, no el titular del anuncio. Ver clavesDe().
+  const guardadas = indexar(ofertas)
+  const guardada = (j) =>
+    clavesDe({ url: j.url, empresa: j.company, puesto: j.title }).map((k) => guardadas.get(k)).find(Boolean)
+
   const jobs = vista?.jobs ?? []
+  // Copia antes de ordenar: `jobs` sale de la caché del store y ordenarlo en el
+  // sitio la mutaría.
+  const lista = orden ? [...jobs].sort(ORDEN[orden]) : jobs
   const descartes = Object.entries(vista?.descartes ?? {})
   const ventana = vista?.preset?.ventana
   // Cuántos criterios blandos tienes puestos. Con cero, no hay nada que separar
   // y la lista es simplemente el orden por encaje.
   const criterios = jobs[0]?.cumple?.de ?? 0
-  const corte = criterios ? jobs.findIndex((j) => j.cumple.ok < j.cumple.de) : -1
+  const cumplenTodo = jobs.filter((j) => j.cumple?.de > 0 && j.cumple.ok === j.cumple.de).length
+  // Dónde acaban las que cumplen todo. Solo existe en el orden del servidor: en
+  // cualquier otro están repartidas y una raya ahí mentiría. El recuento de
+  // arriba sí se sigue diciendo, porque ese es cierto en cualquier orden.
+  const corte = orden || !criterios ? -1 : jobs.findIndex((j) => j.cumple.ok < j.cumple.de)
 
   return (
     <div className="p-8 flex flex-col gap-5">
@@ -102,7 +150,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
             <p className="text-sm" style={{ color: 'var(--s-muted)' }}>
               {vista
                 ? `${jobs.length} de ${vista.total} ofertas`
-                  + (corte > 0 ? ` · ${corte} cumplen todo lo que pides` : '')
+                  + (cumplenTodo > 0 ? ` · ${cumplenTodo} cumplen todo lo que pides` : '')
                   + (ventana === '24h' ? ' · últimas 24 horas' : ventana === 'semana' ? ' · última semana' : '')
                 : 'Sin resultados todavía.'}
             </p>
@@ -177,14 +225,14 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
           className="flex items-center gap-4 px-5 py-2.5 text-xs font-semibold"
           style={{ background: 'var(--s-bg)', color: 'var(--s-muted)', letterSpacing: '0.3px' }}
         >
-          <span className="w-[76px]">ENCAJE</span>
-          <span className="w-[90px]">FECHA</span>
-          <span className="w-[150px]">EMPRESA</span>
+          <Col k="encaje" ancho="w-[76px]" orden={orden} setOrden={setOrden}>ENCAJE</Col>
+          <Col k="fecha" ancho="w-[90px]" orden={orden} setOrden={setOrden}>FECHA</Col>
+          <Col k="empresa" ancho="w-[150px]" orden={orden} setOrden={setOrden}>EMPRESA</Col>
           <span className="flex-1">PUESTO</span>
           <span className="w-[160px]">UBICACIÓN</span>
-          <span className="w-[90px]">SALARIO</span>
-          <span className="w-[220px]">CUBRES</span>
-          <span className="w-[150px] text-right">ACCIONES</span>
+          <Col k="salario" ancho="w-[90px]" orden={orden} setOrden={setOrden}>SALARIO</Col>
+          <span className="w-[190px]">CUBRES</span>
+          <span className="w-[190px] text-right justify-end flex">ACCIONES</span>
         </div>
 
         {/* Ya solo puede quedarse vacío por los tres filtros que descartan de
@@ -197,8 +245,8 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
           </p>
         )}
 
-        {jobs.map((j, i) => {
-          const yaVista = vistas.has(`${j.company}|${j.title}`.toLowerCase())
+        {lista.map((j, i) => {
+          const o = guardada(j)
           return (
             <div key={j.url}>
             {/* Dónde acaba lo que cumple todo lo que pediste. Sin esta línea, las
@@ -210,7 +258,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
             )}
             <div
               className="flex items-center gap-4 px-5 py-3.5 border-t"
-              style={{ borderColor: 'var(--s-border)', opacity: yaVista ? 0.55 : 1 }}
+              style={{ borderColor: 'var(--s-border)', opacity: o ? 0.55 : 1 }}
             >
               <span className="w-[76px] flex flex-col items-start gap-1">
                 <span
@@ -259,7 +307,7 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
               {/* Los dos números que hay detrás de la nota: qué cubres y de
                   cuánto. Un 8 de 10 pedidas no es lo mismo que un 8 de 4. */}
               <span
-                className="w-[220px] text-xs truncate"
+                className="w-[190px] text-xs truncate"
                 style={{ color: 'var(--s-muted)' }}
                 title={`Pide: ${j.stack.join(', ')}`}
               >
@@ -267,29 +315,59 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios }) => {
               </span>
               {/* Aquí no hay "Aplicar": sin auditar y sin adaptar no hay nada
                   que mandar, y saltarse ese orden es justo lo que no quieres. */}
-              <span className="w-[150px] flex items-center justify-end gap-3">
-                <a
-                  href={j.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  title="Abrir la oferta en el portal"
-                  className="flex items-center gap-1.5 text-xs font-semibold"
-                  style={{ color: 'var(--s-accent-dark)' }}
-                >
-                  <ExternalLink size={13} /> Abrir
-                </a>
-                {yaVista ? (
-                  <span className="text-xs" style={{ color: 'var(--s-muted)' }}>en tracker</span>
-                ) : (
-                  <button
-                    onClick={() => onAuditar(j.url)}
-                    title="Auditar esta oferta contra tu CV"
+              <span className="w-[190px] flex flex-col items-end gap-1.5">
+                <span className="flex items-center gap-3">
+                  <a
+                    href={j.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Abrir la oferta en el portal"
                     className="flex items-center gap-1.5 text-xs font-semibold"
-                    style={{ color: 'var(--s-accent)' }}
+                    style={{ color: 'var(--s-accent-dark)' }}
                   >
-                    <Search size={14} /> Auditar
-                  </button>
-                )}
+                    <ExternalLink size={13} /> Abrir
+                  </a>
+                  {/* El estado de verdad que tiene en el tracker, no un "en
+                      tracker" que no dice si la mandaste o solo la miraste.
+                      Auditar desaparece: ya existe, y volver a hacerlo crearía
+                      una oferta duplicada. */}
+                  {o ? (
+                    <span
+                      className="px-2 py-1 rounded-full text-[11px] font-semibold"
+                      style={{ background: ESTADOS[o.estado].bg, color: ESTADOS[o.estado].fg }}
+                      title="Ya está en el tracker. Se cambia desde Ofertas."
+                    >
+                      {ESTADOS[o.estado].label}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => onAuditar(j.url)}
+                      title="Auditar esta oferta contra tu CV"
+                      className="flex items-center gap-1.5 text-xs font-semibold"
+                      style={{ color: 'var(--s-accent)' }}
+                    >
+                      <Search size={14} /> Auditar
+                    </button>
+                  )}
+                </span>
+                {/* Lo que ya hiciste fuera de aquí. Crea la oferta en el tracker
+                    —o mueve la que ya está—, y desde el próximo refresco esta
+                    fila sale atenuada en vez de volver a ofrecerse como nueva.
+                    El estado en el que ya está no se ofrece, así que estos dos
+                    botones también sirven para corregir un clic. */}
+                <span className="flex items-center gap-1.5">
+                  {RAPIDOS.filter((e) => e !== o?.estado).map((e) => (
+                    <button
+                      key={e}
+                      onClick={() => onMarcar(j, e, o)}
+                      title={`Marcar como ${ESTADOS[e].label.toLowerCase()} sin pasar por el editor`}
+                      className="px-2 py-1 rounded-full text-[11px] font-semibold border shrink-0"
+                      style={{ background: 'var(--s-surface)', borderColor: 'var(--s-border)', color: 'var(--s-muted)' }}
+                    >
+                      {MARCA[e]}
+                    </button>
+                  ))}
+                </span>
               </span>
             </div>
             </div>
