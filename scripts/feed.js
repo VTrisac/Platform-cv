@@ -118,6 +118,52 @@ async function selftest() {
   a.equal(solo([oferta({})], {}).pasan.length, 1, 'una oferta normal pasa')
   a.equal(solo([oferta({ location: 'Tokyo' })], {}).descartes['ubicación'], 1)
 
+  // --- ubicación: Barcelona, y el remoto solo si nombra España -------------
+  // Lo de antes era 'barcelona|madrid|valencia|spain|españa|remote|...', que no
+  // filtraba Barcelona sino occidente: medido el 08-09-2026, de 509 ofertas que
+  // pasaban solo 210 eran de aquí.
+  for (const l of ['Barcelona, Catalonia, Spain', 'Greater Barcelona Metropolitan Area',
+    'Sant Cugat del Vallès', 'Terrassa, Catalonia, Spain', 'Barcelona Gran Vía', 'Spain - Barcelona']) {
+    a.equal(solo([oferta({ location: l })], {}).pasan.length, 1, `"${l}" es Barcelona`)
+  }
+  for (const l of ['Madrid, Community of Madrid, Spain', 'Alicante, Spain', 'Málaga, Andalusia, Spain',
+    'Valencia, Valencian Community, Spain', 'Spain - Algete']) {
+    a.equal(solo([oferta({ location: l })], {}).descartes['ubicación'], 1, `"${l}" no es Barcelona`)
+  }
+  // El caso que justifica los dos lookaheads: "remoto" a secas no basta, tiene
+  // que decir España en la misma cadena. Con 'remote' suelto entraban las 80 de
+  // Anthropic en San Francisco y las 100 de RemoteOK de medio mundo.
+  a.equal(solo([oferta({ location: 'Germany (Remote) ; Spain (Remote) ; United Kingdom (Remote)' })], {}).pasan.length, 1,
+    'remoto que acepta España sí entra')
+  for (const l of ['Remote-Friendly (Travel-Required) | San Francisco, CA | Seattle, WA',
+    'United States (Remote)', 'Remote · Seoul', 'Remote']) {
+    a.equal(solo([oferta({ location: l })], {}).descartes['ubicación'], 1, `"${l}" no es remoto desde España`)
+  }
+
+  // --- puesto: el único filtro positivo por título -------------------------
+  // Sin él los tableros de empresa se bajan ENTEROS. Medido el 08-09-2026: solo
+  // 217 de 509 ofertas tenían siquiera un título técnico.
+  a.deepEqual(solo([oferta({ title: 'B2B Travel Advisor Support' })], {}).descartes, {},
+    'sin puestos marcados no se descarta nada por puesto: es como se comportaba antes')
+
+  const conPuesto = (title, familias) => solo([oferta({ title })], { puestos: familias })
+  for (const t of ['AI Engineer', 'AI Tooling Engineer', 'Ingeniero/a IA', 'IA Engineer',
+    'Agentic AI Engineer', 'Senior AI/ML Engineer', 'GenAI Engineer', 'Machine Learning Engineer',
+    'Data & AI Engineer (m/f/d)', 'Senior Applied AI Scientist (AI Marketplace)']) {
+    a.equal(conPuesto(t, ['ia']).pasan.length, 1, `"${t}" es tu puesto`)
+  }
+  for (const t of ['AI Product Operations Lead', 'Clinical Study Data Lead', 'B2B Travel Advisor Support',
+    'Global Tax Trainee', 'Social Media Manager', 'Técnic@ de laboratorio de Biotecnología',
+    'Delivery Driver', 'Senior UX/UI Designer', 'Enterprise Account Executive']) {
+    a.equal(conPuesto(t, ['ia']).descartes['puesto'], 1, `"${t}" no lo es`)
+  }
+  a.equal(conPuesto('Senior Backend Engineer', ['ia']).descartes['puesto'], 1, 'cada familia va por su cuenta')
+  a.equal(conPuesto('Senior Backend Engineer', ['ia', 'backend']).pasan.length, 1, 'y se suman')
+  a.equal(conPuesto('Staff Machine Learning Ops Engineer', ['ops']).pasan.length, 1)
+  a.equal(conPuesto('Senior II Full-Stack Engineer (back-end heavy)', ['fullstack']).pasan.length, 1)
+  a.equal(conPuesto('AI Engineer', ['inventada']).pasan.length, 1,
+    'una familia que no existe se ignora, no revienta la búsqueda')
+
   a.equal(solo([oferta({ fecha: '2026-08-01' })], { ventana: '24h' }).descartes['fuera de la ventana'], 1,
     'de hace 11 días no entra en 24h')
   a.equal(solo([oferta({ fecha: '2026-08-01' })], { ventana: 'semana' }).descartes['fuera de la ventana'], 1)
@@ -161,6 +207,24 @@ async function selftest() {
   const dosDeTres = una([oferta({ text: 'Python, TypeScript and Docker' })], { lenguajes: ['Python', 'TypeScript', 'Java'] })
   a.deepEqual(dosDeTres.cumple, { ok: 2, de: 3 })
   a.deepEqual(dosDeTres.avisos, ['no menciona Java'])
+
+  // --- "priorizar salario" tiene que priorizar de verdad -------------------
+  // Valía un punto de `cumple.ok` como cualquier otro criterio, y `cumple.ok`
+  // los cuenta como intercambiables: con tres criterios marcados, la que NO
+  // publica salario pero menciona Python empataba con la que SÍ lo publica.
+  const salarial = solo([
+    oferta({ title: 'sin salario', text: 'Python, remote-first, with LLM agents' }),
+    oferta({ title: 'con salario', text: 'Java only, salary €60.000' }),
+  ], { exigirSalario: true, modalidades: ['remoto'], lenguajes: ['Python'], ia: 'con' }).pasan
+  a.equal(salarial[0].title, 'con salario', 'publicar salario manda sobre los demás criterios')
+  a.equal(salarial[0].cumple.ok, 1, 'y gana aunque cumpla MENOS criterios')
+  a.equal(salarial[1].cumple.ok, 3)
+  // Sin el interruptor, el orden es el de siempre: manda `cumple.ok`.
+  a.equal(solo([
+    oferta({ title: 'sin salario', text: 'Python, remote-first, with LLM agents' }),
+    oferta({ title: 'con salario', text: 'Java only, salary €60.000' }),
+  ], { modalidades: ['remoto'], lenguajes: ['Python'], ia: 'con' }).pasan[0].title, 'sin salario',
+  'sin marcarlo, el salario no reordena nada')
 
   // El orden hace el trabajo que antes hacía el descarte.
   const ordenadas = solo([

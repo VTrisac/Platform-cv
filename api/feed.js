@@ -11,10 +11,12 @@
 // se queda allí; esto no sabe nada de ficheros.
 //
 // El orden importa y es el mismo que ya elegiste para auditar antes de adaptar:
-// lo barato primero. Pero DESCARTAR solo descartan tres cosas —ubicación,
-// ventana y palabras vetadas—, porque son inequívocas y las escribes tú. Los
-// demás criterios ANOTAN (`avisos`, `cumple`) y el orden hace el resto: un
-// regex sobre el texto de una oferta no sabe lo suficiente como para borrarla.
+// lo barato primero. Pero DESCARTAR solo descartan cuatro cosas —ubicación,
+// puesto, ventana y palabras vetadas—, porque son inequívocas y las escribes
+// tú: dónde, de qué, desde cuándo y qué palabra no quieres. Los demás criterios
+// ANOTAN (`avisos`, `cumple`) y el orden hace el resto: un regex sobre el TEXTO
+// de una oferta no sabe lo suficiente como para borrarla —sobre el TÍTULO sí,
+// que es lo que dice de qué profesión es—.
 // Medido el 28-08-2026, cuando sí borraban: de 534 ofertas, la nota tiraba 430
 // y el combo de todos los días dejaba 26. Ver filtrarTexto().
 import { gate } from '../src/acceso.js'
@@ -38,8 +40,16 @@ const pausa = (ms) => new Promise((r) => setTimeout(r, ms))
 // para "palabras clave|ubicación". Un solo modelo de datos para las dos cosas;
 // la pantalla de criterios las separa al pintarlas.
 export const COMPANIES = [
+  // Las cuatro son de Barcelona, y eso no es cosmético: cada búsqueda baja 30
+  // ofertas y ese presupuesto se gasta ANTES de filtrar. Con "Spain" en el
+  // token, las 30 salían de Madrid y Málaga y el filtro de ubicación las tiraba
+  // después: la búsqueda entera se perdía. Medido el 08-09-2026.
   { name: 'LinkedIn · AI Engineer', ats: 'linkedin', token: 'AI Engineer|Barcelona, Catalonia, Spain' },
-  { name: 'LinkedIn · Backend', ats: 'linkedin', token: 'Backend Engineer|Spain' },
+  { name: 'LinkedIn · ML Engineer', ats: 'linkedin', token: 'Machine Learning Engineer|Barcelona, Catalonia, Spain' },
+  // "Backend Engineer" a secas traía Ruby on Rails, .NET C#, PHP/Symfony y
+  // Golang. El lenguaje va en la búsqueda, no solo en la nota.
+  { name: 'LinkedIn · Backend', ats: 'linkedin', token: 'Python Backend Engineer|Barcelona, Catalonia, Spain' },
+  { name: 'LinkedIn · Full Stack', ats: 'linkedin', token: 'Full Stack Developer|Barcelona, Catalonia, Spain' },
   // Barcelona / España
   { name: 'Typeform', ats: 'greenhouse', token: 'typeform' },
   { name: 'Cabify', ats: 'greenhouse', token: 'cabify' },
@@ -57,6 +67,12 @@ export const COMPANIES = [
   // El cuarto segmento es la BÚSQUEDA, no un filtro de ubicación: estos tableros
   // son globales y traen miles de puestos, así que sin acotar aquí bajarías 60
   // vacantes de Hyderabad y las tiraría todas el filtro de ubicación.
+  //
+  // ponytail: los que dicen "Spain" se quedan en "Spain" aunque solo quieras
+  // Barcelona. Su buscador no sabe que Sant Cugat es Barcelona: medido el
+  // 08-09-2026, Roche con "Spain" da 24 vacantes de las que 10 son del área de
+  // Barcelona, y con "Barcelona" da 3 de las que 1 lo es. Acotar aquí a la
+  // ciudad TIRA las nueve buenas. Se baja la provincia y filtra UBICACION.
   { name: 'Novartis', ats: 'workday', token: 'novartis|wd3|Novartis_Careers|Barcelona' },
   { name: 'AstraZeneca', ats: 'workday', token: 'astrazeneca|wd3|Careers|Barcelona' },
   { name: 'Roche', ats: 'workday', token: 'roche|wd3|roche-ext|Spain' },
@@ -69,7 +85,71 @@ export const COMPANIES = [
   { name: 'Amazon', ats: 'amazon', token: 'engineer|Spain' },
 ]
 
-export const UBICACION = 'barcelona|madrid|valencia|spain|españa|remote|emea|europe'
+// Barcelona y su área, más el remoto que acepte España.
+//
+// Antes era 'barcelona|madrid|valencia|spain|españa|remote|emea|europe', y eso
+// no filtraba Barcelona: filtraba "occidente". Medido el 08-09-2026 sobre 1.432
+// ofertas, pasaban 509 y solo 210 eran de Barcelona — 93 de Madrid, 15 de
+// Málaga/Alicante y 188 "remotas" de cualquier sitio.
+//
+// Los dos lookaheads son lo que separa "Spain (Remote)" de "Remote-Friendly |
+// San Francisco, CA": exigen que la palabra remoto Y España estén las dos en la
+// misma cadena. Con 'remote' suelto entraban las 80 de Anthropic en San
+// Francisco, "United States (Remote)" de Typeform y "Remote · Seoul" de
+// RemoteOK, que es exactamente lo que no quieres ver.
+const BCN = 'barcelona|bcn\\b|sant cugat|sant joan desp|hospitalet|badalona|terrassa|cerdanyola|catalu'
+const REMOTO_ES = '(?=.*remot)(?=.*(?:spain|españa|espana))'
+
+export const UBICACION = `${BCN}|${REMOTO_ES}`
+
+// Las cuatro que ofrece la pantalla de criterios, para no tener que escribir el
+// regex a mano. Viajan por el cable —igual que `keywords`— y no se copian en el
+// cliente: Criterios.jsx no puede importar este módulo (arrastraría node:crypto
+// al bundle), y una segunda copia del regex de Barcelona es la próxima avería.
+export const UBICACIONES = [
+  [BCN, 'Solo Barcelona'],
+  [UBICACION, 'Barcelona + remoto España'],
+  ['spain|españa|espana', 'Toda España'],
+  ['(?:)', 'Cualquiera'],
+]
+
+// Las familias de puesto, y el ÚNICO filtro positivo por título que hay.
+//
+// Sin esto, un tablero de empresa se baja entero: Greenhouse, Lever, Ashby y
+// Workable devuelven la lista completa y aquí entraba todo. Medido el
+// 08-09-2026: de las 509 ofertas que pasaban la ubicación, solo 217 tenían
+// siquiera un título técnico. Las otras 292 eran "B2B Travel Advisor Support
+// (Night Shift)", "Global Tax Trainee", "Clinical Study Data Lead", "Social
+// Media Manager", "Técnic@ de laboratorio de Biotecnología" y "Delivery Driver".
+//
+// ponytail: se mira el TÍTULO y no la descripción. Una oferta de marketing que
+// menciona "machine learning" en un párrafo sigue siendo de marketing, y el
+// título es el único campo que todas las fuentes traen siempre.
+export const PUESTOS = {
+  // '\\b(?:ai|ia)\\b' con hueco hasta 'engineer' y no adyacencia: "AI Tooling
+  // Engineer" y "Data & AI Engineer" son tu puesto y con 'ai engineer' pelado
+  // no casaban. El hueco es corto (25) para que no cruce medio título.
+  ia: '\\b(?:ai|ia)\\b[\\w\\s/&.-]{0,25}engineer|ingenier\\S*(?:\\s+\\S+)?\\s+(?:ia|ai)\\b'
+    + '|artificial intelligence|inteligencia artificial|machine learning'
+    + '|\\bml\\b[\\w\\s/&-]{0,15}engineer|genai|gen ai|\\bllm|\\bnlp\\b|applied ai|deep learning',
+  // 'machine learning[...]ops' con hueco: los títulos reales de Preply son
+  // "Staff Machine Learning Ops Engineer" y "Senior Machine Learning
+  // Platform/Ops Engineer", y con 'ml ?ops' pelado no casaba ninguno.
+  ops: 'ai ?ops|ml ?ops|mlops|machine learning[\\w\\s/]{0,12}ops'
+    + '|ai platform|ml platform|machine learning platform'
+    + '|data engineer|analytics engineer|platform engineer|devops|\\bsre\\b'
+    + '|site reliability|observabilit',
+  backend: 'backend|back-end|back end|api engineer|software engineer|software developer'
+    + '|desarrollador\\S* backend|ingenier\\S* de software|programador',
+  fullstack: 'full.?stack|fullstack',
+}
+
+// Lista vacía = ningún filtro de puesto, que es como se comportaba hasta hoy.
+// Un nombre de familia que no existe se ignora en vez de reventar la búsqueda.
+export const rePuestos = (familias = []) => {
+  const partes = familias.map((f) => PUESTOS[f]).filter(Boolean)
+  return partes.length ? new RegExp(partes.join('|'), 'i') : null
+}
 
 // Los tres valores que acepta la ventana temporal, y su traducción al filtro
 // nativo de LinkedIn (f_TPR). Comprobado: r86400 devuelve solo las últimas 24 h.
@@ -496,7 +576,7 @@ const cribar = (jobs, prueba) => {
 
 // Lo que se decide con la cabecera, SIN bajar la descripción. Va primero para
 // no pedirle a LinkedIn el detalle de ofertas que ya sabemos que no quieres.
-export function filtrarCabecera(jobs, { ubicacion = UBICACION, ventana = 'todo', hoy = new Date(), veto = [] } = {}) {
+export function filtrarCabecera(jobs, { ubicacion = UBICACION, ventana = 'todo', hoy = new Date(), veto = [], puestos = [] } = {}) {
   let re
   try { re = new RegExp(ubicacion || UBICACION, 'i') } catch { re = new RegExp(UBICACION, 'i') }
 
@@ -504,9 +584,16 @@ export function filtrarCabecera(jobs, { ubicacion = UBICACION, ventana = 'todo',
   const corte = dias == null ? null : new Date(hoy.getTime() - dias * 864e5).toISOString().slice(0, 10)
   const vetadas = veto.filter((v) => v.trim())
     .map((v) => new RegExp(`\\b${v.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'i'))
+  // El puesto DESCARTA, como la ubicación y la ventana, y por el mismo motivo:
+  // lo eliges tú y es inequívoco. No es uno de los criterios blandos del
+  // 28-08 —esos juzgan si encajas, y un regex sobre el texto no sabe lo
+  // suficiente—; esto solo dice de qué oficio es la vacante. Un "Delivery
+  // Driver" no es un mal encaje, es otra profesión.
+  const rePuesto = rePuestos(puestos)
 
   return cribar(jobs, (j) => {
     if (!re.test(j.location ?? '')) return 'ubicación'
+    if (rePuesto && !rePuesto.test(j.title ?? '')) return 'puesto'
     // Sin fecha no se puede saber si es de hoy o de marzo: con ventana activa
     // se descarta, porque colarla sería mentir sobre el criterio que pediste.
     if (corte && (!j.fecha || j.fecha < corte)) return 'fuera de la ventana'
@@ -566,10 +653,18 @@ function filtrarTexto(jobs, {
   // a igual nota, la que cubre más tecnologías: un 8 sobre 10 pedidas pesa más
   // que un 8 sobre 4.
   //
+  // Y si has marcado "priorizar las que publican salario", publicarlo va POR
+  // DELANTE de todo lo demás. Antes valía un punto de `cumple.ok` como
+  // cualquier otro criterio, y `cumple.ok` los cuenta como intercambiables: con
+  // salario + modalidad + un lenguaje marcados, una oferta SIN salario que
+  // mencionara Python empataba con una CON salario que no lo mencionara. El
+  // interruptor decía "priorizar" y valía un tercio de un desempate.
+  //
   // Devuelve las ofertas y ya: aquí no se descarta ninguna, así que no hay
   // `descartes` que devolver. Los descartes son cosa de filtrarCabecera().
   return jobs.map(({ text, pendiente, ...j }) => j).sort(
-    (a, b) => b.cumple.ok - a.cumple.ok || b.nota - a.nota || b.hits.length - a.hits.length
+    (a, b) => (exigirSalario ? (b.salario != null) - (a.salario != null) : 0)
+      || b.cumple.ok - a.cumple.ok || b.nota - a.nota || b.hits.length - a.hits.length
   )
 }
 
@@ -610,6 +705,10 @@ const presetEfectivo = (preset = {}) => ({
   ventana: preset.ventana ?? 'todo',
   ubicacion: preset.ubicacion ?? UBICACION,
   veto: preset.veto ?? [],
+  // Las cuatro de fábrica, no la lista vacía: sin filtro de puesto el feed son
+  // los tableros enteros, que es de donde venimos. Quien quiera todo lo
+  // desmarca en la pantalla de criterios y lo ve.
+  puestos: preset.puestos ?? Object.keys(PUESTOS),
   salarioMin: preset.salarioMin ?? 0,
   // Renombrado desde `descartarSinSalario`: ya no descarta nada, ordena. Un
   // nombre que miente sobre lo que hace el código es la próxima avería.
@@ -620,23 +719,32 @@ const presetEfectivo = (preset = {}) => ({
 })
 
 // Lo que la pantalla de criterios necesita saber, sin salir a buscar nada.
+// `familias` son las claves de PUESTOS: si mañana añades una aquí, la pantalla
+// la ofrece sola en vez de quedarse con una lista congelada, que es el fallo
+// que ya tuvimos con `empresasPorDefecto`.
 export const porDefecto = () => ({
   preset: presetEfectivo(), keywords, empresasPorDefecto: COMPANIES,
+  ubicaciones: UBICACIONES, familias: Object.keys(PUESTOS),
 })
 
 export async function buscar(preset = {}) {
-  const { empresas = COMPANIES, ventana = 'todo' } = preset
+  // Los criterios efectivos UNA vez, y filtrando con ellos. Antes se filtraba
+  // con `preset` crudo y se devolvía `presetEfectivo(preset)`, así que los
+  // valores por defecto estaban escritos dos veces y podían discrepar: lo que
+  // el feed decía estar aplicando no era lo que aplicaba.
+  const efectivo = presetEfectivo(preset)
+  const { empresas, ventana } = efectivo
   const boards = await Promise.all(empresas.map((c) => board(c, { ventana })))
   const jobs = deduplicar(boards.flatMap((b) => b.jobs))
 
   // Cabecera -> detalle -> texto. Bajar la descripción es lo caro y lo que se
   // le pide al servidor de otro, así que solo se hace sobre lo que ya ha pasado
-  // ubicación, fecha y veto de título.
-  const cabecera = filtrarCabecera(jobs, { ...preset, ventana })
+  // ubicación, puesto, fecha y veto de título.
+  const cabecera = filtrarCabecera(jobs, efectivo)
   const sinDescripcion = await detalle(cabecera.pasan)
 
   return {
-    jobs: filtrarTexto(cabecera.pasan, preset),
+    jobs: filtrarTexto(cabecera.pasan, efectivo),
     total: jobs.length,
     descartes: cabecera.descartes,
     // Cuántas se quedaron con el texto de la tarjeta porque se agotó el
@@ -655,11 +763,15 @@ export async function buscar(preset = {}) {
     empresasPorDefecto: COMPANIES,
     // Las keywords viajan por el mismo motivo: la pantalla de criterios ofrece
     // los lenguajes de tu CV para marcarlos como obligatorios, y derivarlas otra
-    // vez en el cliente sería duplicar las reglas de parseo en dos sitios.
+    // vez en el cliente sería duplicar las reglas de parseo en dos sitios. Las
+    // ubicaciones y las familias de puesto, igual.
     keywords,
+    ubicaciones: UBICACIONES,
+    familias: Object.keys(PUESTOS),
     // Los criterios efectivos, para que la pantalla pueda partir de ellos sin
-    // importar este módulo (arrastraría el SDK de OpenAI al bundle).
-    preset: presetEfectivo(preset),
+    // importar este módulo (arrastraría el SDK de OpenAI al bundle). Son los
+    // MISMOS con los que se ha filtrado arriba, no una segunda copia.
+    preset: efectivo,
   }
 }
 

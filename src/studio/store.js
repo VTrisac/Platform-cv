@@ -265,7 +265,18 @@ export function useStudio() {
     // límite de ritmo de un minuto te dejaría el feed vacío hasta mañana.
     setFeed: (feed) => setState((s) => ({
       ...s,
-      base: { preset: feed.preset, keywords: feed.keywords, empresasPorDefecto: feed.empresasPorDefecto },
+      // Los cinco campos "de fábrica" que trae la respuesta. Se enumeran a mano
+      // a propósito —el resto de `feed` son las ofertas y no pintan aquí—, pero
+      // el que añada uno nuevo al endpoint tiene que añadirlo también aquí: se
+      // olvidaron `ubicaciones` y `familias` y la pantalla de criterios se
+      // quedaba sin pastillas en cuanto refrescabas el feed.
+      base: {
+        preset: feed.preset,
+        keywords: feed.keywords,
+        empresasPorDefecto: feed.empresasPorDefecto,
+        ubicaciones: feed.ubicaciones,
+        familias: feed.familias,
+      },
       feed: { ...feed, fecha: feed.dead?.some((d) => d.reintentable) ? null : hoy() },
     })),
     // null = sin tocar: el servidor aplica los criterios de siempre. En cuanto

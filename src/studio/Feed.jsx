@@ -122,10 +122,19 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios, onMarcar
   // y la lista es simplemente el orden por encaje.
   const criterios = jobs[0]?.cumple?.de ?? 0
   const cumplenTodo = jobs.filter((j) => j.cumple?.de > 0 && j.cumple.ok === j.cumple.de).length
-  // Dónde acaban las que cumplen todo. Solo existe en el orden del servidor: en
+  // Dónde acaba el primer grupo. Solo existe en el orden del servidor: en
   // cualquier otro están repartidas y una raya ahí mentiría. El recuento de
   // arriba sí se sigue diciendo, porque ese es cierto en cualquier orden.
-  const corte = orden || !criterios ? -1 : jobs.findIndex((j) => j.cumple.ok < j.cumple.de)
+  //
+  // Y tiene que seguir la MISMA clave que ordena en el servidor: con
+  // «priorizar salario» marcado, la primera es tener cifra, no `cumple.ok`
+  // (ver filtrarTexto en api/feed.js). Si la raya se quedara en `cumple.ok`
+  // caería en medio de la lista y diría algo que no es.
+  const porSalario = vista?.preset?.exigirSalario
+  const corte = orden ? -1
+    : porSalario ? jobs.findIndex((j) => j.salario == null)
+      : criterios ? jobs.findIndex((j) => j.cumple.ok < j.cumple.de)
+        : -1
 
   return (
     <div className="p-8 flex flex-col gap-5">
@@ -182,8 +191,9 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios, onMarcar
         </p>
       )}
 
-      {/* Solo quedan tres motivos de descarte —ubicación, ventana y palabra
-          vetada—, los tres inequívocos. Los demás criterios ya no borran nada. */}
+      {/* Solo hay cuatro motivos de descarte —ubicación, puesto, ventana y
+          palabra vetada—, los cuatro inequívocos. Los demás criterios ya no
+          borran nada. */}
       {descartes.length > 0 && (
         <p className="text-xs" style={{ color: 'var(--s-muted)' }}>
           Descartadas: {descartes.map(([m, n]) => `${n} por ${m}`).join(' · ')}.
@@ -240,8 +250,9 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios, onMarcar
             seis interruptores que ahora no tiran nada. */}
         {!loading && jobs.length === 0 && (
           <p className="px-5 py-8 text-sm text-center" style={{ color: 'var(--s-muted)' }}>
-            Ninguna oferta pasa la ubicación, la ventana de tiempo ni las palabras vetadas.
-            Son los tres únicos criterios que descartan: amplía la ventana o revisa la ubicación.
+            Ninguna oferta pasa la ubicación, el puesto, la ventana de tiempo ni las palabras vetadas.
+            Son los cuatro únicos criterios que descartan: amplía la ventana, añade familias de
+            puesto o revisa la ubicación.
           </p>
         )}
 
@@ -253,7 +264,9 @@ const Feed = ({ feed, setFeed, preset, ofertas, onAuditar, onCriterios, onMarcar
                 dos mitades se leen como una sola lista y el orden no se ve. */}
             {i === corte && corte > 0 && (
               <p className="px-5 py-2 text-xs border-t" style={{ borderColor: 'var(--s-border)', background: 'var(--s-bg)', color: 'var(--s-muted)' }}>
-                A partir de aquí, no cumplen todo lo que pides. Siguen ordenadas por encaje.
+                {porSalario
+                  ? 'A partir de aquí, sin salario publicado. Siguen ordenadas por tus criterios.'
+                  : 'A partir de aquí, no cumplen todo lo que pides. Siguen ordenadas por encaje.'}
               </p>
             )}
             <div

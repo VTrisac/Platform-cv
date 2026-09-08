@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { Info, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Info, Plus, RotateCcw, Trash2, TriangleAlert } from 'lucide-react'
 import { criteriosPorDefecto } from './api'
 import { Card, campo } from './ui'
 
@@ -19,6 +19,17 @@ const ATS = ['greenhouse', 'lever', 'ashby', 'workable', 'workday', 'amazon', 'r
 const VENTANAS = [['24h', 'Últimas 24 horas'], ['semana', 'Última semana'], ['todo', 'Sin límite']]
 const MODALIDADES = [['presencial', 'Presencial'], ['hibrido', 'Híbrido'], ['remoto', 'Remoto']]
 const IA = [['indiferente', 'Indiferente'], ['con', 'Solo con IA'], ['sin', 'Solo sin IA']]
+
+// Cómo se llama cada familia de PUESTOS en pantalla. Las claves y las
+// expresiones vienen del servidor (`base.familias`), que es quien filtra: aquí
+// solo está el nombre bonito, y una familia sin nombre se pinta con su clave en
+// vez de desaparecer del panel.
+const NOMBRES = {
+  ia: 'IA · ML · GenAI',
+  ops: 'AI Ops · MLOps · Platform',
+  backend: 'Backend',
+  fullstack: 'Full Stack',
+}
 
 const Pills = ({ opciones, valor, onChange, multi }) => (
   <div className="flex gap-2 flex-wrap">
@@ -43,11 +54,18 @@ const Pills = ({ opciones, valor, onChange, multi }) => (
 )
 
 const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
+  // El error de la carga, PINTADO. Antes era un `.catch(() => {})`: si la
+  // llamada fallaba o cancelabas la contraseña, la pantalla se quedaba en «abre
+  // el Feed una vez» para siempre —sin ubicación, sin salario y sin decir por
+  // qué—, que es justo la forma de que parezca que los criterios no se pueden
+  // tocar.
+  const [error, setError] = useState(null)
+
   // Sin `base` no hay de dónde partir ni con qué comparar tu lista de empresas,
   // y solo llegaba al refrescar el feed —que se cachea un día entero—. Se pide
   // aparte: no sale a buscar ofertas, así que es inmediato.
   useEffect(() => {
-    if (!base) criteriosPorDefecto().then(setBase).catch(() => {})
+    if (!base) criteriosPorDefecto().then(setBase).catch((e) => setError(e.message))
   }, [base, setBase])
 
   // Sin preset propio se edita a partir del que el servidor dice usar de fábrica.
@@ -55,11 +73,25 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
 
   if (!c) {
     return (
-      <div className="p-8">
+      <div className="p-8 flex flex-col gap-2">
         <h1 className="text-[32px] font-semibold leading-tight" style={{ fontFamily: 'var(--s-display)' }}>Criterios</h1>
-        <p className="text-sm mt-2" style={{ color: 'var(--s-muted)' }}>
-          Abre el Feed una vez para cargar los criterios de partida.
-        </p>
+        {error ? (
+          <>
+            <p className="text-sm flex gap-1.5" style={{ color: 'var(--s-perdida)' }}>
+              <TriangleAlert size={14} className="shrink-0 mt-0.5" />
+              No se han podido cargar los criterios: {error}
+            </p>
+            <button
+              onClick={() => { setError(null); criteriosPorDefecto().then(setBase).catch((e) => setError(e.message)) }}
+              className="text-xs underline w-fit"
+              style={{ color: 'var(--s-accent)' }}
+            >
+              Volver a intentarlo
+            </button>
+          </>
+        ) : (
+          <p className="text-sm" style={{ color: 'var(--s-muted)' }}>Cargando los criterios de partida…</p>
+        )}
       </div>
     )
   }
@@ -88,12 +120,42 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
           Criterios
         </h1>
         <p className="text-sm" style={{ color: 'var(--s-muted)' }}>
-          Solo la ubicación, la ventana y las palabras vetadas descartan ofertas. El resto las ordena:
-          lo que cumple todo lo que pides sale arriba. Se aplica en la siguiente búsqueda del Feed.
+          Solo la ubicación, el puesto, la ventana y las palabras vetadas descartan ofertas. El resto
+          las ordena: lo que cumple todo lo que pides sale arriba. Se aplica en la siguiente búsqueda del Feed.
         </p>
       </div>
 
+      {/* La ubicación va PRIMERO y con tarjeta. Vivía en la última fila de la
+          pantalla, debajo de la tabla de 21 empresas, sin tarjeta y pidiendo una
+          expresión regular a pelo: existir, existía, pero no había forma de dar
+          con ella ni de escribirla bien. Poner «Barcelona, España» a mano dejaba
+          el feed a cero, porque las fuentes dicen «Barcelona, Catalonia, Spain». */}
+      <Card
+        title="UBICACIÓN"
+        hint="Descarta de verdad. Las 23 fuentes escriben el sitio cada una a su manera, así que el filtro es una expresión regular: estos cuatro botones la escriben por ti."
+      >
+        <Pills opciones={base?.ubicaciones ?? []} valor={c.ubicacion} onChange={(ubicacion) => editar({ ubicacion })} />
+        <input
+          value={c.ubicacion ?? ''}
+          onChange={(e) => editar({ ubicacion: e.target.value })}
+          spellCheck={false}
+          style={{ ...campo, fontFamily: 'var(--s-mono, ui-monospace, monospace)', fontSize: 12 }}
+        />
+      </Card>
+
       <div className="grid grid-cols-2 gap-4">
+        <Card
+          title="PUESTOS"
+          hint="Descarta por el TÍTULO de la oferta. Sin esto los tableros de empresa se bajan enteros y entran «B2B Travel Advisor», «Global Tax Trainee» o «Clinical Study Data Lead»."
+        >
+          <Pills
+            multi
+            opciones={(base?.familias ?? []).map((f) => [f, NOMBRES[f] ?? f])}
+            valor={c.puestos ?? []}
+            onChange={(puestos) => editar({ puestos })}
+          />
+        </Card>
+
         <Card title="VENTANA DE TIEMPO" hint="Las ofertas más viejas suelen estar ya cerradas.">
           <Pills opciones={VENTANAS} valor={c.ventana} onChange={(ventana) => editar({ ventana })} />
         </Card>
@@ -141,14 +203,17 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
             Priorizar las que publican salario
           </label>
         </div>
-        {/* El número está medido, no estimado: 21 ofertas reales de LinkedIn de
-            la última semana, tres con cifra. */}
+        {/* Los números están medidos, no estimados. El 08-09-2026 se
+            comprobaron las APIs una a una: Ashby con includeCompensation=true
+            devuelve 0 bandas de 103 ofertas de Preply, y Greenhouse y Lever
+            traen el campo a null. No es que el feed no lo lea: no está. */}
         <p className="text-xs flex gap-1.5 p-2.5 rounded-lg" style={{ background: 'var(--s-atencion-f)', color: 'var(--s-atencion)' }}>
           <Info size={13} className="shrink-0 mt-0.5" />
           <span>
-            Solo el <b>14%</b> de las ofertas publica salario (medido sobre 21 reales de LinkedIn).
-            Este interruptor <b>ya no descarta</b> ese 86%: las manda al fondo marcadas como
-            «sin salario». Antes tiraba 392 de 534 ofertas de golpe.
+            Aquí casi nadie publica salario: <b>0 de 103</b> ofertas de Preply, y Greenhouse y Lever
+            devuelven el campo vacío. Este interruptor <b>no descarta</b> ese 86%, pero desde ahora
+            manda en el orden: las que llevan cifra salen <b>arriba del todo</b>, por delante de
+            cualquier otro criterio. Antes valía un punto entre varios y se mezclaban.
           </span>
         </p>
       </Card>
@@ -263,21 +328,13 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
           "encaje bajo". Ahora la nota solo ORDENA. Si algún día sobran
           resultados, el sitio para cortar es aquí, no en el motor. */}
 
-      <div className="flex items-center gap-4">
-        <span className="text-xs" style={{ color: 'var(--s-muted)' }}>
-          Ubicación (regex, se aplica a todas las fuentes)
-        </span>
-        <input
-          value={c.ubicacion}
-          onChange={(e) => editar({ ubicacion: e.target.value })}
-          style={{ ...campo, flex: 1 }}
-        />
-        {preset && (
-          <button onClick={() => setPreset(null)} className="text-xs underline shrink-0" style={{ color: 'var(--s-muted)' }}>
-            volver a los criterios por defecto
-          </button>
-        )}
-      </div>
+      {/* La ubicación ya no está aquí: se ha subido a su propia tarjeta, arriba
+          del todo. Enterrada al final de la pantalla no la encontraba nadie. */}
+      {preset && (
+        <button onClick={() => setPreset(null)} className="text-xs underline w-fit" style={{ color: 'var(--s-muted)' }}>
+          volver a los criterios por defecto
+        </button>
+      )}
     </div>
   )
 }
