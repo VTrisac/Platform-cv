@@ -15,7 +15,7 @@ import { findFigures, textoCarta } from '../api/cover.js'
 import { partir, enLote, preparar } from '../src/studio/lote.js'
 import { agrupar, contar, SUCESOS, salarios, mediana, SIGUIENTE, ESTADOS, aplicarPatch,
   desdeCuando, diasDesde, migrar, hoy, porQueDescartada, clavesDe, indexar,
-  desdeFeed } from '../src/studio/store.js'
+  desdeFeed, podar } from '../src/studio/store.js'
 import { hashPassword } from './set-password.js'
 import { dataEN } from '../src/data.js'
 
@@ -496,6 +496,26 @@ a.deepEqual(migrar([
   { id: 'c', estado: 'enviada', cv: {} },
   { id: 'd', estado: 'descartada', cv: {} },
 ]).map((o) => o.estado), ['preparada', 'guardada', 'enviada', 'descartada'])
+
+// La poda de las trece retiradas el 09-09-2026. Lo que se comprueba no es que
+// quite —eso es un filter—, es que NO quite de más: las de fábrica que siguen
+// vivas, las búsquedas de LinkedIn y una empresa añadida a mano se quedan.
+{
+  const preset = { ubicacion: 'x', empresas: [
+    { name: 'LinkedIn · AI', ats: 'linkedin', token: 'AI Engineer|Barcelona, Catalonia, Spain' },
+    { name: 'Novartis', ats: 'workday', token: 'novartis|wd3|Novartis_Careers|Barcelona' },
+    { name: 'Roche', ats: 'workday', token: 'roche|wd3|roche-ext|Spain' },
+    { name: 'RemoteOK', ats: 'remoteok', token: '' },
+    { name: 'Amazon', ats: 'amazon', token: 'engineer|Spain' },
+    { name: 'Typeform', ats: 'greenhouse', token: 'typeform' },
+    { name: 'La mía', ats: 'greenhouse', token: 'inventada' },
+  ] }
+  a.deepEqual(podar(preset).empresas.map((e) => e.name),
+    ['LinkedIn · AI', 'Roche', 'Typeform', 'La mía'], 'poda las retiradas y solo esas')
+  a.equal(podar(preset).ubicacion, 'x', 'el resto del preset no se toca')
+  a.equal(podar(null), null, 'sin preset no revienta')
+  a.deepEqual(podar({ ubicacion: 'y' }), { ubicacion: 'y' }, 'un preset sin empresas se devuelve igual')
+}
 
 // --- los grupos del Resumen -----------------------------------------------------
 // Con "preparada" en el modelo, los grupos ya no deducen nada de los campos: se

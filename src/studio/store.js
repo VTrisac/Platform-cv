@@ -213,17 +213,46 @@ export const migrar = (ofertas) =>
     .filter((o) => !String(o.id).startsWith('seed-'))
     .map((o) => (o.estado === 'guardada' && o.cv ? { ...o, estado: 'preparada' } : o))
 
+// Las trece fuentes que salieron de fábrica el 09-09-2026: entre todas bajaban
+// 1.139 ofertas y no producían ni un resultado. Tu preset guarda TU lista y gana
+// sobre la del servidor, así que quitarlas del código no las quita de tu
+// navegador: seguirían bajándose en cada refresco.
+//
+// Se podan UNA VEZ, con sello. El sello no es ceremonia: sin él, el día que
+// añadas Amazon a mano —el botón existe— te la borraríamos al recargar, y sería
+// invisible. Por eso tampoco se poda "todo lo que no sea de fábrica": eso sí
+// borraría empresas tuyas. Solo estas trece, por su ats y su token.
+const RETIRADAS = new Set([
+  'greenhouse|cabify', 'greenhouse|anthropic', 'lever|jobandtalent',
+  'workable|huggingface', 'ashby|weaviate', 'remoteok|', 'amazon|engineer|Spain',
+  'workday|novartis|wd3|Novartis_Careers|Barcelona', 'workday|gsk|wd5|GSKCareers|Spain',
+  'workday|pfizer|wd1|PfizerCareers|Spain', 'workday|nvidia|wd5|NVIDIAExternalCareerSite|Spain',
+  'workday|salesforce|wd12|External_Career_Site|Spain', 'workday|adobe|wd5|external_experienced|Spain',
+])
+const SELLO = '2026-09-09'
+
+export const podar = (preset) => {
+  if (!preset?.empresas) return preset
+  return { ...preset, empresas: preset.empresas.filter((e) => !RETIRADAS.has(`${e.ats}|${e.token ?? ''}`)) }
+}
+
 const load = () => {
   try {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const s = JSON.parse(raw)
-      return { ...s, ofertas: migrar(s.ofertas ?? []) }
+      return {
+        ...s,
+        ofertas: migrar(s.ofertas ?? []),
+        // El feed se invalida a la vez: si no, verías la lista limpia en
+        // criterios y los resultados de las viejas hasta mañana.
+        ...(s.podado === SELLO ? {} : { preset: podar(s.preset), feed: null, podado: SELLO }),
+      }
     }
   } catch {
     // JSON corrupto: se empieza de cero antes que dejar la app sin arrancar.
   }
-  return { ofertas: [] }
+  return { ofertas: [], podado: SELLO }
 }
 
 // Hook único; toda la app comparte el mismo objeto y se persiste en cada cambio.
