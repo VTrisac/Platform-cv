@@ -661,6 +661,56 @@ a.equal(textoCarta(null), '')
   Object.assign(process.env, sin)
 }
 
+// --- el suplente y el 403 ---------------------------------------------------
+// Lo que rompió el 09-09-2026: kimi-k3 dejó de responder, era el ÚNICO modelo de
+// la vía NIM, y el gateway pedía dos veces el mismo 403 de "pon una tarjeta".
+{
+  const sin = { ...process.env }
+  const originalFetch = globalThis.fetch
+  const pedidos = []
+  const responder = (status, body) => new Response(JSON.stringify(body),
+    { status, headers: { 'content-type': 'application/json' } })
+  const bueno = { choices: [{ message: { content: '{"ok":true}' }, finish_reason: 'stop' }], usage: {} }
+
+  // NIM sola, dos modelos: el segundo intento va con el suplente, no con el que
+  // acaba de fallar. Repetir contra el atascado es lo que costó 282 s.
+  delete process.env.AI_GATEWAY_API_KEY
+  process.env.NVIDIA_API_KEY = 'x'
+  globalThis.fetch = async (url, init) => {
+    pedidos.push(JSON.parse(init.body).model)
+    return pedidos.length === 1 ? responder(500, { error: 'atascado' }) : responder(200, bueno)
+  }
+  const { datos } = await pedirJSON({ system: 's', user: 'u', schema: {}, modelos: { nim: ['primero', 'suplente'] } })
+  a.deepEqual(datos, { ok: true })
+  a.deepEqual(pedidos, ['primero', 'suplente'], 'el segundo intento cambia de modelo')
+
+  // Y con un solo modelo se sigue reintentando contra él, como antes.
+  pedidos.length = 0
+  globalThis.fetch = async (url, init) => {
+    pedidos.push(JSON.parse(init.body).model)
+    return pedidos.length === 1 ? responder(503, { error: 'ocupado' }) : responder(200, bueno)
+  }
+  await pedirJSON({ system: 's', user: 'u', schema: {}, modelos: { nim: 'solo' } })
+  a.deepEqual(pedidos, ['solo', 'solo'])
+
+  // Un 403 —el gateway sin tarjeta— no se pide dos veces: no se arregla
+  // repitiendo, y salía duplicado en el mensaje de error del navegador.
+  pedidos.length = 0
+  process.env.AI_GATEWAY_API_KEY = 'y'
+  delete process.env.NVIDIA_API_KEY
+  globalThis.fetch = async (url, init) => {
+    pedidos.push(JSON.parse(init.body).model)
+    return responder(403, { error: { message: 'requires a valid credit card' } })
+  }
+  await a.rejects(() => pedirJSON({ system: 's', user: 'u', schema: {}, modelos: { gateway: ['gw'] } }),
+    /credit card/)
+  a.equal(pedidos.length, 1, 'el 403 se pide una sola vez')
+
+  globalThis.fetch = originalFetch
+  delete process.env.AI_GATEWAY_API_KEY; delete process.env.NVIDIA_API_KEY
+  Object.assign(process.env, sin)
+}
+
 // --- reanudar sin volver a pagar ------------------------------------------------
 // El caso real: la carta falla y al reintentar se repetían las tres llamadas.
 {

@@ -32,9 +32,18 @@ export const maxDuration = 300
 // sacó 10 requisitos donde kimi-k3 sacaba 12, y cuesta 0,10/0,50 $ por millón
 // frente a 3,00/15,00: para auditar es el cambio bueno. Ajústalos con
 // AUDIT_MODEL_GW (gateway) y AUDIT_MODEL (NVIDIA) sin tocar el código.
+//
+// 09-09-2026: kimi-k3 DEJA DE IR PRIMERO. Sigue en el catálogo de NIM pero no
+// responde — dos pruebas con un "Di OK" y max_tokens 16, 120 s y 90 s, sin
+// devolver un solo byte— y como era el único modelo de la vía, cada auditoría
+// se comía el presupuesto entero (282 s) para morir en un timeout. minimax-m3
+// contesta en 5 s y ya está medido aquí arriba auditando: es menos severo (13
+// requisitos, 4/6/3), y ese es el precio de que la auditoría exista. kimi-k3 se
+// queda de suplente, para el día que vuelva.
 const MODELOS = {
   gateway: (process.env.AUDIT_MODEL_GW || 'openai/gpt-oss-120b,deepseek/deepseek-v4-flash-0731').split(','),
-  nim: process.env.AUDIT_MODEL || 'moonshotai/kimi-k3',
+  // Lista y no un modelo suelto: el segundo es el suplente del segundo intento.
+  nim: (process.env.AUDIT_MODEL || 'minimaxai/minimax-m3,moonshotai/kimi-k3').split(','),
 }
 
 const schema = {

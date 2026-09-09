@@ -288,15 +288,29 @@ export async function pedirJSON({ system, user, schema, max_tokens = 8000, model
     for (let intento = 0; intento < 2; intento++) {
       const timeout = reparto(via, hasta)
       if (!timeout) { fallos.push(`${via.nombre}: sin tiempo`); break }
+      // El segundo intento va con el SUPLENTE, no con el mismo modelo. En NIM esa
+      // lista es toda la red que hay —el gateway tiene la suya en `models`— y
+      // repetir contra un modelo colgado es lo que costó 282 s el 09-09-2026:
+      // kimi-k3 dejó de responder y el auditor no tenía a dónde caer. Con un
+      // solo modelo en la lista repite, que es lo que hacía antes.
+      const modelo = lista[Math.min(intento, lista.length - 1)]
       const t0 = Date.now()
       try {
-        return await unaVez({ via, modelos: lista, system, user, schema, max_tokens, timeout, valida })
+        return await unaVez({ via, modelo, red: lista, system, user, schema, max_tokens, timeout, valida })
       } catch (e) {
         const seg = Math.round((Date.now() - t0) / 1000)
         // El SDK dice "Request timed out." y nada más; en castellano y con el
         // tiempo delante se entiende sin abrir los logs.
         fallos.push(`${via.nombre} ${seg}s: ${/timed? ?out/i.test(e.message) ? 'no ha respondido a tiempo' : e.message}`)
-        if (Date.now() - t0 > 10000 && !e.contenido) break
+        // Sin tarjeta o sin crédito no se arregla repitiendo en un segundo: el
+        // 403 del gateway salía DOS VECES en el mismo mensaje de error. Solo
+        // estos dos: los 401/404 espurios de NIM sí se reintentan, que es
+        // exactamente para lo que existe esta rama.
+        if ([402, 403].includes(e.status)) break
+        // Un fallo lento ya se comió su parte del presupuesto: solo se insiste
+        // si queda un suplente al que ir. Cuando no queda tiempo no hace falta
+        // guardia: reparto() devuelve 0 y el bucle sale por "sin tiempo".
+        if (Date.now() - t0 > 10000 && !e.contenido && intento >= lista.length - 1) break
         // Un 429 o un 503 se pasan solos en un segundo; repetir en el mismo
         // instante es tirar el segundo intento. Medido: NIM devuelve el 429 en
         // 0 s, así que sin esta pausa los dos intentos son el mismo momento.
@@ -313,9 +327,9 @@ export async function pedirJSON({ system, user, schema, max_tokens = 8000, model
 // Un fallo de contenido se marca para que pedirJSON sepa que reintentar sirve.
 const deContenido = (mensaje) => Object.assign(new Error(mensaje), { contenido: true })
 
-async function unaVez({ via, modelos, system, user, schema, max_tokens, timeout, valida }) {
+async function unaVez({ via, modelo, red, system, user, schema, max_tokens, timeout, valida }) {
   const completion = await client(via).chat.completions.create({
-    model: modelos[0],
+    model: modelo,
     max_tokens,
     messages: [
       { role: 'system', content: `${system}\n\nDevuelve SOLO un objeto JSON, sin texto alrededor, con este esquema exacto:\n${JSON.stringify(schema)}` },
@@ -326,7 +340,7 @@ async function unaVez({ via, modelos, system, user, schema, max_tokens, timeout,
     // sort ttft = de los proveedores que sirven este modelo, el que antes
     // responde, que es exactamente lo que aquí falla. models = su red de abajo.
     ...(via.nombre === 'gateway' && {
-      providerOptions: { gateway: { sort: 'ttft', ...(modelos.length > 1 && { models: modelos }) } },
+      providerOptions: { gateway: { sort: 'ttft', ...(red.length > 1 && { models: red }) } },
     }),
   }, { timeout })
 
