@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Info, Plus, RotateCcw, Trash2, TriangleAlert } from 'lucide-react'
 import { criteriosPorDefecto } from './api'
 import { Card, campo } from './ui'
@@ -64,9 +64,22 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
   // Sin `base` no hay de dónde partir ni con qué comparar tu lista de empresas,
   // y solo llegaba al refrescar el feed —que se cachea un día entero—. Se pide
   // aparte: no sale a buscar ofertas, así que es inmediato.
+  //
+  // SIEMPRE al abrir la pantalla, no solo `if (!base)`. `base` vive en
+  // localStorage, así que con la condición se congelaba el día que se guardó y
+  // no se enteraba nunca de que la lista de fábrica había cambiado en el
+  // servidor: el 09-09-2026 el feed pasó de 25 fuentes a 18 y esta pantalla
+  // seguía diciendo «21 de fábrica» y ofreciendo añadir Cabify y Anthropic, que
+  // ya no existen. Comparar tu lista contra una foto vieja de lo que es de
+  // fábrica es peor que no compararla: el aviso de «te sobran estas» no llega.
+  // La ref evita el bucle —setBase se recrea en cada render y no sirve de guard—
+  // y deja exactamente una llamada por visita.
+  const pedido = useRef(false)
   useEffect(() => {
-    if (!base) criteriosPorDefecto().then(setBase).catch((e) => setError(e.message))
-  }, [base, setBase])
+    if (pedido.current) return
+    pedido.current = true
+    criteriosPorDefecto().then(setBase).catch((e) => setError(e.message))
+  }, [setBase])
 
   // Sin preset propio se edita a partir del que el servidor dice usar de fábrica.
   const c = preset ?? base?.preset
