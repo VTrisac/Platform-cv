@@ -33,17 +33,27 @@ export const maxDuration = 300
 // frente a 3,00/15,00: para auditar es el cambio bueno. Ajústalos con
 // AUDIT_MODEL_GW (gateway) y AUDIT_MODEL (NVIDIA) sin tocar el código.
 //
-// 09-09-2026: kimi-k3 DEJA DE IR PRIMERO. Sigue en el catálogo de NIM pero no
-// responde — dos pruebas con un "Di OK" y max_tokens 16, 120 s y 90 s, sin
-// devolver un solo byte— y como era el único modelo de la vía, cada auditoría
-// se comía el presupuesto entero (282 s) para morir en un timeout. minimax-m3
-// contesta en 5 s y ya está medido aquí arriba auditando: es menos severo (13
-// requisitos, 4/6/3), y ese es el precio de que la auditoría exista. kimi-k3 se
-// queda de suplente, para el día que vuelva.
+// 09-09-2026, y la lección importa más que los modelos: NIM está vaciando su
+// catálogo gratis. gpt-oss-120b llegó a su EOL el 03-09 y minimax-m3 el 09-09 a
+// las 09:00Z —en mitad de esta misma sesión: auditaba a las 10:58 y devolvía 410
+// a las 11:15—, y kimi-k3 sigue listado pero no responde (dos "Di OK" con
+// max_tokens 16, 120 s y 90 s, sin un solo byte). Por eso la vía NIM lleva
+// LISTA y no un modelo suelto: con uno solo, el día que muere se lleva la app.
+//
+// Medido hoy sobre la oferta de Chery (Big Data, el CV no tiene esa pila) y la
+// de Erni, con el presupuesto real de 285 s:
+//   deepseek-v4-pro-0813   123s  12 requisitos  1 sí / 8 parcial / 3 no  12/12 con cita
+//   gpt-oss-20b            136s   7 requisitos                           7/7  con cita, 4.459 tok
+//   nemotron-3-super-120b  ✗ se come los 285 s sin responder
+//   nemotron-3.5-lightning ✗ igual, aunque el "Di OK" volvía en 16 s
+// El ping corto no predice nada: los dos nemotron contestaban en 1 y 16 s y
+// mueren con una auditoría de verdad. deepseek-v4-pro saca casi el doble de
+// requisitos que gpt-oss-20b y gasta la mitad de tokens, así que va primero y
+// gpt-oss-20b queda de suplente.
 const MODELOS = {
   gateway: (process.env.AUDIT_MODEL_GW || 'openai/gpt-oss-120b,deepseek/deepseek-v4-flash-0731').split(','),
   // Lista y no un modelo suelto: el segundo es el suplente del segundo intento.
-  nim: (process.env.AUDIT_MODEL || 'minimaxai/minimax-m3,moonshotai/kimi-k3').split(','),
+  nim: (process.env.AUDIT_MODEL || 'deepseek-ai/deepseek-v4-pro-0813,openai/gpt-oss-20b').split(','),
 }
 
 const schema = {

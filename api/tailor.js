@@ -29,7 +29,19 @@ import { fetchOffer } from '../src/scrape.js'
 // El anterior, nemotron-3-super, encima se pasaba del timeout auditando (149s).
 // Cámbialo con TAILOR_MODEL. El auditor va aparte: AUDIT_MODEL, en audit.js.
 // Es el modelo de la vía NIM; el de la vía gateway se elige en MODELOS, abajo.
-const MODEL = process.env.TAILOR_MODEL || 'minimaxai/minimax-m3'
+//
+// 09-09-2026: minimax-m3 llegó a su EOL en NIM a las 09:00Z y devuelve 410, así
+// que se llevó por delante adaptar Y la carta, que usan este mismo modelo.
+// Medido hoy sobre la oferta de Erni, con el presupuesto real de 285 s:
+//   openai/gpt-oss-20b      53s  ✓ 2.771 tokens, reescribe el título
+//   deepseek-v4-pro-0813   127s  ✓ 1.526 tokens, reescribe el título; carta 56s
+// Adaptar quiere velocidad, así que gpt-oss-20b va primero y deepseek-v4-pro es
+// su red; auditando mandan al revés, porque allí lo que se pide es profundidad
+// (12 requisitos contra 7). deepseek-v4-pro figura como ✗ arriba: ese ✗ es de
+// cuando el cliente cortaba a los 130 s, y hoy tarda 127 —fallaba por tres
+// segundos—. La lista es el seguro: ver el comentario de audit.js, NIM está
+// retirando sus modelos gratis cada dos semanas y con uno solo la app cae.
+const MODEL = (process.env.TAILOR_MODEL || 'openai/gpt-oss-20b,deepseek-ai/deepseek-v4-pro-0813').split(',')
 
 export const maxDuration = 300
 
@@ -225,11 +237,17 @@ export function findInventions(cv, gaps, written) {
 // red: precios del catálogo el 03-09-2026, por millón de tokens (entrada/salida).
 //   openai/gpt-oss-120b      0,10 / 0,50  -> ~0,1 céntimos por auditoría
 //   deepseek-v4-flash-0731   0,08 / 0,15
-//   minimax/minimax-m3-free  0,00 / 0,00  -> gratis, de última red
 // El de pago va primero a propósito: lo que se compra aquí es velocidad, y 100
 // auditorías cuestan 12 céntimos. Cámbialos sin desplegar con las variables.
+//
+// `minimax/minimax-m3-free` estaba aquí de última red y NO EXISTE en el
+// gateway: comprobado el 09-09-2026 contra ai-gateway.vercel.sh/v1/models, que
+// es público y lleva los precios. El id bueno es minimax/minimax-m3, 0,30/1,20,
+// y no es gratis. Como red vale más deepseek-v4-flash, que sí está y cuesta
+// menos que el primario. Del 403 sin tarjeta no se enteraba nadie porque el
+// gateway ni llega a intentarlo.
 export const MODELOS = {
-  gateway: (process.env.TAILOR_MODEL_GW || 'openai/gpt-oss-120b,minimax/minimax-m3-free').split(','),
+  gateway: (process.env.TAILOR_MODEL_GW || 'openai/gpt-oss-120b,deepseek/deepseek-v4-flash-0731').split(','),
   nim: MODEL,
 }
 
