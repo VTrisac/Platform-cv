@@ -50,19 +50,28 @@ export const COMPANIES = [
   // Golang. El lenguaje va en la búsqueda, no solo en la nota.
   { name: 'LinkedIn · Backend', ats: 'linkedin', token: 'Python Backend Engineer|Barcelona, Catalonia, Spain' },
   { name: 'LinkedIn · Full Stack', ats: 'linkedin', token: 'Full Stack Developer|Barcelona, Catalonia, Spain' },
+  // Las cuatro de abajo se añaden el 09-09-2026 por lo que dice la medición: de
+  // los 135 resultados que sobrevivían al filtro, 105 salían de LinkedIn. Es la
+  // fuente que rinde, así que se le dan más búsquedas en vez de más empresas.
+  { name: 'LinkedIn · Data Engineer', ats: 'linkedin', token: 'Data Engineer|Barcelona, Catalonia, Spain' },
+  { name: 'LinkedIn · DevOps', ats: 'linkedin', token: 'DevOps Engineer|Barcelona, Catalonia, Spain' },
+  { name: 'LinkedIn · Platform', ats: 'linkedin', token: 'Platform Engineer|Barcelona, Catalonia, Spain' },
+  { name: 'LinkedIn · MLOps', ats: 'linkedin', token: 'MLOps Engineer|Barcelona, Catalonia, Spain' },
   // Barcelona / España
   { name: 'Typeform', ats: 'greenhouse', token: 'typeform' },
-  { name: 'Cabify', ats: 'greenhouse', token: 'cabify' },
   { name: 'New Relic', ats: 'greenhouse', token: 'newrelic' },
-  { name: 'Jobandtalent', ats: 'lever', token: 'jobandtalent' },
   { name: 'Exoticca', ats: 'workable', token: 'exoticca' },
-  // Remoto / AI-first
-  { name: 'Anthropic', ats: 'greenhouse', token: 'anthropic' },
   { name: 'Preply', ats: 'ashby', token: 'preply' },
-  { name: 'Weaviate', ats: 'ashby', token: 'weaviate' },
-  { name: 'Hugging Face', ats: 'workable', token: 'huggingface' },
   { name: 'Qonto', ats: 'lever', token: 'qonto' },
-  { name: 'RemoteOK', ats: 'remoteok', token: '' },
+  // Añadidas el 09-09-2026. Entraron cinco al sondeo y se quedan dos: N26 pasa
+  // 12 (backend puro) y Wallapop 1 (MLOps Engineer). Amenitiz, Veepee y Edpuzzle
+  // se cayeron en la misma pasada que las validaba, y conviene recordar por qué:
+  // el sondeo preguntaba "¿publica en España?" y las tres decían que sí —17, 15
+  // y 2 en Barcelona—, pero era todo ventas, customer success y contabilidad.
+  // La pregunta buena no es dónde publica una empresa: es si publica INGENIERÍA
+  // donde vives. Es el mismo filtro que tumbó a Novartis, aplicado a tiempo.
+  { name: 'N26', ats: 'greenhouse', token: 'n26' },
+  { name: 'Wallapop', ats: 'greenhouse', token: 'wallapop' },
   // Farma y big tech por Workday. Tokens verificados el 19-08-2026 con --check.
   // El cuarto segmento es la BÚSQUEDA, no un filtro de ubicación: estos tableros
   // son globales y traen miles de puestos, así que sin acotar aquí bajarías 60
@@ -73,17 +82,34 @@ export const COMPANIES = [
   // 08-09-2026, Roche con "Spain" da 24 vacantes de las que 10 son del área de
   // Barcelona, y con "Barcelona" da 3 de las que 1 lo es. Acotar aquí a la
   // ciudad TIRA las nueve buenas. Se baja la provincia y filtra UBICACION.
-  { name: 'Novartis', ats: 'workday', token: 'novartis|wd3|Novartis_Careers|Barcelona' },
+  //
+  // Solo estas tres de farma, y no es arbitrario: medido el 09-09-2026, de las
+  // seis que había aquí, AstraZeneca (3), Sanofi (2) y Roche (1) dan ingeniería
+  // en Barcelona, y Novartis, GSK y Pfizer NINGUNA. Novartis engañaba
+  // especialmente: bajaba 28 vacantes de Barcelona Gran Vía y las 28 eran
+  // clínicas, regulatorias o de auditoría. Un tablero que pasa el filtro de
+  // ubicación y ninguna el de puesto no es un tablero flojo: es otra profesión.
   { name: 'AstraZeneca', ats: 'workday', token: 'astrazeneca|wd3|Careers|Barcelona' },
   { name: 'Roche', ats: 'workday', token: 'roche|wd3|roche-ext|Spain' },
-  { name: 'GSK', ats: 'workday', token: 'gsk|wd5|GSKCareers|Spain' },
   { name: 'Sanofi', ats: 'workday', token: 'sanofi|wd3|SanofiCareers|Barcelona' },
-  { name: 'Pfizer', ats: 'workday', token: 'pfizer|wd1|PfizerCareers|Spain' },
-  { name: 'NVIDIA', ats: 'workday', token: 'nvidia|wd5|NVIDIAExternalCareerSite|Spain' },
-  { name: 'Salesforce', ats: 'workday', token: 'salesforce|wd12|External_Career_Site|Spain' },
-  { name: 'Adobe', ats: 'workday', token: 'adobe|wd5|external_experienced|Spain' },
-  { name: 'Amazon', ats: 'amazon', token: 'engineer|Spain' },
 ]
+
+// Fuera el 09-09-2026, tras medir las 25 fuentes de una pasada: bajaban 1.139
+// ofertas entre todas y producían CERO resultados. No se quitan por ser malas
+// empresas, se quitan por lo que publican y dónde.
+//   Anthropic     595 vacantes, 1 en España, 0 en Barcelona -> el 37% del
+//                 tráfico del feed para nada
+//   RemoteOK      100, y su "remoto" es Nassau, Bedford y Visakhapatnam
+//   Amazon         69, 12 en Barcelona: robótica de almacén y BI de logística
+//   Cabify         65, 25 en España y las 25 en Madrid
+//   Pfizer         60, 3 en España; Adobe 60, 2; NVIDIA 60, 1
+//   Novartis       48, 28 en Barcelona y ninguna de ingeniería (ver arriba)
+//   Salesforce     30, 6 en Barcelona: comerciales y preventa
+//   Jobandtalent   23, 1 en Barcelona: operario de almacén en Martorell
+//   GSK            21, 9 en España y todas en Tres Cantos y Aranda de Duero
+//   Hugging Face    6, 0 en España; Weaviate 2, 0
+// Si alguna abre en Barcelona, vuelve con una línea. Comprobarlo cuesta un
+// `node scripts/feed.js --check`.
 
 // Barcelona y su área, más el remoto que acepte España.
 //
