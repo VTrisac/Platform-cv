@@ -125,6 +125,10 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
   const esDeFabrica = new Set(deFabrica.map((f) => `${f.ats}|${f.token}`))
   const faltan = deFabrica.filter((f) => !tiene.has(`${f.ats}|${f.token}`))
   const sobran = tableros.filter((t) => !esDeFabrica.has(`${t.ats}|${t.token}`))
+  // Y lo mismo para las búsquedas, que se comparan aparte porque su sección no
+  // tiene "dejar solo las de fábrica": una búsqueda tuya no sobra nunca.
+  const busquedasFaltan = (base?.empresasPorDefecto ?? [])
+    .filter((f) => f.ats === 'linkedin' && !tiene.has(`${f.ats}|${f.token}`))
 
   return (
     <div className="p-8 flex flex-col gap-6 max-w-[1100px]">
@@ -265,13 +269,35 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
             </div>
           )
         })}
-        <button
-          onClick={() => guardar([...busquedas, { name: 'LinkedIn · nueva', ats: 'linkedin', token: '|Spain' }], tableros)}
-          className="flex items-center gap-1.5 text-xs font-semibold w-fit"
-          style={{ color: 'var(--s-accent)' }}
-        >
-          <Plus size={14} /> Añadir búsqueda
-        </button>
+        <div className="flex items-center gap-4 flex-wrap">
+          <button
+            onClick={() => guardar([...busquedas, { name: 'LinkedIn · nueva', ats: 'linkedin', token: '|Spain' }], tableros)}
+            className="flex items-center gap-1.5 text-xs font-semibold w-fit"
+            style={{ color: 'var(--s-accent)' }}
+          >
+            <Plus size={14} /> Añadir búsqueda
+          </button>
+          {/* El mismo puente que la tabla de abajo, y hacía más falta aquí: las
+              búsquedas de LinkedIn son las que más resultados dan —105 de 135 el
+              09-09-2026— y eran las únicas que tu preset no podía recibir. Se
+              añadieron cuatro de fábrica ese día (Data Engineer, DevOps,
+              Platform, MLOps) y no había forma de que te llegaran salvo
+              escribirlas a mano una por una.
+              AÑADE, nunca reemplaza: el token de una búsqueda son TUS palabras
+              y TU ubicación, así que las tuyas no se tocan aunque las hayas
+              editado. Por eso aquí no hay un "dejar solo las de fábrica". */}
+          {busquedasFaltan.length > 0 && (
+            <button
+              onClick={() => guardar([...busquedas, ...busquedasFaltan], tableros)}
+              className="flex items-center gap-1.5 text-xs font-semibold w-fit"
+              style={{ color: 'var(--s-accent)' }}
+              title={busquedasFaltan.map((b) => b.name).join(', ')}
+            >
+              <Plus size={14} /> Añadir las {busquedasFaltan.length} de fábrica que faltan
+              ({busquedasFaltan.slice(0, 3).map((b) => String(b.token).split('|')[0]).join(', ')}{busquedasFaltan.length > 3 ? '…' : ''})
+            </button>
+          )}
+        </div>
       </Card>
 
       <Card
