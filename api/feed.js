@@ -72,6 +72,15 @@ export const COMPANIES = [
   // donde vives. Es el mismo filtro que tumbó a Novartis, aplicado a tiempo.
   { name: 'N26', ats: 'greenhouse', token: 'n26' },
   { name: 'Wallapop', ats: 'greenhouse', token: 'wallapop' },
+  // Wellfound es un tablero global de startups, así que va por rol como
+  // LinkedIn. TRES y no siete: medido el 09-09-2026 por cobertura ávida sobre
+  // Barcelona, software-engineer aporta 8 ofertas, devops 5 más y
+  // python-developer 2 más — y ahí se acaba. data-engineer, machine-learning-
+  // engineer, backend-engineer y full-stack-engineer no aportaban NI UNA que no
+  // trajeran ya estos tres, porque Wellfound solapa mucho entre roles.
+  { name: 'Wellfound · Software', ats: 'wellfound', token: 'software-engineer|barcelona' },
+  { name: 'Wellfound · DevOps', ats: 'wellfound', token: 'devops|barcelona' },
+  { name: 'Wellfound · Python', ats: 'wellfound', token: 'python-developer|barcelona' },
   // Farma y big tech por Workday. Tokens verificados el 19-08-2026 con --check.
   // El cuarto segmento es la BÚSQUEDA, no un filtro de ubicación: estos tableros
   // son globales y traen miles de puestos, así que sin acotar aquí bajarías 60
@@ -404,6 +413,62 @@ export const ATS = {
       location: j.normalized_location || j.location || '',
       fecha: iso(j.posted_date), text: JSON.stringify(j),
     })),
+  },
+  // Wellfound (antes AngelList): startups, y por tanto ofertas que no aparecen
+  // en ningún otro tablero de esta lista. Como LinkedIn y RemoteOK es un tablero
+  // global, no de una empresa: el token es «rol|ciudad», con los slugs que
+  // Wellfound usa en su propia URL —/role/l/<rol>/<ciudad>—, así que si quieres
+  // otro rol lo sacas navegando su web y copiando el trozo.
+  //
+  // No tiene API pública: la de AngelList murió y /api/jobs da 404, .rss da 403.
+  // Pero es Next.js y sirve la búsqueda ENTERA en su __NEXT_DATA__, descripción
+  // incluida, así que no hace falta ni JS ni paso de detalle: `pendiente` no se
+  // pone y `text` ya trae el texto de la oferta. Comprobado el 09-09-2026.
+  //
+  // No pagina: ?page=2 devuelve exactamente lo mismo que la primera. Más ofertas
+  // se consiguen con más roles, no con más páginas — devops da 34, software
+  // engineer 16, data engineer 16.
+  wellfound: {
+    html: true,
+    url: (token) => {
+      const [rol = 'software-engineer', donde = 'barcelona'] = String(token).split('|')
+      return `https://wellfound.com/role/l/${rol.trim()}/${donde.trim()}`
+    },
+    jobs: (html) => {
+      const bruto = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/.exec(html)?.[1]
+      if (!bruto) return [] // Cloudflare de por medio o han cambiado de framework
+      let state
+      try {
+        state = JSON.parse(bruto).props?.pageProps?.apolloState?.data ?? {}
+      } catch {
+        return []
+      }
+      // La empresa NO está en la oferta: cuelga al revés, cada StartupResult
+      // lista las suyas en highlightedJobListings. Se invierte una vez.
+      const empresaDe = new Map()
+      for (const v of Object.values(state)) {
+        if (v?.__typename !== 'StartupResult') continue
+        for (const ref of v.highlightedJobListings ?? []) empresaDe.set(ref.__ref, v.name)
+      }
+      return Object.entries(state)
+        .filter(([, v]) => v?.__typename === 'JobListingSearchResult' && v.title)
+        .map(([clave, j]) => ({
+          title: j.title,
+          url: `https://wellfound.com/jobs/${j.id}-${j.slug}`,
+          company: empresaDe.get(clave) ?? 'Wellfound',
+          // locationNames es un array —"Barcelona, Santiago, Lima Region"— y el
+          // filtro de ubicación es un regex sobre la cadena, así que encuentra
+          // Barcelona igual. El prefijo "Remote" va por el mismo motivo que en
+          // RemoteOK: sin él, una remota para España no pasa un filtro que
+          // busca la palabra.
+          location: [j.remote ? 'Remote' : '', ...(j.locationNames ?? []),
+            ...(j.acceptedRemoteLocationNames ?? [])].filter(Boolean).join(', '),
+          // liveStartAt viene en SEGUNDOS, no en milisegundos: sin el x1000 son
+          // todas de enero de 1970 y la ventana de "última semana" las tira.
+          fecha: iso(typeof j.liveStartAt === 'number' ? j.liveStartAt * 1000 : j.liveStartAt),
+          text: JSON.stringify(j),
+        }))
+    },
   },
   // Búsqueda pública de LinkedIn: no pide login, pagina de 10 en 10 y filtra por
   // antigüedad en el servidor (f_TPR). Por eso NO hace falta Playwright ni tu

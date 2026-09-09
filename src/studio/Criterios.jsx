@@ -15,7 +15,7 @@ import { Card, campo } from './ui'
 // El preset vive en localStorage y viaja a /api/feed en cada búsqueda. Mientras
 // sea null manda el servidor con sus valores de siempre; en cuanto tocas algo
 // se guarda entero y mandas tú.
-const ATS = ['greenhouse', 'lever', 'ashby', 'workable', 'workday', 'amazon', 'remoteok']
+const ATS = ['greenhouse', 'lever', 'ashby', 'workable', 'workday', 'amazon', 'remoteok', 'wellfound']
 const VENTANAS = [['24h', 'Últimas 24 horas'], ['semana', 'Última semana'], ['todo', 'Sin límite']]
 const MODALIDADES = [['presencial', 'Presencial'], ['hibrido', 'Híbrido'], ['remoto', 'Remoto']]
 const IA = [['indiferente', 'Indiferente'], ['con', 'Solo con IA'], ['sin', 'Solo sin IA']]
@@ -149,7 +149,7 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
           el feed a cero, porque las fuentes dicen «Barcelona, Catalonia, Spain». */}
       <Card
         title="UBICACIÓN"
-        hint="Descarta de verdad. Las 23 fuentes escriben el sitio cada una a su manera, así que el filtro es una expresión regular: estos cuatro botones la escriben por ti."
+        hint="Descarta de verdad. Cada fuente escribe el sitio a su manera, así que el filtro es una expresión regular: estos cuatro botones la escriben por ti."
       >
         <Pills opciones={base?.ubicaciones ?? []} valor={c.ubicacion} onChange={(ubicacion) => editar({ ubicacion })} />
         <input
@@ -302,7 +302,7 @@ const Criterios = ({ preset, setPreset, base, setBase, lenguajesCV }) => {
 
       <Card
         title="TABLEROS DE EMPRESA"
-        hint="El token es el slug de su página de empleo: boards.greenhouse.io/token, jobs.lever.co/token, token.workable.com. Workday lleva cuatro trozos separados por «|» — inquilino|centro|sitio|búsqueda, que salen de inquilino.centro.myworkdayjobs.com/sitio — porque su tablero es global y hay que acotarlo. Amazon lleva «puesto|ubicación»."
+        hint="El token es el slug de su página de empleo: boards.greenhouse.io/token, jobs.lever.co/token, token.workable.com. Workday lleva cuatro trozos separados por «|» — inquilino|centro|sitio|búsqueda, que salen de inquilino.centro.myworkdayjobs.com/sitio — porque su tablero es global y hay que acotarlo. Amazon lleva «puesto|ubicación», y Wellfound «rol|ciudad» con los slugs de su propia URL (wellfound.com/role/l/rol/ciudad)."
       >
         {tableros.map((t, i) => {
           const cambiar = (patch) => guardar(busquedas, tableros.map((x, n) => (n === i ? { ...x, ...patch } : x)))
